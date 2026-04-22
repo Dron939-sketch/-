@@ -10,6 +10,10 @@ Endpoints:
   GET  /api/city/{name}/history
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
+
+Note: Telegram and VK collectors are intentionally disabled here too —
+see `tasks/scheduler.py` for the explanation. Re-enable by restoring
+the two lines marked `# --- re-enable ...`.
 """
 
 from __future__ import annotations
@@ -27,8 +31,6 @@ from ai import NewsEnricher
 from collectors import (
     AppealsCollector,
     NewsCollector,
-    TelegramCollector,
-    VKCollector,
 )
 from collectors.base import CollectedItem
 from config.cities import CITIES, get_city, get_city_by_slug
@@ -50,7 +52,7 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 
 
 def _resolve_city(name_or_slug: str):
@@ -278,12 +280,7 @@ async def city_history(
     name: str,
     days: int = Query(default=30, ge=1, le=365),
 ) -> dict:
-    """Raw 4-vector history for sparklines.
-
-    Returns `{sb: [[iso_ts, value], ...], tf: [...], ub: [...], chv: [...]}`
-    — sorted ascending by timestamp, up to `days` days back. Empty arrays
-    when the DB has no history yet.
-    """
+    """Raw 4-vector history for sparklines."""
     cfg = _resolve_city(name)
     empty: Dict[str, List[List[Any]]] = {"sb": [], "tf": [], "ub": [], "chv": []}
 
@@ -300,7 +297,7 @@ async def city_history(
 
 
 # ---------------------------------------------------------------------------
-# Live collection + agenda + roadmap (unchanged)
+# Live collection + agenda + roadmap
 # ---------------------------------------------------------------------------
 
 @router.get("/api/city/{name}/news", response_model=schemas.NewsResponse)
@@ -308,8 +305,10 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
     cfg = _resolve_city(name)
 
     collectors = [
-        TelegramCollector(cfg["name"]),
-        VKCollector(cfg["name"]),
+        # --- re-enable when valid TELEGRAM_API_ID/HASH arrive:
+        # TelegramCollector(cfg["name"]),
+        # --- re-enable when VK access token is valid:
+        # VKCollector(cfg["name"]),
         NewsCollector(cfg["name"]),
         AppealsCollector(cfg["name"]),
     ]
