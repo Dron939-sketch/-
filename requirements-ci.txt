@@ -1,0 +1,10 @@
+# Minimal dependency set for CI. The full `requirements.txt` carries
+# torch + transformers (~2 GB download, 5–10 min install) which our
+# offline test suite doesn't exercise — the tests run entirely without
+# them. If CI starts exercising ML code, move those deps here.
+
+fastapi==0.115.0
+pydantic==2.9.2
+aiohttp==3.10.5
+pytest==8.3.3
+pytest-asyncio==0.24.0
