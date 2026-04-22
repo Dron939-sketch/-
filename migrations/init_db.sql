@@ -1,16 +1,27 @@
 -- Городской Разум — initial schema.
--- Targets PostgreSQL 15. TimescaleDB hypertables are *optional*: if the
--- extension is not installed (Render-managed Postgres does not ship it),
--- the affected tables stay regular relational tables and the rest of the
--- schema works without changes.
+-- Targets PostgreSQL 15. Every optional piece (pg_trgm index, timescaledb
+-- hypertables) is wrapped in a DO block with `WHEN OTHERS` so a missing
+-- extension or limited privileges never aborts the whole migration —
+-- critical on Render-managed Postgres which does not ship either ext.
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+--------------------------------------------------------------------------
+-- Extensions (best-effort)
+--------------------------------------------------------------------------
+
+-- pg_trgm powers the fuzzy search index on news.content below. If it's
+-- not available we skip that one index but the schema stays valid.
+DO $$
+BEGIN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS pg_trgm';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pg_trgm extension unavailable (%) — trigram search index skipped', SQLERRM;
+END $$;
 
 DO $$
 BEGIN
     EXECUTE 'CREATE EXTENSION IF NOT EXISTS timescaledb';
-EXCEPTION WHEN insufficient_privilege OR feature_not_supported OR undefined_file THEN
-    RAISE NOTICE 'TimescaleDB extension not available — using plain Postgres';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'TimescaleDB extension unavailable (%) — using plain Postgres', SQLERRM;
 END $$;
 
 --------------------------------------------------------------------------
@@ -32,7 +43,6 @@ CREATE TABLE IF NOT EXISTS cities (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Adopt new columns on existing installations (idempotent).
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug TEXT;
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS emoji TEXT;
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS accent_color TEXT;
@@ -58,7 +68,7 @@ CREATE TABLE IF NOT EXISTS sources (
 --------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS news (
-    id              TEXT PRIMARY KEY,    -- hash from collector
+    id              TEXT PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
     source_kind     TEXT NOT NULL,
     source_handle   TEXT NOT NULL,
@@ -82,8 +92,16 @@ ALTER TABLE news ADD COLUMN IF NOT EXISTS enrichment JSONB;
 CREATE INDEX IF NOT EXISTS news_city_published_idx
     ON news (city_id, published_at DESC);
 CREATE INDEX IF NOT EXISTS news_category_idx ON news (category);
-CREATE INDEX IF NOT EXISTS news_content_trgm_idx
-    ON news USING gin (content gin_trgm_ops);
+
+-- Trigram index depends on pg_trgm — wrap so a missing extension doesn't
+-- roll back the whole migration.
+DO $$
+BEGIN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS news_content_trgm_idx '
+            'ON news USING gin (content gin_trgm_ops)';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'trigram index on news.content skipped (%): ok without pg_trgm', SQLERRM;
+END $$;
 
 CREATE TABLE IF NOT EXISTS appeals (
     id              TEXT PRIMARY KEY,
@@ -120,8 +138,8 @@ CREATE INDEX IF NOT EXISTS metrics_city_ts_idx ON metrics (city_id, ts DESC);
 DO $$
 BEGIN
     PERFORM create_hypertable('metrics', 'ts', if_not_exists => TRUE);
-EXCEPTION WHEN undefined_function THEN
-    RAISE NOTICE 'metrics: TimescaleDB missing, staying as a regular table';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'metrics hypertable skipped (%): staying as a regular table', SQLERRM;
 END $$;
 
 CREATE TABLE IF NOT EXISTS weather (
@@ -143,8 +161,8 @@ CREATE INDEX IF NOT EXISTS weather_city_ts_idx ON weather (city_id, ts DESC);
 DO $$
 BEGIN
     PERFORM create_hypertable('weather', 'ts', if_not_exists => TRUE);
-EXCEPTION WHEN undefined_function THEN
-    RAISE NOTICE 'weather: TimescaleDB missing, staying as a regular table';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'weather hypertable skipped (%): staying as a regular table', SQLERRM;
 END $$;
 
 --------------------------------------------------------------------------
@@ -210,6 +228,6 @@ DO $$
 BEGIN
     PERFORM add_retention_policy('metrics', INTERVAL '365 days', if_not_exists => TRUE);
     PERFORM add_retention_policy('weather', INTERVAL '365 days', if_not_exists => TRUE);
-EXCEPTION WHEN undefined_function THEN
+EXCEPTION WHEN OTHERS THEN
     NULL;
 END $$;
