@@ -52,7 +52,13 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.6.1"
+VERSION = "0.6.2"
+
+# How long a single /agenda call may wait for the DeepSeek enricher.
+# Hard-capped so a slow or broken upstream doesn't block the mayor's
+# dashboard for half a minute. When the timeout fires we serve the
+# agenda without AI-assigned severity/summary fields.
+_AGENDA_ENRICHMENT_TIMEOUT_S = 10
 
 
 def _resolve_city(name_or_slug: str):
@@ -141,11 +147,7 @@ _PLACEHOLDER_LOOPS: List[Dict[str, Any]] = [
 
 @router.get("/api/city/{name}/all_metrics")
 async def all_metrics(name: str) -> dict:
-    """Aggregated metric snapshot consumed by the mayor dashboard.
-
-    Reads live values from the DB when present and falls back to
-    deterministic placeholders on a cold deploy.
-    """
+    """Aggregated metric snapshot consumed by the mayor dashboard."""
     cfg = _resolve_city(name)
 
     city_id = await city_id_by_name(cfg["name"])
@@ -350,7 +352,10 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
     enricher = NewsEnricher()
     if enricher.enabled:
         try:
-            await asyncio.wait_for(enricher.enrich(news_items), timeout=30)
+            await asyncio.wait_for(
+                enricher.enrich(news_items),
+                timeout=_AGENDA_ENRICHMENT_TIMEOUT_S,
+            )
         except asyncio.TimeoutError:
             logger.warning("enricher timed out — proceeding without enrichment")
 
