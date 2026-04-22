@@ -1,8 +1,9 @@
-"""Source registry for data collectors.
+"""Source registry — юго-восток Московской области.
 
-Pilot city Kolomna has a full set of TG / VK / RSS sources. Other cities
-start with just a Google News RSS feed — administrators plug in TG / VK
-handles as we roll out per-city onboarding (TZ §4.4).
+Коломна — пилот с полным набором TG / VK / RSS источников. Остальные
+пять городов стартуют только с Google News RSS; администратор
+подключает локальные TG-каналы и VK-паблики при онбординге
+(ТЗ §4.4).
 """
 
 from __future__ import annotations
@@ -73,49 +74,59 @@ KOLOMNA_SOURCES = CitySources(
     ],
 )
 
-MOSKVA_SOURCES = CitySources(
-    news_rss=[_google_news_rss("Москва", "%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0")],
-)
-
-SPB_SOURCES = CitySources(
+LUKHOVITSY_SOURCES = CitySources(
     news_rss=[
         _google_news_rss(
-            "Санкт-Петербург",
-            "%D0%A1%D0%B0%D0%BD%D0%BA%D1%82-%D0%9F%D0%B5%D1%82%D0%B5%D1%80%D0%B1%D1%83%D1%80%D0%B3",
-        )
+            "Луховицы",
+            "%D0%9B%D1%83%D1%85%D0%BE%D0%B2%D0%B8%D1%86%D1%8B",
+        ),
     ],
 )
 
-KAZAN_SOURCES = CitySources(
-    news_rss=[_google_news_rss("Казань", "%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C")],
-)
-
-EKATERINBURG_SOURCES = CitySources(
+VOSKRESENSK_SOURCES = CitySources(
     news_rss=[
         _google_news_rss(
-            "Екатеринбург",
-            "%D0%95%D0%BA%D0%B0%D1%82%D0%B5%D1%80%D0%B8%D0%BD%D0%B1%D1%83%D1%80%D0%B3",
-        )
+            "Воскресенск",
+            "%D0%92%D0%BE%D1%81%D0%BA%D1%80%D0%B5%D1%81%D0%B5%D0%BD%D1%81%D0%BA",
+        ),
     ],
 )
 
-NOVOSIBIRSK_SOURCES = CitySources(
+EGORYEVSK_SOURCES = CitySources(
     news_rss=[
         _google_news_rss(
-            "Новосибирск",
-            "%D0%9D%D0%BE%D0%B2%D0%BE%D1%81%D0%B8%D0%B1%D0%B8%D1%80%D1%81%D0%BA",
-        )
+            "Егорьевск",
+            "%D0%95%D0%B3%D0%BE%D1%80%D1%8C%D0%B5%D0%B2%D1%81%D0%BA",
+        ),
+    ],
+)
+
+STUPINO_SOURCES = CitySources(
+    news_rss=[
+        _google_news_rss(
+            "Ступино",
+            "%D0%A1%D1%82%D1%83%D0%BF%D0%B8%D0%BD%D0%BE",
+        ),
+    ],
+)
+
+OZYORY_SOURCES = CitySources(
+    news_rss=[
+        _google_news_rss(
+            "Озёры",
+            "%D0%9E%D0%B7%D1%91%D1%80%D1%8B",
+        ),
     ],
 )
 
 
 SOURCES: Dict[str, CitySources] = {
     "Коломна": KOLOMNA_SOURCES,
-    "Москва": MOSKVA_SOURCES,
-    "Санкт-Петербург": SPB_SOURCES,
-    "Казань": KAZAN_SOURCES,
-    "Екатеринбург": EKATERINBURG_SOURCES,
-    "Новосибирск": NOVOSIBIRSK_SOURCES,
+    "Луховицы": LUKHOVITSY_SOURCES,
+    "Воскресенск": VOSKRESENSK_SOURCES,
+    "Егорьевск": EGORYEVSK_SOURCES,
+    "Ступино": STUPINO_SOURCES,
+    "Озёры": OZYORY_SOURCES,
 }
 
 
