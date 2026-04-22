@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CityMind — Коломна</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">CityMind</div>
+    <div class="city" id="city-name">Коломна</div>
+    <div class="updated" id="updated-at">—</div>
+  </header>
+
+  <main class="grid">
+    <section class="card" id="weather-card">
+      <h2>Погода</h2>
+      <div class="big" id="weather-temp">—</div>
+      <div class="muted" id="weather-cond">Нет данных</div>
+    </section>
+
+    <section class="card" id="vectors-card">
+      <h2>4 вектора</h2>
+      <ul class="vectors">
+        <li><span class="label">🛡️ Безопасность</span><span class="value" data-key="safety">—</span></li>
+        <li><span class="label">💰 Экономика</span><span class="value" data-key="economy">—</span></li>
+        <li><span class="label">😊 Качество жизни</span><span class="value" data-key="quality">—</span></li>
+        <li><span class="label">🤝 Соцкапитал</span><span class="value" data-key="social">—</span></li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Доверие к власти</h2>
+      <div class="big" id="trust-index">—</div>
+      <div class="muted">Индекс 0–1</div>
+      <h3>Топ жалоб</h3>
+      <ol class="list" id="top-complaints"></ol>
+    </section>
+
+    <section class="card">
+      <h2>Индекс счастья</h2>
+      <div class="big" id="happiness-index">—</div>
+      <div class="muted">Интегральная оценка</div>
+    </section>
+
+    <section class="card wide">
+      <h2>Композитные индексы</h2>
+      <div class="composite-grid" id="composite-grid"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Повестка дня</h2>
+      <div id="agenda-headline" class="headline">—</div>
+      <div id="agenda-description" class="muted"></div>
+      <h3>Рекомендованные действия</h3>
+      <ul class="list" id="agenda-actions"></ul>
+    </section>
+  </main>
+
+  <script src="/dashboard.js"></script>
+</body>
+</html>
