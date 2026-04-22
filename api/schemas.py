@@ -1,8 +1,4 @@
-"""Pydantic schemas for the public API.
-
-Pydantic is vendored as v2 in `requirements.txt`; only the models actually
-used by the API live here to keep the surface narrow.
-"""
+"""Pydantic schemas for the public API."""
 
 from __future__ import annotations
 
@@ -13,12 +9,16 @@ from pydantic import BaseModel, Field
 
 
 class CityBrief(BaseModel):
+    slug: Optional[str] = None
     name: str
     region: str
+    emoji: Optional[str] = None
+    accent_color: Optional[str] = None
     population: int
     coordinates: Dict[str, float]
     districts: List[str]
     key_problems: List[str]
+    is_pilot: bool = False
 
 
 class WeatherBlock(BaseModel):
