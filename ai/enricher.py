@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from collectors.base import CollectedItem
 from config.settings import settings
 
+from .cache import ResponseCache
 from .deepseek_client import DeepSeekClient, DeepSeekError
 from .prompts import CATEGORIES, build_enrichment_prompt
 
@@ -27,7 +28,10 @@ class NewsEnricher:
         batch_size: Optional[int] = None,
         max_items: Optional[int] = None,
     ):
-        self.client = client or DeepSeekClient()
+        if client is None:
+            cache = ResponseCache.from_settings()
+            client = DeepSeekClient(cache=cache)
+        self.client = client
         self.batch_size = batch_size or settings.enrichment_batch_size
         self.max_items = max_items or settings.enrichment_max_items
 
@@ -36,12 +40,7 @@ class NewsEnricher:
         return self.client.enabled
 
     async def enrich(self, items: Sequence[CollectedItem]) -> List[CollectedItem]:
-        """Annotate the most recent `max_items` with sentiment/category/etc.
-
-        Mutates items in-place AND returns the original list (same objects),
-        so callers can use either style. Older items beyond `max_items` are
-        left alone to keep token spend bounded.
-        """
+        """Annotate the most recent `max_items` with sentiment/category/etc."""
         if not items:
             return list(items)
         if not self.enabled:
@@ -96,11 +95,6 @@ def _serialise_batch(batch: Sequence[CollectedItem]) -> str:
 def _apply_response(
     response: Dict[str, Any], by_id: Dict[str, CollectedItem]
 ) -> None:
-    """Fold the model JSON back onto CollectedItems.
-
-    Accepts either `{"items": [...]}` or a raw list at the top level so a
-    slightly non-compliant response still lands.
-    """
     raw_items = response.get("items") if isinstance(response, dict) else None
     if raw_items is None and isinstance(response, list):
         raw_items = response
