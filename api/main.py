@@ -24,7 +24,6 @@ from config.settings import settings
 from db import init_pool, close_pool
 from db.seed import run_migrations, seed_cities
 
-from . import tasks_wiring  # noqa: F401  (imports registered on app bind)
 from .routes import router
 
 logger = logging.getLogger(__name__)
