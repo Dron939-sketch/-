@@ -1,6 +1,6 @@
 """Source registry for data collectors.
 
-Maps city name → list of sources for Telegram, VK, Yandex News RSS and
+Maps city name → list of sources for Telegram, VK, News RSS and
 Gosuslugi. Entries are annotated with a priority (P0/P1/P2) so collectors can
 back off gracefully under rate limits.
 """
@@ -50,10 +50,13 @@ KOLOMNA_SOURCES = CitySources(
         Source("vk", "Коломна Онлайн", "kolomna_online", "news", "P1"),
     ],
     news_rss=[
+        # Google News ru RSS — живой публичный фид без ключей. Старый
+        # https://news.yandex.ru/Kolomna/index.rss ушёл в Дзен и отвечает
+        # таймаутом, поэтому заменён на Google News.
         Source(
             "news_rss",
-            "Яндекс.Новости — Коломна",
-            "https://news.yandex.ru/Kolomna/index.rss",
+            "Google News — Коломна",
+            "https://news.google.com/rss/search?q=%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0&hl=ru&gl=RU&ceid=RU:ru",
             "news",
             "P1",
         ),
