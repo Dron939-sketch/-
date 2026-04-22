@@ -74,6 +74,13 @@ class Settings:
     yandex_api_key: str = _env("YANDEX_API_KEY", "")
     gosuslugi_api_key: str = _env("GOSUSLUGI_API_KEY", "")
 
+    # --- DeepSeek LLM (news enrichment) ---
+    deepseek_api_key: str = _env("DEEPSEEK_API_KEY", "")
+    deepseek_base_url: str = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    deepseek_model: str = _env("DEEPSEEK_MODEL", "deepseek-chat")
+    enrichment_batch_size: int = _env_int("ENRICHMENT_BATCH_SIZE", 20)
+    enrichment_max_items: int = _env_int("ENRICHMENT_MAX_ITEMS", 60)
+
     # --- Collector behaviour ---
     collection_interval_minutes: int = _env_int("COLLECTION_INTERVAL_MIN", 30)
     news_lookback_hours: int = _env_int("NEWS_LOOKBACK_HOURS", 24)

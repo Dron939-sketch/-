@@ -19,6 +19,10 @@ class CollectedItem:
     The `id` is a deterministic hash of (source, external_id|url|text) so
     re-running a collector against the same source is idempotent at the
     storage layer.
+
+    The `enrichment` dict is filled by `ai.enricher.NewsEnricher` after
+    collection: `{sentiment, category, severity, summary}`. It stays `None`
+    when DeepSeek is disabled or the call failed.
     """
 
     source_kind: str
@@ -30,6 +34,7 @@ class CollectedItem:
     author: Optional[str] = None
     category: Optional[str] = None
     raw: Dict[str, Any] = field(default_factory=dict)
+    enrichment: Optional[Dict[str, Any]] = None
 
     @property
     def id(self) -> str:
@@ -47,6 +52,7 @@ class CollectedItem:
             "url": self.url,
             "author": self.author,
             "category": self.category,
+            "enrichment": self.enrichment,
         }
 
 
