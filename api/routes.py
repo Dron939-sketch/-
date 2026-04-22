@@ -33,18 +33,22 @@ from collectors.base import CollectedItem
 from config.cities import CITIES, get_city, get_city_by_slug
 from config.settings import settings
 from db.queries import (
+    latest_metrics,
     latest_weather,
+    metrics_history,
+    metrics_trend_7d,
     news_counts_last_24h,
     top_recent_summaries,
 )
 from db.seed import city_id_by_name
+from metrics.forecast import build_forecast_block
 
 from . import schemas
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 
 def _resolve_city(name_or_slug: str):
@@ -105,13 +109,32 @@ _PLACEHOLDER_COMPLAINTS = [
     "Недостаток детских площадок в новых районах",
 ]
 
+_PLACEHOLDER_VECTORS = {
+    "safety": 4.0 / 6.0,
+    "economy": 3.5 / 6.0,
+    "quality": 3.8 / 6.0,
+    "social": 4.2 / 6.0,
+}
+
+_PLACEHOLDER_TRENDS = {
+    "safety": 0.0,
+    "economy": 0.0,
+    "quality": 0.0,
+    "social": 0.0,
+}
+
+_PLACEHOLDER_FORECAST = {
+    "summary": "Прогноз появится через несколько дней — система накапливает историю.",
+    "recommendation": "",
+}
+
 
 @router.get("/api/city/{name}/all_metrics")
 async def all_metrics(name: str) -> dict:
     """Aggregated metric snapshot consumed by the mayor dashboard.
 
-    When the DB has data we serve it; otherwise we fall back to
-    deterministic placeholders so the UI still renders on a cold deploy.
+    Reads live values from the DB when present and falls back to
+    deterministic placeholders on a cold deploy.
     """
     cfg = _resolve_city(name)
 
@@ -121,6 +144,10 @@ async def all_metrics(name: str) -> dict:
     top_praises: List[str] = []
     news_counts = {"negative": 0, "positive": 0, "total": 0}
     trust_index = 0.58
+    happiness_overall = 0.62
+    city_metrics = dict(_PLACEHOLDER_VECTORS)
+    trends = dict(_PLACEHOLDER_TRENDS)
+    forecast = dict(_PLACEHOLDER_FORECAST)
 
     if city_id is not None:
         wx = await latest_weather(city_id)
@@ -134,10 +161,10 @@ async def all_metrics(name: str) -> dict:
                 "wind_speed": wx.get("wind_speed"),
                 "comfort_index": wx.get("comfort_index"),
             }
+
         counts = await news_counts_last_24h(city_id)
         if counts.get("total", 0) > 0:
             news_counts = counts
-            # Derive a cheap trust index: fewer complaints -> higher trust.
             ratio = counts["negative"] / max(counts["total"], 1)
             trust_index = round(max(0.0, min(1.0, 0.8 - ratio * 0.6)), 2)
             complaints_live = await top_recent_summaries(
@@ -157,6 +184,34 @@ async def all_metrics(name: str) -> dict:
             if praises_live:
                 top_praises = praises_live
 
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            def _to_unit(v: Any) -> float | None:
+                return None if v is None else round(float(v) / 6.0, 3)
+
+            live = {
+                "safety":  _to_unit(metric_row.get("sb")),
+                "economy": _to_unit(metric_row.get("tf")),
+                "quality": _to_unit(metric_row.get("ub")),
+                "social":  _to_unit(metric_row.get("chv")),
+            }
+            # Only overwrite vectors for which we have a real number.
+            for k, v in live.items():
+                if v is not None:
+                    city_metrics[k] = v
+            if metric_row.get("trust_index") is not None:
+                trust_index = round(float(metric_row["trust_index"]), 2)
+            if metric_row.get("happiness_index") is not None:
+                happiness_overall = round(float(metric_row["happiness_index"]), 2)
+
+            trend_row = await metrics_trend_7d(city_id)
+            # Non-zero trend means we actually had two datapoints to diff.
+            if any(abs(v) > 0 for v in trend_row.values()):
+                trends = trend_row
+
+            history = await metrics_history(city_id, days=30)
+            forecast = build_forecast_block(history, days_ahead=90)
+
     return {
         "city": cfg["name"],
         "slug": cfg.get("slug"),
@@ -165,18 +220,8 @@ async def all_metrics(name: str) -> dict:
         "region": cfg.get("region"),
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "weather": weather,
-        "city_metrics": {
-            "safety": 4.0 / 6.0,
-            "economy": 3.5 / 6.0,
-            "quality": 3.8 / 6.0,
-            "social": 4.2 / 6.0,
-        },
-        "trends": {
-            "safety": 0.02,
-            "economy": -0.01,
-            "quality": 0.05,
-            "social": -0.03,
-        },
+        "city_metrics": city_metrics,
+        "trends": trends,
         "trust": {
             "index": trust_index,
             "positive_mentions": news_counts["positive"],
@@ -186,7 +231,7 @@ async def all_metrics(name: str) -> dict:
             "trend": "stable",
         },
         "happiness": {
-            "overall": 0.62,
+            "overall": happiness_overall,
             "life_satisfaction": 0.64,
             "emotional_state": 0.60,
             "social_connection": 0.65,
@@ -208,17 +253,7 @@ async def all_metrics(name: str) -> dict:
             {"name": "Качество жизни → Отток", "level": "warn"},
             {"name": "Институциональная петля", "level": "info"},
         ],
-        "forecast_3m": {
-            "summary": (
-                "При текущем сценарии через 3 месяца безопасность снизится "
-                "до 3.5/6, а экономика вырастет до 4.1/6. Петля «Безопасность "
-                "→ Экономика» усилится на 40%."
-            ),
-            "recommendation": (
-                "Разорвать петлю через инвестиции в безопасность — "
-                "окупаемость 4 месяца."
-            ),
-        },
+        "forecast_3m": forecast,
     }
 
 
