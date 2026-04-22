@@ -7,12 +7,17 @@
 const REFRESH_MS = 10 * 60 * 1000;
 const STORAGE_KEY = "cityMind.selectedCitySlug";
 
+// Dashboard keys (safety/economy/quality/social) → DB keys (sb/tf/ub/chv)
+// for the sparkline history endpoint.
 const VECTOR_META = [
-  { key: "safety",  name: "Безопасность",   icon: "🛡️" },
-  { key: "economy", name: "Экономика",       icon: "💰" },
-  { key: "quality", name: "Качество жизни",  icon: "😊" },
-  { key: "social",  name: "Соцкапитал",     icon: "🤝" },
+  { key: "safety",  dbKey: "sb",  name: "Безопасность",   icon: "🛡️" },
+  { key: "economy", dbKey: "tf",  name: "Экономика",       icon: "💰" },
+  { key: "quality", dbKey: "ub",  name: "Качество жизни",  icon: "😊" },
+  { key: "social",  dbKey: "chv", name: "Соцкапитал",     icon: "🤝" },
 ];
+
+const SPARKLINE_W = 160;
+const SPARKLINE_H = 30;
 
 async function fetchJson(url) {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -23,18 +28,12 @@ async function fetchJson(url) {
 // -------------------------------------------------- City bootstrap
 
 function pickInitialSlug(cities) {
-  // 1. explicit URL path (/kolomna, /stupino, ...)
   const urlSlug = window.location.pathname.replace(/^\/+/, "").toLowerCase();
   if (urlSlug && cities.some((c) => c.slug === urlSlug)) return urlSlug;
-
-  // 2. localStorage
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && cities.some((c) => c.slug === stored)) return stored;
-
-  // 3. pilot city
   const pilot = cities.find((c) => c.is_pilot);
   if (pilot) return pilot.slug;
-
   return cities[0]?.slug;
 }
 
@@ -120,21 +119,125 @@ function renderVectors(metrics, trends) {
       <div class="icon">${v.icon}</div>
       <div class="score">${scaled}<small> / 6</small></div>
       <div class="name">${v.name}</div>
+      <svg class="sparkline empty" data-key="${v.dbKey}" viewBox="0 0 ${SPARKLINE_W} ${SPARKLINE_H}" preserveAspectRatio="none" aria-hidden="true"></svg>
       <div class="trend ${trend.cls}">${trend.label}</div>
     `;
     grid.appendChild(tile);
   });
 }
 
+function renderSparklines(history) {
+  // history: {sb:[[ts, v], ...], tf:[...], ub:[...], chv:[...]}
+  VECTOR_META.forEach((v) => {
+    const svg = document.querySelector(`.sparkline[data-key="${v.dbKey}"]`);
+    if (!svg) return;
+    const series = (history && history[v.dbKey]) || [];
+    if (series.length < 2) {
+      svg.classList.add("empty");
+      svg.innerHTML = "";
+      return;
+    }
+    const values = series.map((p) => p[1]);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const pad = 3;
+    const points = series.map((p, i) => {
+      const x = (i / (series.length - 1)) * SPARKLINE_W;
+      const y = SPARKLINE_H - pad - ((p[1] - min) / range) * (SPARKLINE_H - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const fillPoints = `0,${SPARKLINE_H} ${points.join(" ")} ${SPARKLINE_W},${SPARKLINE_H}`;
+    svg.classList.remove("empty");
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="sparklineGradient-${v.dbKey}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--gold)" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="var(--gold)" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <polygon class="sparkline-fill" points="${fillPoints}" fill="url(#sparklineGradient-${v.dbKey})"/>
+      <polyline points="${points.join(" ")}"/>
+    `;
+  });
+}
+
+// -------------------------------------------------- Loops & modal
+
+let currentLoops = [];
+
 function renderLoops(loops) {
+  currentLoops = Array.isArray(loops) ? loops : [];
   const el = document.getElementById("loops-list");
   el.innerHTML = "";
-  (loops || []).forEach((l) => {
+  currentLoops.forEach((l, idx) => {
     const li = document.createElement("li");
-    li.innerHTML = `<span class="dot ${l.level || "info"}"></span> ${l.name}`;
+    li.setAttribute("role", "button");
+    li.setAttribute("tabindex", "0");
+    li.dataset.index = String(idx);
+    li.innerHTML =
+      `<span class="dot ${l.level || "info"}"></span>` +
+      `<span>${l.name || "Петля"}</span>` +
+      `<span class="caret">→</span>`;
+    li.addEventListener("click", () => openLoopModal(idx));
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLoopModal(idx); }
+    });
     el.appendChild(li);
   });
 }
+
+function openLoopModal(idx) {
+  const loop = currentLoops[idx];
+  if (!loop) return;
+  document.getElementById("loop-modal-title").textContent = loop.name || "Петля";
+  document.getElementById("loop-modal-description").textContent = loop.description || "";
+
+  const bp = loop.break_points || {};
+  const details = document.getElementById("loop-modal-details");
+  details.innerHTML = "";
+  const rows = [];
+  if (loop.strength != null) rows.push(["Сила петли", `${Math.round(loop.strength * 100)}%`]);
+  if (bp.strategic_priority) rows.push(["Приоритет", bp.strategic_priority]);
+  if (bp.break_timeline) rows.push(["Горизонт разрыва", bp.break_timeline]);
+  if (bp.effort_required) rows.push(["Требуемые усилия", bp.effort_required]);
+  if (bp.advice) rows.push(["Совет", bp.advice]);
+  if (bp.length != null) rows.push(["Длина цикла", String(bp.length)]);
+  if (bp.impact != null) rows.push(["Влияние", `${Math.round(bp.impact * 100)}%`]);
+
+  rows.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "detail-row";
+    row.innerHTML = `<span class="label">${label}</span><span class="value">${value}</span>`;
+    details.appendChild(row);
+  });
+
+  const resourcesBox = document.getElementById("loop-modal-resources");
+  const resourcesList = document.getElementById("loop-modal-resources-list");
+  resourcesList.innerHTML = "";
+  if (Array.isArray(bp.recommended_resources) && bp.recommended_resources.length) {
+    bp.recommended_resources.forEach((r) => {
+      const li = document.createElement("li");
+      li.textContent = r;
+      resourcesList.appendChild(li);
+    });
+    resourcesBox.hidden = false;
+  } else {
+    resourcesBox.hidden = true;
+  }
+
+  const modal = document.getElementById("loop-modal");
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeLoopModal() {
+  const modal = document.getElementById("loop-modal");
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+// -------------------------------------------------- Misc
 
 function renderTrustHappy(data) {
   const trustPct = data.trust?.index != null ? data.trust.index : null;
@@ -209,6 +312,12 @@ async function refresh() {
     console.warn("metrics unavailable", e);
   }
   try {
+    const history = await fetchJson(`/api/city/${slug}/history?days=30`);
+    renderSparklines(history.series || {});
+  } catch (e) {
+    console.warn("history unavailable", e);
+  }
+  try {
     const agenda = await fetchJson(`/api/city/${slug}/agenda`);
     renderAgenda(agenda);
   } catch (e) {
@@ -221,7 +330,6 @@ async function switchCity(city) {
   currentCity = city;
   applyCity(city);
   renderGreeting(city);
-  // Re-render the menu so the active marker moves with the selection.
   const cities = window.__CITIES__ || [];
   renderCityMenu(cities, city.slug, switchCity);
   document.getElementById("city-menu").hidden = true;
@@ -255,6 +363,14 @@ async function init() {
   document.addEventListener("click", () => {
     menu.hidden = true;
     btn.setAttribute("aria-expanded", "false");
+  });
+
+  // Modal dismissal — backdrop click, close button, Esc.
+  document.querySelectorAll("#loop-modal [data-dismiss]").forEach((el) => {
+    el.addEventListener("click", closeLoopModal);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLoopModal();
   });
 
   refreshTimer = setInterval(refresh, REFRESH_MS);
