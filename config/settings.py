@@ -80,6 +80,7 @@ class Settings:
     deepseek_model: str = _env("DEEPSEEK_MODEL", "deepseek-chat")
     enrichment_batch_size: int = _env_int("ENRICHMENT_BATCH_SIZE", 20)
     enrichment_max_items: int = _env_int("ENRICHMENT_MAX_ITEMS", 60)
+    enrichment_cache_ttl_hours: int = _env_int("ENRICHMENT_CACHE_TTL_HOURS", 24)
 
     # --- Collector behaviour ---
     collection_interval_minutes: int = _env_int("COLLECTION_INTERVAL_MIN", 30)
