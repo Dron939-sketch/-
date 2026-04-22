@@ -15,12 +15,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Set
 
 from fastapi import APIRouter, HTTPException
 
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
+from ai import NewsEnricher
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -62,14 +63,7 @@ async def city_detail(name: str) -> schemas.CityBrief:
 
 @router.get("/api/city/{name}/all_metrics")
 async def all_metrics(name: str) -> dict:
-    """Aggregated metric snapshot consumed by the mayor dashboard.
-
-    Shape matches `dashboard/dashboard.js` expectations (weather, 4-vector
-    city_metrics, trust, happiness, 8 composite indices). While the
-    TimescaleDB `metrics` table is empty we serve deterministic placeholders
-    so the UI renders — real values land here once the Celery collection
-    loop is running and writing to Postgres.
-    """
+    """Aggregated metric snapshot consumed by the mayor dashboard."""
     try:
         get_city(name)
     except KeyError as exc:
@@ -131,9 +125,7 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
     """Run all configured collectors for a city and return a merged feed.
 
     Each collector has a hard 15 s wall clock via `asyncio.wait_for` so one
-    slow upstream cannot block the whole response. In production the heavy
-    lifting is done by a Celery worker on a schedule and this endpoint
-    serves rows from Postgres instead.
+    slow upstream cannot block the whole response.
     """
     try:
         get_city(name)
@@ -166,9 +158,10 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
 async def daily_agenda(name: str) -> schemas.AgendaResponse:
     """Compose the morning briefing.
 
-    Pulls a fresh news window (time-capped above) and pairs it with
-    placeholder metrics. When the TimescaleDB store is online the metrics
-    come from a SELECT of the latest row.
+    Collects fresh news, runs them through the DeepSeek-backed enricher
+    (sentiment / category / severity / summary) and feeds the result into
+    `DailyAgendaBuilder`. If the enricher is disabled or fails, the builder
+    falls back to source-level categories and still produces a valid report.
     """
     try:
         get_city(name)
@@ -185,15 +178,27 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
             published_at=n.published_at,
             url=n.url,
             category=n.category,
+            enrichment=None,
         )
         for n in news_response.items
     ]
 
+    enricher = NewsEnricher()
+    if enricher.enabled:
+        try:
+            await asyncio.wait_for(enricher.enrich(news_items), timeout=30)
+        except asyncio.TimeoutError:
+            logger.warning("enricher timed out — proceeding without enrichment")
+
     city_metrics = {"СБ": 4.0, "ТФ": 3.5, "УБ": 3.8, "ЧВ": 4.2}
     trust = {
         "index": 0.58,
-        "top_complaints": _top_titles_by_category(news_items, {"complaints", "utilities"}, 3),
-        "top_praises": _top_titles_by_category(news_items, {"culture", "sport"}, 3),
+        "top_complaints": _pick_titles(
+            news_items, {"complaints", "utilities", "incidents"}, 3, negative_only=True
+        ),
+        "top_praises": _pick_titles(
+            news_items, {"culture", "sport", "official"}, 3, positive_only=True
+        ),
     }
     happiness = {"overall": 0.62}
     weather = {"temperature": 12.0, "condition": "Облачно", "condition_emoji": "☁️"}
@@ -207,6 +212,15 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
         weather=weather,
         news=news_items,
     )
+
+    # If we have enrichment data, override the headline with the highest
+    # severity story — more reliable than the source-based heuristic.
+    top_severe = _top_by_severity(news_items)
+    if top_severe is not None:
+        agenda.headline = (
+            top_severe.enrichment.get("summary") or top_severe.title
+        )
+        agenda.description = top_severe.content[:400]
 
     return schemas.AgendaResponse(
         city=agenda.city,
@@ -244,13 +258,57 @@ async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResp
     return schemas.RoadmapResponse(city=name, roadmap=plan.to_dict())
 
 
-def _top_titles_by_category(
-    items: List[CollectedItem], categories: set, limit: int
+# ----- helpers -----
+
+
+def _pick_titles(
+    items: List[CollectedItem],
+    categories: Set[str],
+    limit: int,
+    *,
+    negative_only: bool = False,
+    positive_only: bool = False,
 ) -> List[str]:
-    picked: List[str] = []
+    """Pick short summaries/titles matching a set of categories.
+
+    Prefers the AI-generated `summary` when the enricher has tagged the
+    item; falls back to the raw title. Optionally filters by sentiment sign.
+    """
+    out: List[str] = []
     for it in items:
-        if it.category in categories and it.title:
-            picked.append(it.title)
-            if len(picked) >= limit:
+        enr = it.enrichment or {}
+        cat = (enr.get("category") or it.category or "other")
+        if cat not in categories:
+            continue
+        sent = enr.get("sentiment")
+        if negative_only and (sent is None or sent > -0.1):
+            # Without sentiment data, keep the item — better a non-negative
+            # complaint than an empty list.
+            if sent is not None:
+                continue
+        if positive_only and (sent is None or sent < 0.1):
+            if sent is not None:
+                continue
+        text = enr.get("summary") or it.title
+        if text:
+            out.append(text)
+            if len(out) >= limit:
                 break
-    return picked
+    return out
+
+
+def _top_by_severity(items: List[CollectedItem]) -> CollectedItem | None:
+    """Return the item with the highest AI-scored severity, if any."""
+    scored = [
+        (it, it.enrichment.get("severity"))
+        for it in items
+        if it.enrichment and it.enrichment.get("severity") is not None
+    ]
+    if not scored:
+        return None
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    top_item, top_sev = scored[0]
+    # Only override when the model actually flagged something notable.
+    if top_sev is None or top_sev < 0.5:
+        return None
+    return top_item
