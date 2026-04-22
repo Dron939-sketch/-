@@ -311,6 +311,34 @@ body {
 .vector-tile .trend.down { color: var(--danger); }
 .vector-tile .trend.flat { color: var(--muted); }
 
+/* Sparkline inside a vector tile. Width is implicit from the parent. */
+.vector-tile .sparkline {
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin-top: 10px;
+  opacity: 0.85;
+  transition: opacity 0.25s ease;
+}
+.vector-tile:hover .sparkline { opacity: 1; }
+.vector-tile .sparkline polyline {
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  filter: drop-shadow(0 0 3px rgba(212, 175, 55, 0.45));
+}
+.vector-tile .sparkline .sparkline-fill {
+  fill: url(#sparklineGradient);
+  stroke: none;
+  opacity: 0.35;
+}
+.vector-tile .sparkline.empty {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ------------------ AGENDA ------------------ */
 .badge {
   display: inline-flex; align-items: center; gap: 6px;
@@ -356,7 +384,22 @@ body {
   border-radius: 10px;
   border: 1px solid rgba(197, 160, 89, 0.08);
   font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
 }
+.loops-list li:hover {
+  border-color: rgba(197, 160, 89, 0.35);
+  background: rgba(26, 58, 92, 0.65);
+  transform: translateX(2px);
+}
+.loops-list .caret {
+  margin-left: auto;
+  color: var(--gold);
+  font-size: 0.85rem;
+  opacity: 0.6;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.loops-list li:hover .caret { opacity: 1; transform: translateX(2px); }
 .loops-list .dot {
   width: 10px; height: 10px; border-radius: 50%;
   box-shadow: 0 0 10px currentColor;
@@ -433,6 +476,129 @@ body {
   border-top: 1px solid rgba(197, 160, 89, 0.08);
 }
 
+/* ------------------ MODAL ------------------ */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal.open { display: flex; }
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(10, 22, 40, 0.65), rgba(5, 10, 20, 0.88));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade-in 0.25s ease;
+}
+.modal-panel {
+  position: relative;
+  max-width: 560px;
+  width: calc(100% - 40px);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 32px 36px 28px;
+  border-radius: var(--radius);
+  background:
+    linear-gradient(160deg, rgba(26, 58, 92, 0.55), rgba(13, 33, 53, 0.85)),
+    var(--bg-night);
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  box-shadow: var(--shadow-lg);
+  animation: modal-rise 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-panel::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+.modal-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 30px; height: 30px;
+  border: none;
+  background: rgba(197, 160, 89, 0.1);
+  color: var(--gold);
+  border-radius: 50%;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.modal-close:hover {
+  background: rgba(212, 175, 55, 0.22);
+  color: var(--gold-bright);
+}
+.modal-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.modal-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 700;
+  font-size: 1.6rem;
+  margin: 0 0 12px;
+  line-height: 1.25;
+}
+.modal-description {
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 0 0 18px;
+}
+.modal-details {
+  margin: 0 0 14px;
+  display: grid;
+  gap: 10px;
+}
+.modal-details .detail-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 8px;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+  font-size: 0.92rem;
+}
+.modal-details .detail-row .label {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.76rem;
+  align-self: center;
+}
+.modal-details .detail-row .value {
+  color: var(--text);
+  font-weight: 500;
+}
+.chip-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex; flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.chip-list li {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  color: var(--gold-light);
+}
+@media (max-width: 640px) {
+  .modal-panel { padding: 24px 20px 20px; }
+  .modal-details .detail-row { grid-template-columns: 1fr; gap: 4px; }
+}
+
 /* ------------------ ANIMATIONS ------------------ */
 @keyframes card-rise {
   from { opacity: 0; transform: translateY(10px); }
@@ -441,6 +607,10 @@ body {
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes modal-rise {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* Stagger animations for cards */
