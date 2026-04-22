@@ -1,10 +1,17 @@
--- CityMind initial schema.
--- Targets PostgreSQL 15 + TimescaleDB (for metrics / weather timeseries).
--- If TimescaleDB is not installed the `create_hypertable` calls are no-ops;
--- the rest of the schema remains valid plain Postgres.
+-- Городской Разум — initial schema.
+-- Targets PostgreSQL 15. TimescaleDB hypertables are *optional*: if the
+-- extension is not installed (Render-managed Postgres does not ship it),
+-- the affected tables stay regular relational tables and the rest of the
+-- schema works without changes.
 
-CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+DO $$
+BEGIN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS timescaledb';
+EXCEPTION WHEN insufficient_privilege OR feature_not_supported OR undefined_file THEN
+    RAISE NOTICE 'TimescaleDB extension not available — using plain Postgres';
+END $$;
 
 --------------------------------------------------------------------------
 -- Core reference tables
@@ -12,14 +19,22 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS cities (
     id              SERIAL PRIMARY KEY,
+    slug            TEXT UNIQUE,
     name            TEXT NOT NULL UNIQUE,
     region          TEXT NOT NULL,
     population      INTEGER,
     lat             DOUBLE PRECISION,
     lon             DOUBLE PRECISION,
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
+    accent_color    TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Adopt slug column on existing installations (idempotent).
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS accent_color TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS cities_slug_uniq ON cities (slug)
+    WHERE slug IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sources (
     id              SERIAL PRIMARY KEY,
@@ -41,7 +56,6 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE TABLE IF NOT EXISTS news (
     id              TEXT PRIMARY KEY,    -- hash from collector
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
-    source_id       INTEGER REFERENCES sources(id) ON DELETE SET NULL,
     source_kind     TEXT NOT NULL,
     source_handle   TEXT NOT NULL,
     title           TEXT,
@@ -50,9 +64,16 @@ CREATE TABLE IF NOT EXISTS news (
     author          TEXT,
     category        TEXT,
     published_at    TIMESTAMPTZ NOT NULL,
-    sentiment       REAL,                -- [-1, +1], filled by NLP pass
+    sentiment       REAL,
+    severity        REAL,
+    summary         TEXT,
+    enrichment      JSONB,
     collected_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE news ADD COLUMN IF NOT EXISTS severity REAL;
+ALTER TABLE news ADD COLUMN IF NOT EXISTS summary TEXT;
+ALTER TABLE news ADD COLUMN IF NOT EXISTS enrichment JSONB;
 
 CREATE INDEX IF NOT EXISTS news_city_published_idx
     ON news (city_id, published_at DESC);
@@ -63,34 +84,39 @@ CREATE INDEX IF NOT EXISTS news_content_trgm_idx
 CREATE TABLE IF NOT EXISTS appeals (
     id              TEXT PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
-    source          TEXT NOT NULL,       -- gosuslugi | vk_dm | telegram_bot | ...
+    source          TEXT NOT NULL,
     author          TEXT,
     title           TEXT,
     content         TEXT,
     category        TEXT,
-    status          TEXT NOT NULL DEFAULT 'new', -- new | in_progress | resolved
+    status          TEXT NOT NULL DEFAULT 'new',
     sentiment       REAL,
     published_at    TIMESTAMPTZ NOT NULL,
     collected_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 --------------------------------------------------------------------------
--- Timeseries metrics
+-- Timeseries: metrics + weather. Hypertables are best-effort.
 --------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS metrics (
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
     ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    sb              REAL,  -- Безопасность
-    tf              REAL,  -- Экономика
-    ub              REAL,  -- Качество жизни
-    chv             REAL,  -- Социальный капитал
+    sb              REAL,
+    tf              REAL,
+    ub              REAL,
+    chv             REAL,
     trust_index     REAL,
     happiness_index REAL,
     PRIMARY KEY (city_id, ts)
 );
 
-SELECT create_hypertable('metrics', 'ts', if_not_exists => TRUE);
+DO $$
+BEGIN
+    PERFORM create_hypertable('metrics', 'ts', if_not_exists => TRUE);
+EXCEPTION WHEN undefined_function THEN
+    RAISE NOTICE 'metrics: TimescaleDB missing, staying as a regular table';
+END $$;
 
 CREATE TABLE IF NOT EXISTS weather (
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
@@ -106,7 +132,14 @@ CREATE TABLE IF NOT EXISTS weather (
     PRIMARY KEY (city_id, ts)
 );
 
-SELECT create_hypertable('weather', 'ts', if_not_exists => TRUE);
+DO $$
+BEGIN
+    PERFORM create_hypertable('weather', 'ts', if_not_exists => TRUE);
+EXCEPTION WHEN undefined_function THEN
+    RAISE NOTICE 'weather: TimescaleDB missing, staying as a regular table';
+END $$;
+
+CREATE INDEX IF NOT EXISTS weather_city_ts_idx ON weather (city_id, ts DESC);
 
 --------------------------------------------------------------------------
 -- Analytics outputs
@@ -125,7 +158,7 @@ CREATE TABLE IF NOT EXISTS loops (
 CREATE TABLE IF NOT EXISTS agendas (
     id              BIGSERIAL PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
-    kind            TEXT NOT NULL, -- daily | weekly | critical | strategic
+    kind            TEXT NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     headline        TEXT NOT NULL,
     description     TEXT,
@@ -157,18 +190,16 @@ CREATE TABLE IF NOT EXISTS users (
     id              SERIAL PRIMARY KEY,
     email           TEXT NOT NULL UNIQUE,
     full_name       TEXT,
-    role            TEXT NOT NULL DEFAULT 'viewer',  -- admin | mayor | deputy | analyst | viewer
+    role            TEXT NOT NULL DEFAULT 'viewer',
     password_hash   TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_login_at   TIMESTAMPTZ
 );
 
 --------------------------------------------------------------------------
--- Retention
+-- Retention (no-op on plain Postgres)
 --------------------------------------------------------------------------
 
--- Drop news older than 12 months if TimescaleDB retention policy is enabled.
--- These statements are no-ops on plain Postgres.
 DO $$
 BEGIN
     PERFORM add_retention_policy('metrics', INTERVAL '365 days', if_not_exists => TRUE);
