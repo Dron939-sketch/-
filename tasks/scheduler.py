@@ -5,7 +5,8 @@ Three loops:
   collectors, DeepSeek-enrich, upsert into `news`.
 - `weather_loop` every hour: fetch current weather and upsert `weather`.
 - `snapshot_loop` every hour: aggregate the last 24h of news into a
-  `metrics` row so the dashboard can show real trends + forecast.
+  `metrics` row AND re-run the confinement loop detector, writing the
+  top loops to the `loops` table.
 
 Every iteration is wrapped in a generous try/except — a failure for
 one city never stops the others, a failure one iteration never stops
@@ -19,6 +20,7 @@ import logging
 from typing import List, Optional
 
 from ai.enricher import NewsEnricher
+from analytics.loops import analyze_loops
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -29,8 +31,10 @@ from collectors.base import CollectedItem
 from config.cities import CITIES
 from config.settings import settings
 from db import get_pool
+from db.loops_queries import replace_loops
 from db.queries import (
     insert_metrics,
+    latest_metrics,
     news_window,
     upsert_news_batch,
     upsert_weather,
@@ -110,9 +114,7 @@ async def snapshot_metrics(city_name: str) -> bool:
     """Aggregate the last 24h of news into a `metrics` row.
 
     This is the signal that powers the dashboard trend arrows and the
-    3-month forecast. Skips the write when there are no rows to summarise,
-    so an empty-DB deployment stays empty instead of filling with
-    "baseline 3.5" rows that would pollute the forecast.
+    3-month forecast. Skips the write when there are no rows to summarise.
     """
     pool = get_pool()
     if pool is None:
@@ -133,6 +135,44 @@ async def snapshot_metrics(city_name: str) -> bool:
             ", ".join(f"{k}={v}" for k, v in values.items()),
         )
     return ok
+
+
+async def analyze_loops_for_city(city_name: str) -> int:
+    """Read the latest metrics snapshot, run the confinement loop detector,
+    and persist the top loops. Returns rows written.
+    """
+    pool = get_pool()
+    if pool is None:
+        return 0
+    city_id = await city_id_by_name(city_name)
+    if city_id is None:
+        return 0
+    metric_row = await latest_metrics(city_id)
+    if metric_row is None:
+        logger.debug("analyze_loops %s: no metrics yet", city_name)
+        return 0
+
+    # Run the legacy analyzer off the event loop — it's CPU-bound and
+    # doesn't need asyncpg connections.
+    snapshot = {
+        "sb": metric_row.get("sb"),
+        "tf": metric_row.get("tf"),
+        "ub": metric_row.get("ub"),
+        "chv": metric_row.get("chv"),
+    }
+    loops = await asyncio.get_running_loop().run_in_executor(
+        None, analyze_loops, city_name, snapshot, city_id
+    )
+    if not loops:
+        return 0
+
+    written = await replace_loops(city_id, loops)
+    if written:
+        logger.info(
+            "analyze_loops %s: %d loops, top='%s' (strength=%.2f)",
+            city_name, written, loops[0]["name"], loops[0]["strength"],
+        )
+    return written
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +209,11 @@ async def _snapshot_loop(interval_s: int) -> None:
     while True:
         for city_name in CITIES:
             try:
-                await snapshot_metrics(city_name)
+                wrote = await snapshot_metrics(city_name)
+                if wrote:
+                    # Chain the loop detector immediately so dashboard
+                    # sees fresh metrics + fresh loops in the same tick.
+                    await analyze_loops_for_city(city_name)
             except Exception:  # noqa: BLE001
                 logger.exception("snapshot_loop failed for %s", city_name)
         await asyncio.sleep(interval_s)
@@ -182,8 +226,7 @@ async def _snapshot_loop(interval_s: int) -> None:
 def start() -> None:
     """Kick off background loops. Safe to call once at startup.
 
-    Does nothing if no DB pool is available — without a pool we have
-    nowhere to write, so running the loops is just wasted work.
+    Does nothing if no DB pool is available.
     """
     if _tasks:
         return

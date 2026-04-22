@@ -32,6 +32,7 @@ from collectors import (
 from collectors.base import CollectedItem
 from config.cities import CITIES, get_city, get_city_by_slug
 from config.settings import settings
+from db.loops_queries import latest_loops
 from db.queries import (
     latest_metrics,
     latest_weather,
@@ -48,7 +49,7 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 
 def _resolve_city(name_or_slug: str):
@@ -128,6 +129,12 @@ _PLACEHOLDER_FORECAST = {
     "recommendation": "",
 }
 
+_PLACEHOLDER_LOOPS: List[Dict[str, Any]] = [
+    {"name": "Безопасность → Экономика", "level": "critical"},
+    {"name": "Качество жизни → Отток",   "level": "warn"},
+    {"name": "Институциональная петля",  "level": "info"},
+]
+
 
 @router.get("/api/city/{name}/all_metrics")
 async def all_metrics(name: str) -> dict:
@@ -148,6 +155,7 @@ async def all_metrics(name: str) -> dict:
     city_metrics = dict(_PLACEHOLDER_VECTORS)
     trends = dict(_PLACEHOLDER_TRENDS)
     forecast = dict(_PLACEHOLDER_FORECAST)
+    loops_block: List[Dict[str, Any]] = list(_PLACEHOLDER_LOOPS)
 
     if city_id is not None:
         wx = await latest_weather(city_id)
@@ -195,7 +203,6 @@ async def all_metrics(name: str) -> dict:
                 "quality": _to_unit(metric_row.get("ub")),
                 "social":  _to_unit(metric_row.get("chv")),
             }
-            # Only overwrite vectors for which we have a real number.
             for k, v in live.items():
                 if v is not None:
                     city_metrics[k] = v
@@ -205,12 +212,24 @@ async def all_metrics(name: str) -> dict:
                 happiness_overall = round(float(metric_row["happiness_index"]), 2)
 
             trend_row = await metrics_trend_7d(city_id)
-            # Non-zero trend means we actually had two datapoints to diff.
             if any(abs(v) > 0 for v in trend_row.values()):
                 trends = trend_row
 
             history = await metrics_history(city_id, days=30)
             forecast = build_forecast_block(history, days_ahead=90)
+
+        stored_loops = await latest_loops(city_id, limit=3)
+        if stored_loops:
+            loops_block = [
+                {
+                    "name": loop["name"],
+                    "level": loop.get("level") or "info",
+                    "description": loop.get("description"),
+                    "strength": loop.get("strength"),
+                    "break_points": loop.get("break_points") or {},
+                }
+                for loop in stored_loops
+            ]
 
     return {
         "city": cfg["name"],
@@ -248,11 +267,7 @@ async def all_metrics(name: str) -> dict:
             "future_outlook": 0.62,
             "overall_color": "warn",
         },
-        "loops": [
-            {"name": "Безопасность → Экономика", "level": "critical"},
-            {"name": "Качество жизни → Отток", "level": "warn"},
-            {"name": "Институциональная петля", "level": "info"},
-        ],
+        "loops": loops_block,
         "forecast_3m": forecast,
     }
 
