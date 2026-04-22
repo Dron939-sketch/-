@@ -1,11 +1,12 @@
-"""City registry.
+"""City registry — юго-восток Московской области.
 
-Six pilot cities. Adding more = one entry in `CITIES` plus a matching
-`CitySources` bundle in `config/sources.py`. Slugs are the stable
-identifier used in URLs (`/api/city/by-slug/kolomna`).
+Шесть пилотных городов: Коломна (основной), Луховицы, Воскресенск,
+Егорьевск, Ступино, Озёры. Добавление нового города = одна запись здесь
++ соответствующий `CitySources` в `config/sources.py`.
 
-Per the TZ, cities carry a few brand fields (emoji, accent_color) so the
-frontend can render the premium city selector without hitting the DB.
+Slugs — это стабильные идентификаторы для URL
+(`/api/city/by-slug/kolomna`). Поля emoji / accent_color — для премиум-
+селектора из ТЗ §4.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ class CityConfig(TypedDict, total=False):
 
 
 # ---------------------------------------------------------------------------
-# Pilot — first city fully wired to TG / VK sources
+# Пилот — город, у которого полностью настроены TG / VK источники.
 # ---------------------------------------------------------------------------
 
 KOLOMNA: CityConfig = {
@@ -66,107 +67,133 @@ KOLOMNA: CityConfig = {
 
 
 # ---------------------------------------------------------------------------
-# Federal demo cities — minimal configs (no TG/VK handles yet, only RSS).
+# Города-соседи — минимальные конфиги (пока только RSS Google News).
+# TG / VK источники добавляются администратором при онбординге.
 # ---------------------------------------------------------------------------
 
-MOSKVA: CityConfig = {
-    "slug": "moskva",
-    "name": "Москва",
-    "region": "Москва",
-    "emoji": "🏙️",
-    "accent_color": "#D4AF37",
-    "population": 13_010_000,
-    "coordinates": {"lat": 55.7558, "lon": 37.6173},
-    "timezone": "Europe/Moscow",
-    "districts": ["ЦАО", "САО", "СВАО", "ВАО", "ЮВАО", "ЮАО", "ЮЗАО", "ЗАО", "СЗАО", "ЗелАО", "ТиНАО"],
-    "key_problems": [
-        "транспортная перегрузка",
-        "доступность жилья",
-        "качество воздуха",
-        "миграционная нагрузка",
-    ],
-    "is_pilot": False,
-}
-
-
-SPB: CityConfig = {
-    "slug": "spb",
-    "name": "Санкт-Петербург",
-    "region": "Санкт-Петербург",
-    "emoji": "🏛️",
+LUKHOVITSY: CityConfig = {
+    "slug": "lukhovitsy",
+    "name": "Луховицы",
+    "region": "Московская область",
+    "emoji": "🥒",
     "accent_color": "#C5A059",
-    "population": 5_600_000,
-    "coordinates": {"lat": 59.9311, "lon": 30.3609},
+    "population": 29_300,
+    "coordinates": {"lat": 54.9639, "lon": 39.0289},
     "timezone": "Europe/Moscow",
     "districts": [
-        "Центральный", "Адмиралтейский", "Василеостровский", "Петроградский",
-        "Выборгский", "Калининский", "Московский", "Невский", "Приморский",
+        "Центральный",
+        "Военный городок",
+        "Южный",
+        "Красная горка",
     ],
     "key_problems": [
-        "состояние исторической застройки",
-        "паводки и уровень воды",
-        "транспортная связность окраин",
-        "туристическая нагрузка на центр",
+        "сохранение огуречного кластера",
+        "транспортная доступность до Москвы и Коломны",
+        "модернизация медицинской инфраструктуры",
+        "благоустройство центра",
     ],
     "is_pilot": False,
 }
 
 
-KAZAN: CityConfig = {
-    "slug": "kazan",
-    "name": "Казань",
-    "region": "Республика Татарстан",
-    "emoji": "🕌",
+VOSKRESENSK: CityConfig = {
+    "slug": "voskresensk",
+    "name": "Воскресенск",
+    "region": "Московская область",
+    "emoji": "⚗️",
     "accent_color": "#C5A059",
-    "population": 1_300_000,
-    "coordinates": {"lat": 55.7961, "lon": 49.1064},
+    "population": 75_200,
+    "coordinates": {"lat": 55.3189, "lon": 38.6739},
     "timezone": "Europe/Moscow",
-    "districts": ["Вахитовский", "Кировский", "Московский", "Ново-Савиновский", "Приволжский", "Советский", "Авиастроительный"],
+    "districts": [
+        "Центральный",
+        "Колыберево",
+        "Москворечье",
+        "Лопатинский",
+        "Фосфоритный",
+    ],
     "key_problems": [
-        "развитие IT-кластера",
-        "туристическая инфраструктура",
-        "межконфессиональный диалог",
-        "экология Волги",
+        "экология после химических производств",
+        "реконструкция жилого фонда",
+        "создание рабочих мест",
+        "транспортная связность районов",
     ],
     "is_pilot": False,
 }
 
 
-EKATERINBURG: CityConfig = {
-    "slug": "ekaterinburg",
-    "name": "Екатеринбург",
-    "region": "Свердловская область",
-    "emoji": "⛰️",
+EGORYEVSK: CityConfig = {
+    "slug": "egoryevsk",
+    "name": "Егорьевск",
+    "region": "Московская область",
+    "emoji": "⛪",
     "accent_color": "#C5A059",
-    "population": 1_540_000,
-    "coordinates": {"lat": 56.8389, "lon": 60.6057},
-    "timezone": "Asia/Yekaterinburg",
-    "districts": ["Верх-Исетский", "Железнодорожный", "Кировский", "Ленинский", "Октябрьский", "Орджоникидзевский", "Чкаловский"],
+    "population": 71_000,
+    "coordinates": {"lat": 55.3833, "lon": 39.0333},
+    "timezone": "Europe/Moscow",
+    "districts": [
+        "Центральный",
+        "6-й микрорайон",
+        "Новый",
+        "Михали",
+        "Заречный",
+    ],
+    "key_problems": [
+        "сохранение исторического центра",
+        "отток молодёжи в Москву",
+        "состояние дорог",
+        "развитие текстильной отрасли",
+    ],
+    "is_pilot": False,
+}
+
+
+STUPINO: CityConfig = {
+    "slug": "stupino",
+    "name": "Ступино",
+    "region": "Московская область",
+    "emoji": "🏭",
+    "accent_color": "#C5A059",
+    "population": 64_100,
+    "coordinates": {"lat": 54.8833, "lon": 38.0778},
+    "timezone": "Europe/Moscow",
+    "districts": [
+        "Центральный",
+        "Новое Ступино",
+        "Приокский",
+        "Малино",
+        "Ситне-Щелканово",
+    ],
     "key_problems": [
         "реиндустриализация промзон",
-        "качество воздуха",
-        "транспортное кольцо",
-        "городская среда центра",
+        "транспортный каркас на Каширу и Москву",
+        "экология берегов Оки",
+        "развитие жилых кварталов",
     ],
     "is_pilot": False,
 }
 
 
-NOVOSIBIRSK: CityConfig = {
-    "slug": "novosibirsk",
-    "name": "Новосибирск",
-    "region": "Новосибирская область",
-    "emoji": "🌨️",
+OZYORY: CityConfig = {
+    "slug": "ozyory",
+    "name": "Озёры",
+    "region": "Московская область",
+    "emoji": "💧",
     "accent_color": "#C5A059",
-    "population": 1_635_000,
-    "coordinates": {"lat": 55.0084, "lon": 82.9357},
-    "timezone": "Asia/Novosibirsk",
-    "districts": ["Центральный", "Железнодорожный", "Заельцовский", "Калининский", "Кировский", "Ленинский", "Октябрьский", "Первомайский", "Советский", "Дзержинский"],
+    "population": 24_200,
+    "coordinates": {"lat": 54.8522, "lon": 38.5544},
+    "timezone": "Europe/Moscow",
+    "districts": [
+        "Центральный",
+        "Посёлок 1 Мая",
+        "Бояркино",
+        "Кудрявцево",
+    ],
     "key_problems": [
-        "транспортный каркас",
-        "развитие Академгородка",
-        "ЖКХ в зимний период",
-        "демография и миграция",
+        "туристический потенциал берегов Оки",
+        "дороги и транспорт до райцентров",
+        "отток молодёжи",
+        "благоустройство набережных",
     ],
     "is_pilot": False,
 }
@@ -174,11 +201,11 @@ NOVOSIBIRSK: CityConfig = {
 
 CITIES: Dict[str, CityConfig] = {
     KOLOMNA["name"]: KOLOMNA,
-    MOSKVA["name"]: MOSKVA,
-    SPB["name"]: SPB,
-    KAZAN["name"]: KAZAN,
-    EKATERINBURG["name"]: EKATERINBURG,
-    NOVOSIBIRSK["name"]: NOVOSIBIRSK,
+    LUKHOVITSY["name"]: LUKHOVITSY,
+    VOSKRESENSK["name"]: VOSKRESENSK,
+    EGORYEVSK["name"]: EGORYEVSK,
+    STUPINO["name"]: STUPINO,
+    OZYORY["name"]: OZYORY,
 }
 
 
@@ -191,7 +218,7 @@ def get_city(name: str) -> CityConfig:
 
 
 def get_city_by_slug(slug: str) -> CityConfig:
-    """Look up a city by its URL slug (`kolomna`, `moskva`, ...)."""
+    """Look up a city by its URL slug (`kolomna`, `lukhovitsy`, ...)."""
     slug = slug.strip().lower()
     for cfg in CITIES.values():
         if cfg.get("slug") == slug:
