@@ -40,12 +40,7 @@ def make_cache_key(system: str, user: str, model: str) -> str:
 
 
 class ResponseCache:
-    """Thin wrapper around redis.asyncio with safe fallbacks.
-
-    Pass `redis=` an instance for tests; production calls
-    `ResponseCache.from_settings()` which lazily connects to
-    `REDIS_URL`.
-    """
+    """Thin wrapper around redis.asyncio with safe fallbacks."""
 
     def __init__(
         self,
@@ -87,7 +82,10 @@ class ResponseCache:
         try:
             raw = await self._redis.get(key)
         except Exception:  # noqa: BLE001
-            logger.warning("Redis GET failed for %s", key, exc_info=False)
+            # Demoted from WARNING to DEBUG: a misbehaving Redis can flood
+            # logs on every enrichment batch. The caller already falls
+            # through to a direct DeepSeek call, so the miss is harmless.
+            logger.debug("Redis GET failed for %s (fall through)", key)
             return None
         if raw is None:
             return None
@@ -109,4 +107,4 @@ class ResponseCache:
                 ex=self.ttl_seconds or None,
             )
         except Exception:  # noqa: BLE001
-            logger.warning("Redis SET failed for %s", key, exc_info=False)
+            logger.debug("Redis SET failed for %s (ignored)", key)
