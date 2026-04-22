@@ -1,4 +1,4 @@
-"""Yandex News RSS collector.
+"""News RSS collector (Google News / other feeds).
 
 Parses the public RSS feeds configured in `config/sources.py`. Works
 without any API key and has no rate-limit concerns beyond basic HTTP
@@ -23,6 +23,7 @@ from .base import BaseCollector, CollectedItem
 logger = logging.getLogger(__name__)
 
 _TAG_RE = re.compile(r"<[^>]+>")
+_FETCH_TIMEOUT = aiohttp.ClientTimeout(total=8, connect=5)
 
 
 def _strip_tags(html: str) -> str:
@@ -39,12 +40,12 @@ class NewsCollector(BaseCollector):
             - timedelta(hours=settings.news_lookback_hours)
         )
         items: List[CollectedItem] = []
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=_FETCH_TIMEOUT) as session:
             for src in sources:
                 try:
                     items.extend(await self._fetch(session, src, since))
                 except Exception:  # noqa: BLE001
-                    logger.exception("RSS fetch failed for %s", src.handle)
+                    logger.warning("RSS fetch failed for %s", src.handle, exc_info=False)
         return items
 
     async def _fetch(
@@ -59,7 +60,7 @@ class NewsCollector(BaseCollector):
         except ImportError:
             logger.warning("feedparser not installed — NewsCollector disabled")
             return []
-        async with session.get(src.handle, timeout=20) as response:
+        async with session.get(src.handle) as response:
             response.raise_for_status()
             body = await response.read()
         parsed = feedparser.parse(body)
