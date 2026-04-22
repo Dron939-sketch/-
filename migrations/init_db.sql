@@ -26,13 +26,17 @@ CREATE TABLE IF NOT EXISTS cities (
     lat             DOUBLE PRECISION,
     lon             DOUBLE PRECISION,
     timezone        TEXT NOT NULL DEFAULT 'Europe/Moscow',
+    emoji           TEXT,
     accent_color    TEXT,
+    is_pilot        BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Adopt slug column on existing installations (idempotent).
+-- Adopt new columns on existing installations (idempotent).
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS emoji TEXT;
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS accent_color TEXT;
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS is_pilot BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS cities_slug_uniq ON cities (slug)
     WHERE slug IS NOT NULL;
 
@@ -111,6 +115,8 @@ CREATE TABLE IF NOT EXISTS metrics (
     PRIMARY KEY (city_id, ts)
 );
 
+CREATE INDEX IF NOT EXISTS metrics_city_ts_idx ON metrics (city_id, ts DESC);
+
 DO $$
 BEGIN
     PERFORM create_hypertable('metrics', 'ts', if_not_exists => TRUE);
@@ -132,14 +138,14 @@ CREATE TABLE IF NOT EXISTS weather (
     PRIMARY KEY (city_id, ts)
 );
 
+CREATE INDEX IF NOT EXISTS weather_city_ts_idx ON weather (city_id, ts DESC);
+
 DO $$
 BEGIN
     PERFORM create_hypertable('weather', 'ts', if_not_exists => TRUE);
 EXCEPTION WHEN undefined_function THEN
     RAISE NOTICE 'weather: TimescaleDB missing, staying as a regular table';
 END $$;
-
-CREATE INDEX IF NOT EXISTS weather_city_ts_idx ON weather (city_id, ts DESC);
 
 --------------------------------------------------------------------------
 -- Analytics outputs
