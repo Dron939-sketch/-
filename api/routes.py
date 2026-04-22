@@ -7,6 +7,7 @@ Endpoints:
   GET  /api/city/by-slug/{slug}
   GET  /api/city/{name}/news
   GET  /api/city/{name}/all_metrics
+  GET  /api/city/{name}/history
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
 """
@@ -18,7 +19,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Set
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
@@ -49,7 +50,7 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 
 def _resolve_city(name_or_slug: str):
@@ -270,6 +271,32 @@ async def all_metrics(name: str) -> dict:
         "loops": loops_block,
         "forecast_3m": forecast,
     }
+
+
+@router.get("/api/city/{name}/history")
+async def city_history(
+    name: str,
+    days: int = Query(default=30, ge=1, le=365),
+) -> dict:
+    """Raw 4-vector history for sparklines.
+
+    Returns `{sb: [[iso_ts, value], ...], tf: [...], ub: [...], chv: [...]}`
+    — sorted ascending by timestamp, up to `days` days back. Empty arrays
+    when the DB has no history yet.
+    """
+    cfg = _resolve_city(name)
+    empty: Dict[str, List[List[Any]]] = {"sb": [], "tf": [], "ub": [], "chv": []}
+
+    city_id = await city_id_by_name(cfg["name"])
+    if city_id is None:
+        return {"city": cfg["name"], "days": days, "series": empty}
+
+    hist = await metrics_history(city_id, days=days)
+    series = {
+        key: [[ts.isoformat(), value] for ts, value in points]
+        for key, points in hist.items()
+    }
+    return {"city": cfg["name"], "days": days, "series": series}
 
 
 # ---------------------------------------------------------------------------
