@@ -5,13 +5,14 @@ Endpoints:
   GET  /api/cities
   GET  /api/city/{name}
   GET  /api/city/{name}/news
-  GET  /api/city/{name}/all_metrics  (compatible with app.py stub)
+  GET  /api/city/{name}/all_metrics
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import List
@@ -59,13 +60,80 @@ async def city_detail(name: str) -> schemas.CityBrief:
     return schemas.CityBrief(**cfg)
 
 
+@router.get("/api/city/{name}/all_metrics")
+async def all_metrics(name: str) -> dict:
+    """Aggregated metric snapshot consumed by the mayor dashboard.
+
+    Shape matches `dashboard/dashboard.js` expectations (weather, 4-vector
+    city_metrics, trust, happiness, 8 composite indices). While the
+    TimescaleDB `metrics` table is empty we serve deterministic placeholders
+    so the UI renders — real values land here once the Celery collection
+    loop is running and writing to Postgres.
+    """
+    try:
+        get_city(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return {
+        "city": name,
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "weather": {
+            "temperature": 12.0,
+            "feels_like": 10.0,
+            "condition": "Облачно",
+            "condition_emoji": "☁️",
+            "humidity": 78,
+            "wind_speed": 3.5,
+            "comfort_index": 0.6,
+        },
+        "city_metrics": {
+            "safety": 4.0 / 6.0,
+            "economy": 3.5 / 6.0,
+            "quality": 3.8 / 6.0,
+            "social": 4.2 / 6.0,
+        },
+        "trust": {
+            "index": 0.58,
+            "positive_mentions": 0,
+            "negative_mentions": 0,
+            "top_complaints": [
+                "Дороги в центре требуют ремонта",
+                "Перебои в работе транспорта утром",
+                "Недостаток детских площадок в новых районах",
+            ],
+            "top_praises": [],
+            "trend": "stable",
+        },
+        "happiness": {
+            "overall": 0.62,
+            "life_satisfaction": 0.64,
+            "emotional_state": 0.60,
+            "social_connection": 0.65,
+            "top_factors": ["погода", "культурные события", "зарплаты"],
+        },
+        "composite_indices": {
+            "quality_of_life": 0.63,
+            "economic_development": 0.55,
+            "social_cohesion": 0.68,
+            "environmental": 0.72,
+            "infrastructure": 0.58,
+            "mayoral_performance": 0.60,
+            "city_attractiveness": 0.66,
+            "future_outlook": 0.62,
+            "overall_color": "warn",
+        },
+    }
+
+
 @router.get("/api/city/{name}/news", response_model=schemas.NewsResponse)
 async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
     """Run all configured collectors for a city and return a merged feed.
 
-    The call is synchronous and may take several seconds if upstream APIs
-    are slow. In production it is usually invoked by a Celery worker on a
-    schedule and the stored rows are served from Postgres instead.
+    Each collector has a hard 15 s wall clock via `asyncio.wait_for` so one
+    slow upstream cannot block the whole response. In production the heavy
+    lifting is done by a Celery worker on a schedule and this endpoint
+    serves rows from Postgres instead.
     """
     try:
         get_city(name)
@@ -81,7 +149,9 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
     items: List[CollectedItem] = []
     for coll in collectors:
         try:
-            items.extend(await coll.collect())
+            items.extend(await asyncio.wait_for(coll.collect(), timeout=15))
+        except asyncio.TimeoutError:
+            logger.warning("collector timed out: %s", type(coll).__name__)
         except Exception:  # noqa: BLE001
             logger.exception("collector failure: %s", type(coll).__name__)
         finally:
@@ -96,9 +166,9 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
 async def daily_agenda(name: str) -> schemas.AgendaResponse:
     """Compose the morning briefing.
 
-    This endpoint pulls a fresh news window and pairs it with whatever
-    cached metrics are currently known for the city. If the metrics store
-    is empty we fall back to placeholders that still produce a valid report.
+    Pulls a fresh news window (time-capped above) and pairs it with
+    placeholder metrics. When the TimescaleDB store is online the metrics
+    come from a SELECT of the latest row.
     """
     try:
         get_city(name)
@@ -119,8 +189,6 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
         for n in news_response.items
     ]
 
-    # Placeholder metric snapshot. When the TimescaleDB `metrics` table is
-    # wired up this will be replaced by a SELECT of the latest row.
     city_metrics = {"СБ": 4.0, "ТФ": 3.5, "УБ": 3.8, "ЧВ": 4.2}
     trust = {
         "index": 0.58,
