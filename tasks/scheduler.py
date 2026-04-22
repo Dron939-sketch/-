@@ -11,6 +11,15 @@ Three loops:
 Every iteration is wrapped in a generous try/except — a failure for
 one city never stops the others, a failure one iteration never stops
 the loop.
+
+Note on disabled collectors
+---------------------------
+Telegram and VK collectors are intentionally NOT plugged in here. The
+VK API token currently returns `error_code=5` (invalid access_token)
+and the Telegram client would also warn on every cycle without
+credentials. Removing them from the list stops the log spam without
+touching the collector modules — flip them back on by restoring the
+two lines marked `# --- re-enable ...` below.
 """
 
 from __future__ import annotations
@@ -24,8 +33,6 @@ from analytics.loops import analyze_loops
 from collectors import (
     AppealsCollector,
     NewsCollector,
-    TelegramCollector,
-    VKCollector,
 )
 from collectors.base import CollectedItem
 from config.cities import CITIES
@@ -63,8 +70,10 @@ async def collect_city(city_name: str, enricher: Optional[NewsEnricher] = None) 
         return 0
 
     collectors = [
-        TelegramCollector(city_name),
-        VKCollector(city_name),
+        # --- re-enable when valid TELEGRAM_API_ID/HASH arrive:
+        # TelegramCollector(city_name),
+        # --- re-enable when VK access token is valid:
+        # VKCollector(city_name),
         NewsCollector(city_name),
         AppealsCollector(city_name),
     ]
@@ -111,11 +120,7 @@ async def refresh_weather(city_name: str) -> bool:
 
 
 async def snapshot_metrics(city_name: str) -> bool:
-    """Aggregate the last 24h of news into a `metrics` row.
-
-    This is the signal that powers the dashboard trend arrows and the
-    3-month forecast. Skips the write when there are no rows to summarise.
-    """
+    """Aggregate the last 24h of news into a `metrics` row."""
     pool = get_pool()
     if pool is None:
         return False
@@ -138,9 +143,6 @@ async def snapshot_metrics(city_name: str) -> bool:
 
 
 async def analyze_loops_for_city(city_name: str) -> int:
-    """Read the latest metrics snapshot, run the confinement loop detector,
-    and persist the top loops. Returns rows written.
-    """
     pool = get_pool()
     if pool is None:
         return 0
@@ -152,8 +154,6 @@ async def analyze_loops_for_city(city_name: str) -> int:
         logger.debug("analyze_loops %s: no metrics yet", city_name)
         return 0
 
-    # Run the legacy analyzer off the event loop — it's CPU-bound and
-    # doesn't need asyncpg connections.
     snapshot = {
         "sb": metric_row.get("sb"),
         "tf": metric_row.get("tf"),
@@ -204,15 +204,12 @@ async def _weather_loop(interval_s: int) -> None:
 
 
 async def _snapshot_loop(interval_s: int) -> None:
-    # Wait long enough for the first collection pass to land some rows.
     await asyncio.sleep(120)
     while True:
         for city_name in CITIES:
             try:
                 wrote = await snapshot_metrics(city_name)
                 if wrote:
-                    # Chain the loop detector immediately so dashboard
-                    # sees fresh metrics + fresh loops in the same tick.
                     await analyze_loops_for_city(city_name)
             except Exception:  # noqa: BLE001
                 logger.exception("snapshot_loop failed for %s", city_name)
@@ -224,10 +221,6 @@ async def _snapshot_loop(interval_s: int) -> None:
 # ---------------------------------------------------------------------------
 
 def start() -> None:
-    """Kick off background loops. Safe to call once at startup.
-
-    Does nothing if no DB pool is available.
-    """
     if _tasks:
         return
     if get_pool() is None:
@@ -251,7 +244,6 @@ def start() -> None:
 
 
 async def stop() -> None:
-    """Cancel all running loops. Safe to call multiple times."""
     while _tasks:
         t = _tasks.pop()
         t.cancel()
