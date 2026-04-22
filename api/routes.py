@@ -1,9 +1,10 @@
-"""HTTP routes for the CityMind API.
+"""HTTP routes for the CityMind / Городской Разум API.
 
 Endpoints:
   GET  /health
   GET  /api/cities
   GET  /api/city/{name}
+  GET  /api/city/by-slug/{slug}
   GET  /api/city/{name}/news
   GET  /api/city/{name}/all_metrics
   GET  /api/city/{name}/agenda
@@ -29,7 +30,7 @@ from collectors import (
     VKCollector,
 )
 from collectors.base import CollectedItem
-from config.cities import CITIES, get_city
+from config.cities import CITIES, get_city, get_city_by_slug
 from config.settings import settings
 
 from . import schemas
@@ -37,7 +38,19 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
+
+
+def _resolve_city(name_or_slug: str):
+    """Resolve a path parameter to a city config, trying name then slug."""
+    try:
+        return get_city(name_or_slug)
+    except KeyError:
+        pass
+    try:
+        return get_city_by_slug(name_or_slug)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.get("/health", response_model=schemas.HealthResponse)
@@ -52,25 +65,32 @@ async def list_cities() -> List[schemas.CityBrief]:
     return [schemas.CityBrief(**cfg) for cfg in CITIES.values()]
 
 
-@router.get("/api/city/{name}", response_model=schemas.CityBrief)
-async def city_detail(name: str) -> schemas.CityBrief:
+@router.get("/api/city/by-slug/{slug}", response_model=schemas.CityBrief)
+async def city_by_slug(slug: str) -> schemas.CityBrief:
     try:
-        cfg = get_city(name)
+        cfg = get_city_by_slug(slug)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    return schemas.CityBrief(**cfg)
+
+
+@router.get("/api/city/{name}", response_model=schemas.CityBrief)
+async def city_detail(name: str) -> schemas.CityBrief:
+    cfg = _resolve_city(name)
     return schemas.CityBrief(**cfg)
 
 
 @router.get("/api/city/{name}/all_metrics")
 async def all_metrics(name: str) -> dict:
     """Aggregated metric snapshot consumed by the mayor dashboard."""
-    try:
-        get_city(name)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    cfg = _resolve_city(name)
 
     return {
-        "city": name,
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "emoji": cfg.get("emoji"),
+        "accent_color": cfg.get("accent_color"),
+        "region": cfg.get("region"),
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "weather": {
             "temperature": 12.0,
@@ -86,6 +106,12 @@ async def all_metrics(name: str) -> dict:
             "economy": 3.5 / 6.0,
             "quality": 3.8 / 6.0,
             "social": 4.2 / 6.0,
+        },
+        "trends": {
+            "safety": 0.02,
+            "economy": -0.01,
+            "quality": 0.05,
+            "social": -0.03,
         },
         "trust": {
             "index": 0.58,
@@ -117,26 +143,34 @@ async def all_metrics(name: str) -> dict:
             "future_outlook": 0.62,
             "overall_color": "warn",
         },
+        "loops": [
+            {"name": "Безопасность → Экономика", "level": "critical"},
+            {"name": "Качество жизни → Отток", "level": "warn"},
+            {"name": "Институциональная петля", "level": "info"},
+        ],
+        "forecast_3m": {
+            "summary": (
+                "При текущем сценарии через 3 месяца безопасность снизится "
+                "до 3.5/6, а экономика вырастет до 4.1/6. Петля «Безопасность "
+                "→ Экономика» усилится на 40%."
+            ),
+            "recommendation": (
+                "Разорвать петлю через инвестиции в безопасность — "
+                "окупаемость 4 месяца."
+            ),
+        },
     }
 
 
 @router.get("/api/city/{name}/news", response_model=schemas.NewsResponse)
 async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
-    """Run all configured collectors for a city and return a merged feed.
-
-    Each collector has a hard 15 s wall clock via `asyncio.wait_for` so one
-    slow upstream cannot block the whole response.
-    """
-    try:
-        get_city(name)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    cfg = _resolve_city(name)
 
     collectors = [
-        TelegramCollector(name),
-        VKCollector(name),
-        NewsCollector(name),
-        AppealsCollector(name),
+        TelegramCollector(cfg["name"]),
+        VKCollector(cfg["name"]),
+        NewsCollector(cfg["name"]),
+        AppealsCollector(cfg["name"]),
     ]
     items: List[CollectedItem] = []
     for coll in collectors:
@@ -151,24 +185,14 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
 
     items.sort(key=lambda it: it.published_at, reverse=True)
     payload = [schemas.NewsItem(**it.to_dict()) for it in items[:limit]]
-    return schemas.NewsResponse(city=name, collected=len(payload), items=payload)
+    return schemas.NewsResponse(city=cfg["name"], collected=len(payload), items=payload)
 
 
 @router.get("/api/city/{name}/agenda", response_model=schemas.AgendaResponse)
 async def daily_agenda(name: str) -> schemas.AgendaResponse:
-    """Compose the morning briefing.
+    cfg = _resolve_city(name)
 
-    Collects fresh news, runs them through the DeepSeek-backed enricher
-    (sentiment / category / severity / summary) and feeds the result into
-    `DailyAgendaBuilder`. If the enricher is disabled or fails, the builder
-    falls back to source-level categories and still produces a valid report.
-    """
-    try:
-        get_city(name)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-    news_response = await collect_news(name, limit=200)
+    news_response = await collect_news(cfg["name"], limit=200)
     news_items = [
         CollectedItem(
             source_kind=n.source_kind,
@@ -203,7 +227,7 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
     happiness = {"overall": 0.62}
     weather = {"temperature": 12.0, "condition": "Облачно", "condition_emoji": "☁️"}
 
-    builder = DailyAgendaBuilder(city_name=name)
+    builder = DailyAgendaBuilder(city_name=cfg["name"])
     agenda = builder.build(
         date=datetime.now(tz=timezone.utc),
         city_metrics=city_metrics,
@@ -213,13 +237,9 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
         news=news_items,
     )
 
-    # If we have enrichment data, override the headline with the highest
-    # severity story — more reliable than the source-based heuristic.
     top_severe = _top_by_severity(news_items)
     if top_severe is not None:
-        agenda.headline = (
-            top_severe.enrichment.get("summary") or top_severe.title
-        )
+        agenda.headline = top_severe.enrichment.get("summary") or top_severe.title
         agenda.description = top_severe.content[:400]
 
     return schemas.AgendaResponse(
@@ -240,11 +260,8 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
 
 @router.post("/api/city/{name}/roadmap", response_model=schemas.RoadmapResponse)
 async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResponse:
-    try:
-        get_city(name)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    planner = RoadmapPlanner(name)
+    cfg = _resolve_city(name)
+    planner = RoadmapPlanner(cfg["name"])
     try:
         plan = planner.plan(
             vector=req.vector,
@@ -255,7 +272,7 @@ async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResp
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return schemas.RoadmapResponse(city=name, roadmap=plan.to_dict())
+    return schemas.RoadmapResponse(city=cfg["name"], roadmap=plan.to_dict())
 
 
 # ----- helpers -----
@@ -269,11 +286,6 @@ def _pick_titles(
     negative_only: bool = False,
     positive_only: bool = False,
 ) -> List[str]:
-    """Pick short summaries/titles matching a set of categories.
-
-    Prefers the AI-generated `summary` when the enricher has tagged the
-    item; falls back to the raw title. Optionally filters by sentiment sign.
-    """
     out: List[str] = []
     for it in items:
         enr = it.enrichment or {}
@@ -281,14 +293,10 @@ def _pick_titles(
         if cat not in categories:
             continue
         sent = enr.get("sentiment")
-        if negative_only and (sent is None or sent > -0.1):
-            # Without sentiment data, keep the item — better a non-negative
-            # complaint than an empty list.
-            if sent is not None:
-                continue
-        if positive_only and (sent is None or sent < 0.1):
-            if sent is not None:
-                continue
+        if negative_only and sent is not None and sent > -0.1:
+            continue
+        if positive_only and sent is not None and sent < 0.1:
+            continue
         text = enr.get("summary") or it.title
         if text:
             out.append(text)
@@ -298,7 +306,6 @@ def _pick_titles(
 
 
 def _top_by_severity(items: List[CollectedItem]) -> CollectedItem | None:
-    """Return the item with the highest AI-scored severity, if any."""
     scored = [
         (it, it.enrichment.get("severity"))
         for it in items
@@ -308,7 +315,6 @@ def _top_by_severity(items: List[CollectedItem]) -> CollectedItem | None:
         return None
     scored.sort(key=lambda pair: pair[1], reverse=True)
     top_item, top_sev = scored[0]
-    # Only override when the model actually flagged something notable.
     if top_sev is None or top_sev < 0.5:
         return None
     return top_item
