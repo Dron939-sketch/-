@@ -10,6 +10,8 @@ Features:
 - one retry on 429 / 5xx / transient network errors
 - raises `DeepSeekError` on final failure so callers can decide whether
   to fall back or surface the error
+- optional Redis-backed response cache (see `ai/cache.py`); when a hit
+  is found we skip the network call entirely
 """
 
 from __future__ import annotations
@@ -17,11 +19,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import aiohttp
 
 from config.settings import settings
+
+from .cache import ResponseCache, make_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +41,13 @@ class DeepSeekClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         timeout_s: float = 30.0,
+        cache: Optional[ResponseCache] = None,
     ):
         self.api_key = api_key if api_key is not None else settings.deepseek_api_key
         self.base_url = (base_url or settings.deepseek_base_url).rstrip("/")
         self.model = model or settings.deepseek_model
         self.timeout = aiohttp.ClientTimeout(total=timeout_s, connect=10)
+        self.cache = cache  # may be None — caching is optional
 
     @property
     def enabled(self) -> bool:
@@ -54,14 +60,30 @@ class DeepSeekClient:
         *,
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         """Send a chat completion and return the decoded JSON body.
+
+        When `use_cache=True` (default) and a cache instance is attached,
+        we look up a SHA256(model+system+user) key in Redis first and
+        return the stored payload on hit — no network call, no tokens.
 
         Raises `DeepSeekError` if the API is unreachable after one retry or
         if the model returns non-JSON content.
         """
         if not self.enabled:
             raise DeepSeekError("DEEPSEEK_API_KEY is not configured")
+
+        cache_key = (
+            make_cache_key(system, user, self.model)
+            if (use_cache and self.cache is not None and self.cache.enabled)
+            else None
+        )
+        if cache_key is not None:
+            cached = await self.cache.get(cache_key)
+            if cached is not None:
+                logger.debug("DeepSeek cache HIT %s", cache_key[-8:])
+                return cached
 
         payload = {
             "model": self.model,
@@ -80,6 +102,7 @@ class DeepSeekClient:
         url = f"{self.base_url}/chat/completions"
 
         last_exc: Optional[BaseException] = None
+        result: Optional[Dict[str, Any]] = None
         for attempt in range(2):
             try:
                 async with aiohttp.ClientSession(timeout=self.timeout) as session:
@@ -97,9 +120,7 @@ class DeepSeekClient:
                         data = await resp.json()
             except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                 last_exc = exc
-                logger.warning(
-                    "DeepSeek attempt %d failed (%s)", attempt + 1, exc
-                )
+                logger.warning("DeepSeek attempt %d failed (%s)", attempt + 1, exc)
                 await asyncio.sleep(0.5 * (attempt + 1))
                 continue
             except DeepSeekError as exc:
@@ -110,14 +131,19 @@ class DeepSeekClient:
                     continue
                 raise
 
-            # Parse Chat Completion envelope.
             try:
                 content = data["choices"][0]["message"]["content"]
-                return json.loads(content)
+                result = json.loads(content)
+                break
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
                 raise DeepSeekError(f"Bad DeepSeek response shape: {exc}") from exc
 
-        raise DeepSeekError(f"DeepSeek unreachable: {last_exc}")
+        if result is None:
+            raise DeepSeekError(f"DeepSeek unreachable: {last_exc}")
+
+        if cache_key is not None:
+            await self.cache.set(cache_key, result)
+        return result
 
     @staticmethod
     def usage_from(data: Dict[str, Any]) -> Dict[str, int]:
