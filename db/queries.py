@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from collectors.base import CollectedItem
 
@@ -84,6 +84,68 @@ async def upsert_news_batch(
         return 0
 
 
+async def news_window(city_id: int, hours: int = 24) -> List[CollectedItem]:
+    """Return CollectedItem objects from the last `hours` hours.
+
+    We fully reconstruct the enrichment dict so the pure `snapshot_from_news`
+    helper can consume rows straight from the DB the same way it consumes
+    freshly-scraped items.
+    """
+    pool = get_pool()
+    if pool is None:
+        return []
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT source_kind, source_handle, title, content, url,
+                       author, category, published_at, sentiment, severity,
+                       summary, enrichment
+                FROM news
+                WHERE city_id = $1 AND published_at >= $2
+                ORDER BY published_at DESC
+                LIMIT 500
+                """,
+                city_id,
+                since,
+            )
+    except Exception:  # noqa: BLE001
+        return []
+
+    out: List[CollectedItem] = []
+    for r in rows:
+        enrichment = r["enrichment"]
+        if isinstance(enrichment, str):
+            try:
+                enrichment = json.loads(enrichment)
+            except json.JSONDecodeError:
+                enrichment = None
+        if enrichment is None and (
+            r["sentiment"] is not None or r["summary"] is not None
+        ):
+            enrichment = {
+                "sentiment": r["sentiment"],
+                "category": r["category"],
+                "severity": r["severity"],
+                "summary": r["summary"],
+            }
+        out.append(
+            CollectedItem(
+                source_kind=r["source_kind"],
+                source_handle=r["source_handle"],
+                title=r["title"] or "",
+                content=r["content"] or "",
+                published_at=r["published_at"],
+                url=r["url"],
+                author=r["author"],
+                category=r["category"],
+                enrichment=enrichment,
+            )
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Weather
 # ---------------------------------------------------------------------------
@@ -154,6 +216,145 @@ async def latest_weather(city_id: int) -> Optional[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Metrics timeseries
+# ---------------------------------------------------------------------------
+
+_INSERT_METRICS_SQL = """
+INSERT INTO metrics (city_id, ts, sb, tf, ub, chv, trust_index, happiness_index)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (city_id, ts) DO UPDATE SET
+    sb = EXCLUDED.sb,
+    tf = EXCLUDED.tf,
+    ub = EXCLUDED.ub,
+    chv = EXCLUDED.chv,
+    trust_index = EXCLUDED.trust_index,
+    happiness_index = EXCLUDED.happiness_index
+"""
+
+
+async def insert_metrics(city_id: int, values: Dict[str, float],
+                         ts: Optional[datetime] = None) -> bool:
+    pool = get_pool()
+    if pool is None:
+        return False
+    ts = ts or datetime.now(tz=timezone.utc)
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                _INSERT_METRICS_SQL,
+                city_id,
+                ts,
+                values.get("sb"),
+                values.get("tf"),
+                values.get("ub"),
+                values.get("chv"),
+                values.get("trust_index"),
+                values.get("happiness_index"),
+            )
+        return True
+    except Exception:  # noqa: BLE001
+        logger.warning("insert_metrics failed for city %s", city_id, exc_info=False)
+        return False
+
+
+async def latest_metrics(city_id: int) -> Optional[Dict[str, Any]]:
+    pool = get_pool()
+    if pool is None:
+        return None
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT ts, sb, tf, ub, chv, trust_index, happiness_index
+                FROM metrics WHERE city_id = $1
+                ORDER BY ts DESC LIMIT 1
+                """,
+                city_id,
+            )
+        return dict(row) if row else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def metrics_trend_7d(city_id: int) -> Dict[str, float]:
+    """Return 4-vector percentage change: (latest − row_7d_ago) / 6.
+
+    Result keys are `safety / economy / quality / social` so the dashboard
+    can drop it straight into the `trends` block. Vectors without history
+    get 0.0 (no delta shown).
+    """
+    pool = get_pool()
+    empty = {"safety": 0.0, "economy": 0.0, "quality": 0.0, "social": 0.0}
+    if pool is None:
+        return empty
+    week_ago = datetime.now(tz=timezone.utc) - timedelta(days=7)
+    try:
+        async with pool.acquire() as conn:
+            now_row = await conn.fetchrow(
+                "SELECT sb, tf, ub, chv FROM metrics WHERE city_id=$1 "
+                "ORDER BY ts DESC LIMIT 1",
+                city_id,
+            )
+            old_row = await conn.fetchrow(
+                "SELECT sb, tf, ub, chv FROM metrics "
+                "WHERE city_id=$1 AND ts <= $2 "
+                "ORDER BY ts DESC LIMIT 1",
+                city_id, week_ago,
+            )
+    except Exception:  # noqa: BLE001
+        return empty
+
+    if now_row is None or old_row is None:
+        return empty
+
+    def _delta(key: str, col_now: str, col_old: str) -> float:
+        a = now_row[col_now]
+        b = old_row[col_old]
+        if a is None or b is None:
+            return 0.0
+        return round((a - b) / 6.0, 3)
+
+    return {
+        "safety":  _delta("safety", "sb", "sb"),
+        "economy": _delta("economy", "tf", "tf"),
+        "quality": _delta("quality", "ub", "ub"),
+        "social":  _delta("social", "chv", "chv"),
+    }
+
+
+async def metrics_history(
+    city_id: int, days: int = 30
+) -> Dict[str, List[Tuple[datetime, float]]]:
+    """Return `{vector: [(ts, value), …]}` sorted ascending by ts."""
+    pool = get_pool()
+    empty: Dict[str, List[Tuple[datetime, float]]] = {
+        "sb": [], "tf": [], "ub": [], "chv": [],
+    }
+    if pool is None:
+        return empty
+    since = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT ts, sb, tf, ub, chv FROM metrics "
+                "WHERE city_id=$1 AND ts >= $2 ORDER BY ts ASC",
+                city_id, since,
+            )
+    except Exception:  # noqa: BLE001
+        return empty
+
+    out: Dict[str, List[Tuple[datetime, float]]] = {
+        "sb": [], "tf": [], "ub": [], "chv": [],
+    }
+    for r in rows:
+        for key in ("sb", "tf", "ub", "chv"):
+            v = r[key]
+            if v is not None:
+                out[key].append((r["ts"], float(v)))
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Dashboard aggregates
 # ---------------------------------------------------------------------------
 
@@ -162,7 +363,6 @@ _POSITIVE_CATS = ("culture", "sport", "official")
 
 
 async def news_counts_last_24h(city_id: int) -> Dict[str, int]:
-    """Return {negative, positive, total} counts for the last 24h."""
     pool = get_pool()
     if pool is None:
         return {"negative": 0, "positive": 0, "total": 0}
@@ -202,10 +402,6 @@ async def top_recent_summaries(
     positive: bool = False,
     limit: int = 3,
 ) -> List[str]:
-    """Return up to `limit` AI-summaries (or titles) for recent rows in the
-    given categories. If `negative=True` we only accept rows with
-    sentiment < -0.1 (and symmetrically for positive).
-    """
     pool = get_pool()
     if pool is None:
         return []
