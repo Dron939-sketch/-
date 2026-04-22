@@ -1,4 +1,4 @@
-"""HTTP routes for the CityMind / Городской Разум API.
+"""HTTP routes for the Городской Разум API.
 
 Endpoints:
   GET  /health
@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List, Set
+from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, HTTPException
 
@@ -32,17 +32,22 @@ from collectors import (
 from collectors.base import CollectedItem
 from config.cities import CITIES, get_city, get_city_by_slug
 from config.settings import settings
+from db.queries import (
+    latest_weather,
+    news_counts_last_24h,
+    top_recent_summaries,
+)
+from db.seed import city_id_by_name
 
 from . import schemas
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 
 def _resolve_city(name_or_slug: str):
-    """Resolve a path parameter to a city config, trying name then slug."""
     try:
         return get_city(name_or_slug)
     except KeyError:
@@ -80,10 +85,77 @@ async def city_detail(name: str) -> schemas.CityBrief:
     return schemas.CityBrief(**cfg)
 
 
+# ---------------------------------------------------------------------------
+# Dashboard snapshot
+# ---------------------------------------------------------------------------
+
+_PLACEHOLDER_WEATHER: Dict[str, Any] = {
+    "temperature": 12.0,
+    "feels_like": 10.0,
+    "condition": "Облачно",
+    "condition_emoji": "☁️",
+    "humidity": 78,
+    "wind_speed": 3.5,
+    "comfort_index": 0.6,
+}
+
+_PLACEHOLDER_COMPLAINTS = [
+    "Дороги в центре требуют ремонта",
+    "Перебои в работе транспорта утром",
+    "Недостаток детских площадок в новых районах",
+]
+
+
 @router.get("/api/city/{name}/all_metrics")
 async def all_metrics(name: str) -> dict:
-    """Aggregated metric snapshot consumed by the mayor dashboard."""
+    """Aggregated metric snapshot consumed by the mayor dashboard.
+
+    When the DB has data we serve it; otherwise we fall back to
+    deterministic placeholders so the UI still renders on a cold deploy.
+    """
     cfg = _resolve_city(name)
+
+    city_id = await city_id_by_name(cfg["name"])
+    weather: Dict[str, Any] = dict(_PLACEHOLDER_WEATHER)
+    top_complaints: List[str] = list(_PLACEHOLDER_COMPLAINTS)
+    top_praises: List[str] = []
+    news_counts = {"negative": 0, "positive": 0, "total": 0}
+    trust_index = 0.58
+
+    if city_id is not None:
+        wx = await latest_weather(city_id)
+        if wx is not None:
+            weather = {
+                "temperature": wx.get("temperature"),
+                "feels_like": wx.get("feels_like"),
+                "condition": wx.get("condition"),
+                "condition_emoji": wx.get("condition_emoji"),
+                "humidity": wx.get("humidity"),
+                "wind_speed": wx.get("wind_speed"),
+                "comfort_index": wx.get("comfort_index"),
+            }
+        counts = await news_counts_last_24h(city_id)
+        if counts.get("total", 0) > 0:
+            news_counts = counts
+            # Derive a cheap trust index: fewer complaints -> higher trust.
+            ratio = counts["negative"] / max(counts["total"], 1)
+            trust_index = round(max(0.0, min(1.0, 0.8 - ratio * 0.6)), 2)
+            complaints_live = await top_recent_summaries(
+                city_id,
+                categories={"complaints", "utilities", "incidents"},
+                negative=True,
+                limit=3,
+            )
+            if complaints_live:
+                top_complaints = complaints_live
+            praises_live = await top_recent_summaries(
+                city_id,
+                categories={"culture", "sport", "official"},
+                positive=True,
+                limit=3,
+            )
+            if praises_live:
+                top_praises = praises_live
 
     return {
         "city": cfg["name"],
@@ -92,15 +164,7 @@ async def all_metrics(name: str) -> dict:
         "accent_color": cfg.get("accent_color"),
         "region": cfg.get("region"),
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "weather": {
-            "temperature": 12.0,
-            "feels_like": 10.0,
-            "condition": "Облачно",
-            "condition_emoji": "☁️",
-            "humidity": 78,
-            "wind_speed": 3.5,
-            "comfort_index": 0.6,
-        },
+        "weather": weather,
         "city_metrics": {
             "safety": 4.0 / 6.0,
             "economy": 3.5 / 6.0,
@@ -114,15 +178,11 @@ async def all_metrics(name: str) -> dict:
             "social": -0.03,
         },
         "trust": {
-            "index": 0.58,
-            "positive_mentions": 0,
-            "negative_mentions": 0,
-            "top_complaints": [
-                "Дороги в центре требуют ремонта",
-                "Перебои в работе транспорта утром",
-                "Недостаток детских площадок в новых районах",
-            ],
-            "top_praises": [],
+            "index": trust_index,
+            "positive_mentions": news_counts["positive"],
+            "negative_mentions": news_counts["negative"],
+            "top_complaints": top_complaints,
+            "top_praises": top_praises,
             "trend": "stable",
         },
         "happiness": {
@@ -161,6 +221,10 @@ async def all_metrics(name: str) -> dict:
         },
     }
 
+
+# ---------------------------------------------------------------------------
+# Live collection + agenda + roadmap (unchanged)
+# ---------------------------------------------------------------------------
 
 @router.get("/api/city/{name}/news", response_model=schemas.NewsResponse)
 async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
