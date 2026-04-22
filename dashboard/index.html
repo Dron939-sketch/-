@@ -123,6 +123,22 @@
     <span class="muted small" id="footer-tag">алгоритм Мейстера</span>
   </footer>
 
+  <!-- Loop detail modal (hidden by default) -->
+  <div class="modal" id="loop-modal" aria-hidden="true" role="dialog" aria-labelledby="loop-modal-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">Активная петля</div>
+      <h2 class="modal-title" id="loop-modal-title">—</h2>
+      <p class="modal-description" id="loop-modal-description"></p>
+      <dl class="modal-details" id="loop-modal-details"></dl>
+      <div class="modal-resources" id="loop-modal-resources" hidden>
+        <div class="section-title">Рекомендуемые ресурсы</div>
+        <ul class="chip-list" id="loop-modal-resources-list"></ul>
+      </div>
+    </div>
+  </div>
+
   <script src="/dashboard.js"></script>
 </body>
 </html>
