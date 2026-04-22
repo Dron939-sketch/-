@@ -3,60 +3,125 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CityMind — Коломна</title>
+  <title>Городской Разум — Прогнозное управление городом</title>
+  <meta name="description" content="Городской Разум — платформа прогнозного управления городом на основе алгоритма Мейстера." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">CityMind</div>
-    <div class="city" id="city-name">Коломна</div>
-    <div class="updated" id="updated-at">—</div>
+    <a class="brand" href="/" aria-label="Городской Разум">
+      <span class="brand-mark">🧠</span>
+      <span class="brand-name">Городской <em>Разум</em></span>
+    </a>
+
+    <div class="city-selector" aria-label="Выбор города">
+      <button type="button" class="city-button" id="city-button" aria-haspopup="listbox" aria-expanded="false">
+        <span class="city-emoji" id="city-emoji">🏰</span>
+        <span class="city-label" id="city-name">Коломна</span>
+        <span class="chev">▾</span>
+      </button>
+      <ul class="city-menu" id="city-menu" role="listbox" hidden></ul>
+    </div>
+
+    <div class="topbar-right">
+      <span class="updated" id="updated-at">—</span>
+      <span class="avatar" title="Профиль">👤</span>
+    </div>
   </header>
 
-  <main class="grid">
-    <section class="card" id="weather-card">
-      <h2>Погода</h2>
-      <div class="big" id="weather-temp">—</div>
-      <div class="muted" id="weather-cond">Нет данных</div>
+  <main class="page">
+    <!-- row 1: greeting + weather -->
+    <section class="card greeting">
+      <div class="greeting-eyebrow" id="today-date">—</div>
+      <h1 class="greeting-title" id="greeting-title">Доброе утро</h1>
+      <div class="greeting-sub" id="greeting-sub">Сводка по городу на сегодня</div>
     </section>
 
-    <section class="card" id="vectors-card">
-      <h2>4 вектора</h2>
-      <ul class="vectors">
-        <li><span class="label">🛡️ Безопасность</span><span class="value" data-key="safety">—</span></li>
-        <li><span class="label">💰 Экономика</span><span class="value" data-key="economy">—</span></li>
-        <li><span class="label">😊 Качество жизни</span><span class="value" data-key="quality">—</span></li>
-        <li><span class="label">🤝 Соцкапитал</span><span class="value" data-key="social">—</span></li>
-      </ul>
+    <section class="card weather">
+      <div class="card-eyebrow">Погода в городе</div>
+      <div class="weather-row">
+        <div class="weather-main">
+          <span class="weather-emoji" id="weather-emoji">☁️</span>
+          <span class="weather-temp" id="weather-temp">—</span>
+        </div>
+        <div class="weather-meta">
+          <div><span class="muted">Ощущается</span> <span id="weather-feels">—</span></div>
+          <div><span class="muted">Влажность</span> <span id="weather-humidity">—</span></div>
+          <div><span class="muted">Ветер</span> <span id="weather-wind">—</span></div>
+        </div>
+      </div>
+      <div class="muted small" id="weather-cond">—</div>
     </section>
 
-    <section class="card">
-      <h2>Доверие к власти</h2>
-      <div class="big" id="trust-index">—</div>
-      <div class="muted">Индекс 0–1</div>
-      <h3>Топ жалоб</h3>
-      <ol class="list" id="top-complaints"></ol>
+    <!-- row 2: 4 key vectors -->
+    <section class="card wide vectors-card">
+      <div class="card-eyebrow">Ключевые показатели города</div>
+      <div class="vectors-grid" id="vectors-grid"></div>
     </section>
 
-    <section class="card">
-      <h2>Индекс счастья</h2>
-      <div class="big" id="happiness-index">—</div>
-      <div class="muted">Интегральная оценка</div>
+    <!-- row 3: agenda + loops -->
+    <section class="card agenda">
+      <div class="card-eyebrow">
+        <span class="badge badge-critical" id="agenda-badge">⚡ Приоритет дня</span>
+      </div>
+      <div class="headline" id="agenda-headline">—</div>
+      <p class="agenda-description" id="agenda-description"></p>
+      <h3 class="section-title">Рекомендованные действия</h3>
+      <ul class="check-list" id="agenda-actions"></ul>
     </section>
 
-    <section class="card wide">
-      <h2>Композитные индексы</h2>
-      <div class="composite-grid" id="composite-grid"></div>
+    <section class="card loops">
+      <div class="card-eyebrow">Активные петли</div>
+      <ul class="loops-list" id="loops-list"></ul>
+      <div class="loop-action muted small">Нажмите на петлю, чтобы увидеть точки разрыва.</div>
     </section>
 
-    <section class="card wide">
-      <h2>Повестка дня</h2>
-      <div id="agenda-headline" class="headline">—</div>
-      <div id="agenda-description" class="muted"></div>
-      <h3>Рекомендованные действия</h3>
-      <ul class="list" id="agenda-actions"></ul>
+    <!-- row 4: trust + happiness -->
+    <section class="card wide trust-happy">
+      <div class="card-eyebrow">Индекс доверия и счастья</div>
+      <div class="trust-row">
+        <div class="trust-bar">
+          <div class="trust-label">Доверие к власти</div>
+          <div class="bar"><div class="bar-fill" id="trust-fill"></div></div>
+          <div class="trust-value"><span id="trust-percent">—</span> <span class="delta" id="trust-delta"></span></div>
+        </div>
+        <div class="trust-bar">
+          <div class="trust-label">Счастье горожан</div>
+          <div class="bar"><div class="bar-fill" id="happiness-fill"></div></div>
+          <div class="trust-value"><span id="happiness-percent">—</span> <span class="delta" id="happiness-delta"></span></div>
+        </div>
+      </div>
+
+      <div class="trust-cols">
+        <div>
+          <h3 class="section-title">Топ жалоб</h3>
+          <ol class="list" id="top-complaints"></ol>
+        </div>
+        <div>
+          <h3 class="section-title">Топ похвал</h3>
+          <ol class="list" id="top-praises"></ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- row 5: 3-month forecast -->
+    <section class="card wide forecast">
+      <div class="card-eyebrow">Прогноз на 3 месяца (алгоритм Мейстера)</div>
+      <p class="forecast-summary" id="forecast-summary">—</p>
+      <div class="forecast-rec">
+        <span class="spark">⚡</span>
+        <span id="forecast-rec">—</span>
+      </div>
     </section>
   </main>
+
+  <footer class="footer">
+    <span>Городской Разум · прогнозное управление городом</span>
+    <span class="muted small" id="footer-tag">алгоритм Мейстера</span>
+  </footer>
 
   <script src="/dashboard.js"></script>
 </body>
