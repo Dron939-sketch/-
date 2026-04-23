@@ -10,12 +10,9 @@ Endpoints:
   GET  /api/city/{name}/history
   GET  /api/city/{name}/model
   POST /api/city/{name}/simulate
+  GET  /api/city/{name}/root_cause/{node_id}
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
-
-Note: Telegram and VK collectors are intentionally disabled here too —
-see `tasks/scheduler.py` for the explanation. Re-enable by restoring
-the two lines marked `# --- re-enable ...`.
 """
 
 from __future__ import annotations
@@ -31,7 +28,7 @@ from pydantic import BaseModel, Field
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher
-from analytics import build_graph, simulate
+from analytics import build_graph, simulate, trace_root_cause
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -56,7 +53,7 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 
 _AGENDA_ENRICHMENT_TIMEOUT_S = 10
 
@@ -299,10 +296,7 @@ async def city_history(
 
 
 async def _build_city_graph(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Shared helper: pull the latest snapshot and build the graph.
-
-    Used by both `/model` (GET) and `/simulate` (POST).
-    """
+    """Shared helper: pull the latest snapshot and build the graph."""
     snapshot: Dict[str, float] = {"sb": 3.5, "tf": 3.5, "ub": 3.5, "chv": 3.5}
     city_id = await city_id_by_name(cfg["name"])
     if city_id is not None:
@@ -336,12 +330,7 @@ class SimulateRequest(BaseModel):
 
 @router.post("/api/city/{name}/simulate")
 async def city_simulate(name: str, req: SimulateRequest) -> dict:
-    """Butterfly-effect simulator.
-
-    Given an element id (1..9) and a delta on the 1..6 scale, propagates
-    the change across the confinement graph and returns per-node
-    predictions sorted by impact. No DB writes — purely speculative.
-    """
+    """Butterfly-effect simulator."""
     cfg = _resolve_city(name)
     graph = await _build_city_graph(cfg)
     if graph.get("disabled"):
@@ -355,6 +344,33 @@ async def city_simulate(name: str, req: SimulateRequest) -> dict:
         "city": cfg["name"],
         "slug": cfg.get("slug"),
         **sim.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/root_cause/{node_id}")
+async def city_root_cause(
+    name: str,
+    node_id: str,
+    max_depth: int = Query(default=5, ge=1, le=10),
+) -> dict:
+    """Root-cause trace: walk backward from the problem node up to `max_depth`.
+
+    The result matches the «5 почему» panel in the TZ mock-up: a chain
+    of `CauseHop` items with "because ..." sentences and a terminal
+    `root` node the dashboard highlights as the primary lever.
+    """
+    cfg = _resolve_city(name)
+    graph = await _build_city_graph(cfg)
+    if graph.get("disabled"):
+        raise HTTPException(
+            status_code=503,
+            detail=f"confinement graph unavailable ({graph.get('reason')})",
+        )
+    result = trace_root_cause(graph, node_id, max_depth=max_depth)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        **result.to_dict(),
     }
 
 
