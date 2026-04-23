@@ -3,6 +3,7 @@
 from .benchmark import BenchmarkResult, CityMetric, CityRow, VectorStat, benchmark
 from .butterfly import Simulation, NodeDelta, simulate
 from .crisis import Alert, CrisisReport, detect_crises
+from .investment import Factor, InvestmentProfile, compute as investment_compute
 from .loops import analyze_loops, metrics_to_vectors
 from .model import build_graph
 from .reputation import AuthorStat, ReputationReport, ViralPost, analyze as reputation_analyze
@@ -20,6 +21,9 @@ __all__ = [
     "detect_crises",
     "Alert",
     "CrisisReport",
+    "investment_compute",
+    "Factor",
+    "InvestmentProfile",
     "metrics_to_vectors",
     "reputation_analyze",
     "AuthorStat",
