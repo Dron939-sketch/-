@@ -1208,6 +1208,135 @@ function renderBudget(data) {
   }
 }
 
+// -------------------------------------------------- Decision simulator
+
+const DEC_FILTERS = [
+  { key: null,        label: "Все" },
+  { key: "safety",    label: "🛡️ Безопасность" },
+  { key: "economy",   label: "💰 Экономика" },
+  { key: "quality",   label: "😊 Качество" },
+  { key: "social",    label: "🤝 Соцкапитал" },
+];
+const DEC_SCENARIO_LABELS = {
+  optimistic:  "Оптимистичный",
+  realistic:   "Реалистичный",
+  pessimistic: "Пессимистичный",
+};
+const DEC_VECTOR_ICON = { safety: "🛡️", economy: "💰", quality: "😊", social: "🤝" };
+
+let _decisionFilter = null;
+
+function _fmtRubCompact(v) {
+  const n = Number(v) || 0;
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace(".0", "") + " млрд ₽";
+  if (n >= 1_000_000)     return (n / 1_000_000).toFixed(0) + " млн ₽";
+  return n.toLocaleString("ru-RU") + " ₽";
+}
+
+function _scenarioDeltaRow(s) {
+  const entries = [
+    ["safety",  s.safety],
+    ["economy", s.economy],
+    ["quality", s.quality],
+    ["social",  s.social],
+  ];
+  return entries
+    .filter(([_v, d]) => Math.abs(Number(d) || 0) >= 0.05)
+    .map(([v, d]) => {
+      const cls = d > 0.05 ? "up" : d < -0.05 ? "down" : "flat";
+      const sign = d >= 0 ? "+" : "";
+      return `<span class="delta ${cls}"><span class="vec">${DEC_VECTOR_ICON[v] || v}</span>${sign}${Number(d).toFixed(2)}</span>`;
+    }).join("");
+}
+
+function renderDecisions(data) {
+  const filtersEl = document.getElementById("dec-filters");
+  const gridEl = document.getElementById("dec-grid");
+  const meta = document.getElementById("decisions-meta");
+  if (!gridEl || !filtersEl) return;
+
+  // Build filter chips once.
+  if (!filtersEl.children.length) {
+    DEC_FILTERS.forEach((f) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "dec-filter" + (f.key === _decisionFilter ? " active" : "");
+      b.textContent = f.label;
+      b.addEventListener("click", async () => {
+        _decisionFilter = f.key;
+        // Toggle active class and refresh.
+        filtersEl.querySelectorAll(".dec-filter").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+        try {
+          const url = f.key
+            ? `/api/city/${currentCity?.slug}/decisions?vector=${encodeURIComponent(f.key)}`
+            : `/api/city/${currentCity?.slug}/decisions`;
+          const fresh = await fetchJson(url);
+          renderDecisions(fresh);
+        } catch (e) {
+          console.warn("decisions filter failed", e);
+        }
+      });
+      filtersEl.appendChild(b);
+    });
+  }
+
+  const decisions = Array.isArray(data?.decisions) ? data.decisions : [];
+  gridEl.innerHTML = "";
+  if (!decisions.length) {
+    gridEl.innerHTML = `<div class="dec-empty">По этому фильтру решений не найдено.</div>`;
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  decisions.forEach((d) => {
+    const card = document.createElement("div");
+    card.className = "dec-card";
+    card.setAttribute("data-vector", d.primary_vector);
+
+    const scenariosHtml = ["optimistic", "realistic", "pessimistic"].map((key) => {
+      const s = (d.scenarios || {})[key];
+      if (!s) return "";
+      const deltas = _scenarioDeltaRow(s) || `<span class="delta flat">без заметного эффекта</span>`;
+      return `
+        <div class="dec-scenario ${key}" title="${s.note || ""}">
+          <span class="lbl">${DEC_SCENARIO_LABELS[key]}</span>
+          <span class="delta-row">${deltas}</span>
+        </div>
+      `;
+    }).join("");
+
+    const risksHtml = (d.risks || []).slice(0, 3)
+      .map((r) => `<li>${r}</li>`)
+      .join("");
+
+    const tagsHtml = (d.tags || [])
+      .map((t) => `<span class="dec-tag">#${t}</span>`)
+      .join("");
+
+    card.innerHTML = `
+      <div class="dec-name">${d.name}</div>
+      <div class="dec-description">${d.description || ""}</div>
+      <div class="dec-meta">
+        <span><strong>${_fmtRubCompact(d.cost_rub)}</strong> · ${d.duration_months} мес.</span>
+      </div>
+      <div class="dec-scenarios">${scenariosHtml}</div>
+      ${risksHtml ? `<ul class="dec-risks">${risksHtml}</ul>` : ""}
+      <div class="dec-tags">${tagsHtml}</div>
+    `;
+    gridEl.appendChild(card);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts
+      ? `${decisions.length} вариантов · обновлено ${ts}`
+      : "";
+  }
+}
+
 const MG_CONFIDENCE_LABELS = {
   high:   "Высокая уверенность",
   medium: "Средняя уверенность",
@@ -2072,6 +2201,15 @@ async function refresh() {
     renderMarketGaps(gaps);
   } catch (e) {
     console.warn("market gaps unavailable", e);
+  }
+  try {
+    const url = _decisionFilter
+      ? `/api/city/${slug}/decisions?vector=${encodeURIComponent(_decisionFilter)}`
+      : `/api/city/${slug}/decisions`;
+    const decisions = await fetchJson(url);
+    renderDecisions(decisions);
+  } catch (e) {
+    console.warn("decisions unavailable", e);
   }
   setUpdated();
 }
