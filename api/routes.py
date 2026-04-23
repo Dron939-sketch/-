@@ -15,6 +15,7 @@ Endpoints:
   GET  /api/city/{name}/crisis
   GET  /api/city/{name}/reputation
   GET  /api/city/{name}/investment
+  GET  /api/city/{name}/foresight
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
@@ -37,7 +38,7 @@ from ai import NewsEnricher
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import investment_compute, reputation_analyze
+from analytics import foresight_forecast, investment_compute, reputation_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -665,6 +666,50 @@ async def _peer_rank_for(slug: Optional[str]) -> Optional[Dict[str, Any]]:
     if position is None:
         return None
     return {"position": position, "total": total or len(cities), "leader_slug": leader}
+
+
+# Trend dampener: the 7-day delta is noisy. We multiply it to get an annualised
+# slope that's visible over a 5-year horizon but not absurd. 1.2 means a typical
+# weekly move (≈0.02 normalised → 0.12 unit) projects to ≈0.72 over 5 years.
+_TREND_ANNUAL_MULTIPLIER = 1.2
+
+
+@router.get("/api/city/{name}/foresight")
+async def city_foresight(name: str) -> dict:
+    """Three-scenario 5-year projection + 10 megatrends grid.
+
+    Uses latest_metrics for the starting point and metrics_trend_7d for
+    per-vector direction. The trend is dampened (×1.2, de-normalised back
+    to the 1..6 scale) because a 7-day delta is a noisy signal to
+    extrapolate linearly over 5 years. Missing metrics → projections with
+    null values instead of crashing.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    current: Dict[str, float] = {}
+    trends: Dict[str, float] = {}
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv"):
+                if metric_row.get(col) is not None:
+                    current[col] = float(metric_row[col])
+
+        trend_7d = await metrics_trend_7d(city_id)
+        for vkey, value in trend_7d.items():
+            # trend_7d returns (a - b) / 6; undo /6 to get the unit delta,
+            # then scale by the annual multiplier.
+            trends[vkey] = value * 6.0 * _TREND_ANNUAL_MULTIPLIER
+
+    report = foresight_forecast(current_metrics=current, trend_per_vector=trends)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
 
 
 @router.get("/api/benchmark")
