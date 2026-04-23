@@ -1,13 +1,14 @@
 -- Городской Разум — initial schema.
--- Targets PostgreSQL 15. Every optional piece (pg_trgm index, timescaledb
+-- Targets PostgreSQL 15. Every optional piece (pg_trgm index, TimescaleDB
 -- hypertables) is wrapped in a DO block with `WHEN OTHERS` so a missing
--- extension or limited privileges never aborts the whole migration —
--- critical on Render-managed Postgres which does not ship either ext.
+-- extension or limited privileges never aborts the whole migration.
+--
+-- The file is split into segments by `-- @SEGMENT ...` marker lines.
+-- `db.seed.run_migrations` executes each segment in its own transaction,
+-- so a failure in one segment (e.g. an unsupported TimescaleDB feature
+-- on Apache edition) doesn't roll back the previous ones.
 
---------------------------------------------------------------------------
--- Extensions (best-effort)
---------------------------------------------------------------------------
-
+-- @SEGMENT extensions
 -- pg_trgm powers the fuzzy search index on news.content below. If it's
 -- not available we skip that one index but the schema stays valid.
 DO $$
@@ -24,10 +25,7 @@ EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'TimescaleDB extension unavailable (%) — using plain Postgres', SQLERRM;
 END $$;
 
---------------------------------------------------------------------------
--- Core reference tables
---------------------------------------------------------------------------
-
+-- @SEGMENT core_tables
 CREATE TABLE IF NOT EXISTS cities (
     id              SERIAL PRIMARY KEY,
     slug            TEXT UNIQUE,
@@ -63,10 +61,7 @@ CREATE TABLE IF NOT EXISTS sources (
     UNIQUE (city_id, kind, handle)
 );
 
---------------------------------------------------------------------------
--- Collected content
---------------------------------------------------------------------------
-
+-- @SEGMENT news_table
 CREATE TABLE IF NOT EXISTS news (
     id              TEXT PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
@@ -93,8 +88,9 @@ CREATE INDEX IF NOT EXISTS news_city_published_idx
     ON news (city_id, published_at DESC);
 CREATE INDEX IF NOT EXISTS news_category_idx ON news (category);
 
--- Trigram index depends on pg_trgm — wrap so a missing extension doesn't
--- roll back the whole migration.
+-- @SEGMENT news_trigram_index
+-- Trigram index depends on pg_trgm — isolated segment so a missing
+-- extension doesn't affect anything else.
 DO $$
 BEGIN
     EXECUTE 'CREATE INDEX IF NOT EXISTS news_content_trgm_idx '
@@ -103,6 +99,7 @@ EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'trigram index on news.content skipped (%): ok without pg_trgm', SQLERRM;
 END $$;
 
+-- @SEGMENT appeals_table
 CREATE TABLE IF NOT EXISTS appeals (
     id              TEXT PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
@@ -117,10 +114,7 @@ CREATE TABLE IF NOT EXISTS appeals (
     collected_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
---------------------------------------------------------------------------
--- Timeseries: metrics + weather. Hypertables are best-effort.
---------------------------------------------------------------------------
-
+-- @SEGMENT metrics_table
 CREATE TABLE IF NOT EXISTS metrics (
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
     ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -135,6 +129,7 @@ CREATE TABLE IF NOT EXISTS metrics (
 
 CREATE INDEX IF NOT EXISTS metrics_city_ts_idx ON metrics (city_id, ts DESC);
 
+-- @SEGMENT metrics_hypertable
 DO $$
 BEGIN
     PERFORM create_hypertable('metrics', 'ts', if_not_exists => TRUE);
@@ -142,6 +137,7 @@ EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'metrics hypertable skipped (%): staying as a regular table', SQLERRM;
 END $$;
 
+-- @SEGMENT weather_table
 CREATE TABLE IF NOT EXISTS weather (
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
     ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -158,6 +154,7 @@ CREATE TABLE IF NOT EXISTS weather (
 
 CREATE INDEX IF NOT EXISTS weather_city_ts_idx ON weather (city_id, ts DESC);
 
+-- @SEGMENT weather_hypertable
 DO $$
 BEGIN
     PERFORM create_hypertable('weather', 'ts', if_not_exists => TRUE);
@@ -165,10 +162,7 @@ EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'weather hypertable skipped (%): staying as a regular table', SQLERRM;
 END $$;
 
---------------------------------------------------------------------------
--- Analytics outputs
---------------------------------------------------------------------------
-
+-- @SEGMENT analytics_tables
 CREATE TABLE IF NOT EXISTS loops (
     id              BIGSERIAL PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
@@ -206,10 +200,7 @@ CREATE TABLE IF NOT EXISTS roadmaps (
     payload         JSONB NOT NULL
 );
 
---------------------------------------------------------------------------
--- Users and auth
---------------------------------------------------------------------------
-
+-- @SEGMENT users_table
 CREATE TABLE IF NOT EXISTS users (
     id              SERIAL PRIMARY KEY,
     email           TEXT NOT NULL UNIQUE,
@@ -220,14 +211,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at   TIMESTAMPTZ
 );
 
---------------------------------------------------------------------------
--- Retention (no-op on plain Postgres)
---------------------------------------------------------------------------
-
-DO $$
-BEGIN
-    PERFORM add_retention_policy('metrics', INTERVAL '365 days', if_not_exists => TRUE);
-    PERFORM add_retention_policy('weather', INTERVAL '365 days', if_not_exists => TRUE);
-EXCEPTION WHEN OTHERS THEN
-    NULL;
-END $$;
+-- Retention policies removed: on TimescaleDB Apache edition
+-- add_retention_policy raises FeatureNotSupportedError (Enterprise-only)
+-- before the DO block's exception handler can see it. We don't need
+-- retention for the MVP — row count is modest for 6 cities × 1h snapshots.
