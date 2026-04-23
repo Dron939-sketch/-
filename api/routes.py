@@ -21,6 +21,7 @@ Endpoints:
   POST /api/city/{name}/narratives
   GET  /api/city/{name}/topics
   GET  /api/city/{name}/decisions
+  GET  /api/city/{name}/deep_forecast
   GET  /api/city/{name}/market_gaps
   GET  /api/city/{name}/cases
   GET  /api/benchmark
@@ -46,7 +47,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import analyze_market_gaps, filter_decisions, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
+from analytics import analyze_market_gaps, deep_forecast, filter_decisions, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -916,6 +917,34 @@ async def city_topics(name: str, days: int = 7) -> dict:
         "city": cfg["name"],
         "slug": cfg.get("slug"),
         "window_days": days,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/deep_forecast")
+async def city_deep_forecast(name: str) -> dict:
+    """Per-vector point forecast + confidence band at 7/30/90 days.
+
+    Bridges analytics.deep_forecast to the metrics_history we already query
+    for the 3-month forecast block. The underlying method (holt / trend /
+    flat / insufficient_data) is surfaced in the response so the UI can
+    label confidence honestly.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    history_raw: Dict[str, List[Any]] = {}
+    if city_id is not None:
+        history = await metrics_history(city_id, days=90)
+        # metrics_history returns {vector_db_key: [(ts, val), ...]}. Strip ts.
+        for col in ("sb", "tf", "ub", "chv"):
+            history_raw[col] = [val for _ts, val in history.get(col, [])]
+
+    report = deep_forecast(history_raw)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
     }
