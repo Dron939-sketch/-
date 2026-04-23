@@ -3,6 +3,7 @@
 from .benchmark import BenchmarkResult, CityMetric, CityRow, VectorStat, benchmark
 from .butterfly import Simulation, NodeDelta, simulate
 from .crisis import Alert, CrisisReport, detect_crises
+from .foresight import ForesightReport, MegatrendRow, Scenario, VectorProjection, forecast as foresight_forecast
 from .investment import Factor, InvestmentProfile, compute as investment_compute
 from .loops import analyze_loops, metrics_to_vectors
 from .model import build_graph
@@ -21,6 +22,11 @@ __all__ = [
     "detect_crises",
     "Alert",
     "CrisisReport",
+    "foresight_forecast",
+    "ForesightReport",
+    "MegatrendRow",
+    "Scenario",
+    "VectorProjection",
     "investment_compute",
     "Factor",
     "InvestmentProfile",
