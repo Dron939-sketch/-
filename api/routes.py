@@ -19,6 +19,7 @@ Endpoints:
   GET  /api/city/{name}/foresight
   GET  /api/city/{name}/budget
   POST /api/city/{name}/narratives
+  GET  /api/city/{name}/topics
   GET  /api/city/{name}/cases
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
@@ -43,7 +44,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan
+from analytics import foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -63,6 +64,7 @@ from db.queries import (
     news_negative_count,
     news_total_count,
     news_window,
+    news_window_range,
     top_recent_summaries,
 )
 from db.seed import city_id_by_name
@@ -811,6 +813,54 @@ async def city_narratives(name: str, req: NarrativesRequest) -> dict:
         "slug": cfg.get("slug"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/topics")
+async def city_topics(name: str, days: int = 7) -> dict:
+    """Group last N days of news into 7 topic buckets + trend vs prior week.
+
+    Pulls news_window (current period) and news_window_range (same-size
+    slice immediately before it), hands both to the pure topics.analyze.
+    Returns a topic report sorted by current-period count desc.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+    days = max(1, min(30, int(days)))
+    hours = days * 24
+
+    current_items: List[Dict[str, Any]] = []
+    prior_items: List[Dict[str, Any]] = []
+
+    if city_id is not None:
+        cur = await news_window(city_id, hours=hours)
+        prior = await news_window_range(city_id, hours_from=hours, hours_to=hours * 2)
+
+        def _flatten(items: List[CollectedItem]) -> List[Dict[str, Any]]:
+            out: List[Dict[str, Any]] = []
+            for it in items:
+                enr = it.enrichment or {}
+                raw = it.raw if isinstance(getattr(it, "raw", None), dict) else {}
+                out.append({
+                    "title": it.title,
+                    "content": it.content,
+                    "url": it.url,
+                    "category": it.category,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                })
+            return out
+
+        current_items = _flatten(cur)
+        prior_items = _flatten(prior)
+
+    report = topics_analyze(current_items, prior_items)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "window_days": days,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
     }
 
 

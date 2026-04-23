@@ -11,6 +11,7 @@ from .model import build_graph
 from .reputation import AuthorStat, ReputationReport, ViralPost, analyze as reputation_analyze
 from .resources import ResourcePlan, VectorAllocation, plan as resource_plan
 from .root_cause import CauseHop, RootCauseTrace, trace as trace_root_cause
+from .topics import TopicReport, TopicRow, analyze as topics_analyze, classify_item
 from .transparency import Breakdown, Component, breakdown
 
 __all__ = [
@@ -50,6 +51,10 @@ __all__ = [
     "trace_root_cause",
     "RootCauseTrace",
     "CauseHop",
+    "topics_analyze",
+    "TopicReport",
+    "TopicRow",
+    "classify_item",
     "breakdown",
     "Breakdown",
     "Component",

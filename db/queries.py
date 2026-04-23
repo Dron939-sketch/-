@@ -146,6 +146,72 @@ async def news_window(city_id: int, hours: int = 24) -> List[CollectedItem]:
     return out
 
 
+async def news_window_range(
+    city_id: int, hours_from: int, hours_to: int,
+) -> List[CollectedItem]:
+    """News published between [now - hours_from, now - hours_to).
+
+    Used for "prior week" comparisons, e.g. hours_from=7*24 hours_to=14*24
+    gives the 7-14 days ago slice.
+    """
+    pool = get_pool()
+    if pool is None:
+        return []
+    now = datetime.now(tz=timezone.utc)
+    if hours_from > hours_to:
+        hours_from, hours_to = hours_to, hours_from
+    start = now - timedelta(hours=hours_to)
+    end = now - timedelta(hours=hours_from)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT source_kind, source_handle, title, content, url,
+                       author, category, published_at, sentiment, severity,
+                       summary, enrichment
+                FROM news
+                WHERE city_id = $1 AND published_at >= $2 AND published_at < $3
+                ORDER BY published_at DESC
+                LIMIT 500
+                """,
+                city_id, start, end,
+            )
+    except Exception:  # noqa: BLE001
+        return []
+
+    out: List[CollectedItem] = []
+    for r in rows:
+        enrichment = r["enrichment"]
+        if isinstance(enrichment, str):
+            try:
+                enrichment = json.loads(enrichment)
+            except json.JSONDecodeError:
+                enrichment = None
+        if enrichment is None and (
+            r["sentiment"] is not None or r["summary"] is not None
+        ):
+            enrichment = {
+                "sentiment": r["sentiment"],
+                "category": r["category"],
+                "severity": r["severity"],
+                "summary": r["summary"],
+            }
+        out.append(
+            CollectedItem(
+                source_kind=r["source_kind"],
+                source_handle=r["source_handle"],
+                title=r["title"] or "",
+                content=r["content"] or "",
+                published_at=r["published_at"],
+                url=r["url"],
+                author=r["author"],
+                category=r["category"],
+                enrichment=enrichment,
+            )
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Weather
 # ---------------------------------------------------------------------------
