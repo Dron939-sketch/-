@@ -1333,6 +1333,86 @@ body {
   .budget-list .amount { grid-column: 1 / -1; text-align: left; }
 }
 
+/* ------------------ DECISION SIMULATOR CARD ------------------ */
+.dec-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.dec-filter {
+  padding: 4px 12px;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.dec-filter:hover { border-color: var(--gold); }
+.dec-filter.active {
+  background: rgba(212, 175, 55, 0.2);
+  border-color: var(--gold-bright);
+  color: var(--gold-bright);
+}
+.dec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.dec-card {
+  padding: 14px 16px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dec-card[data-vector="safety"]  { border-left: 3px solid #5C7A9B; }
+.dec-card[data-vector="economy"] { border-left: 3px solid var(--gold); }
+.dec-card[data-vector="quality"] { border-left: 3px solid var(--good); }
+.dec-card[data-vector="social"]  { border-left: 3px solid var(--ice); }
+
+.dec-name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
+.dec-description { color: var(--muted); font-size: 0.85rem; }
+.dec-meta { display: flex; gap: 10px; font-size: 0.76rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dec-meta strong { color: var(--gold-light); }
+.dec-scenarios { display: grid; gap: 6px; }
+.dec-scenario {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 10px;
+  font-size: 0.82rem;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(10, 22, 40, 0.4);
+}
+.dec-scenario.optimistic  { border-left: 2px solid var(--good); }
+.dec-scenario.realistic   { border-left: 2px solid var(--gold); }
+.dec-scenario.pessimistic { border-left: 2px solid var(--danger); }
+.dec-scenario .lbl { color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.7rem; align-self: center; }
+.dec-scenario .delta-row { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.dec-scenario .delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+.dec-scenario .delta.up   { color: var(--good); }
+.dec-scenario .delta.down { color: var(--danger); }
+.dec-scenario .delta.flat { color: var(--muted); }
+.dec-scenario .delta .vec { color: var(--muted); font-weight: 500; margin-right: 2px; }
+
+.dec-risks { list-style: none; padding: 0; margin: 4px 0 0; font-size: 0.78rem; color: var(--muted); }
+.dec-risks li::before { content: "⚠ "; color: var(--warn); }
+.dec-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
+.dec-tag {
+  font-size: 0.7rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  color: var(--gold-light);
+}
+.dec-empty { color: var(--muted); padding: 14px; text-align: center; font-style: italic; grid-column: 1 / -1; }
+
 /* ------------------ MARKET GAPS CARD ------------------ */
 .mg-hint { margin-bottom: 12px; font-style: italic; }
 .mg-grid {

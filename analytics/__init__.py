@@ -3,6 +3,7 @@
 from .benchmark import BenchmarkResult, CityMetric, CityRow, VectorStat, benchmark
 from .butterfly import Simulation, NodeDelta, simulate
 from .crisis import Alert, CrisisReport, detect_crises
+from .decisions import Decision, DecisionScenario, filter_for as filter_decisions, list_decisions, get_decision
 from .foresight import ForesightReport, MegatrendRow, Scenario, VectorProjection, forecast as foresight_forecast
 from .investment import Factor, InvestmentProfile, compute as investment_compute
 from .knowledge import Case, Recommendation, library_size, recommend as recommend_cases
@@ -26,6 +27,11 @@ __all__ = [
     "detect_crises",
     "Alert",
     "CrisisReport",
+    "list_decisions",
+    "filter_decisions",
+    "get_decision",
+    "Decision",
+    "DecisionScenario",
     "foresight_forecast",
     "ForesightReport",
     "MegatrendRow",
