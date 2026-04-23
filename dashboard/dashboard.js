@@ -795,6 +795,68 @@ function renderForecast(data) {
     data.forecast_3m?.recommendation || "";
 }
 
+const CRISIS_LEVEL_LABELS = {
+  critical: "Критично",
+  high:     "Высокий",
+  medium:   "Средний",
+  watch:    "Мониторинг",
+};
+const CRISIS_LEVEL_ICON = {
+  critical: "!",
+  high:     "!",
+  medium:   "●",
+  watch:    "•",
+};
+
+function renderCrisis(data) {
+  const strip = document.getElementById("crisis-strip");
+  const headline = document.getElementById("crisis-headline");
+  const toggle = document.getElementById("crisis-toggle");
+  const list = document.getElementById("crisis-alerts");
+  if (!strip) return;
+
+  const status = data?.status || "ok";
+  const alerts = Array.isArray(data?.alerts) ? data.alerts : [];
+
+  strip.setAttribute("data-status", status);
+  headline.textContent = data?.headline || (
+    status === "ok" ? "Всё в норме — кризисных сигналов нет"
+    : "Есть сигналы — проверьте подробности"
+  );
+
+  list.innerHTML = "";
+  alerts.forEach((a) => {
+    const li = document.createElement("li");
+    li.className = "crisis-alert";
+    li.setAttribute("data-level", a.level || "watch");
+    const pct = Math.round((Number(a.probability) || 0) * 100);
+    const horizon = a.horizon ? `· ${a.horizon}` : "";
+    li.innerHTML = `
+      <span class="level-pill">${CRISIS_LEVEL_ICON[a.level] || "•"}</span>
+      <div class="title">
+        <span>${a.title || "Сигнал"}</span>
+        <span class="horizon">${CRISIS_LEVEL_LABELS[a.level] || a.level || ""} ${horizon}</span>
+      </div>
+      <div class="description">${a.description || ""}</div>
+      <div class="probability">Вероятность: ${pct}%</div>
+    `;
+    list.appendChild(li);
+  });
+
+  if (alerts.length === 0) {
+    toggle.hidden = true;
+    list.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    return;
+  }
+  toggle.hidden = false;
+  toggle.textContent = `Подробнее (${alerts.length})`;
+  // Auto-expand when attention; collapse when just watch so the strip stays compact.
+  const shouldOpen = status === "attention";
+  toggle.setAttribute("aria-expanded", String(shouldOpen));
+  list.hidden = !shouldOpen;
+}
+
 function renderBenchmark(data) {
   const body = document.getElementById("benchmark-body");
   const meta = document.getElementById("benchmark-meta");
@@ -970,6 +1032,13 @@ async function refresh() {
   } catch (e) {
     console.warn("benchmark unavailable", e);
   }
+  try {
+    const crisis = await fetchJson(`/api/city/${slug}/crisis`);
+    renderCrisis(crisis);
+  } catch (e) {
+    console.warn("crisis unavailable", e);
+    renderCrisis({ status: "ok", alerts: [] });
+  }
   setUpdated();
 }
 
@@ -1020,6 +1089,17 @@ async function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeAllModals();
   });
+
+  const crisisToggle = document.getElementById("crisis-toggle");
+  const crisisList   = document.getElementById("crisis-alerts");
+  if (crisisToggle && crisisList) {
+    crisisToggle.addEventListener("click", () => {
+      const open = crisisToggle.getAttribute("aria-expanded") === "true";
+      const next = !open;
+      crisisToggle.setAttribute("aria-expanded", String(next));
+      crisisList.hidden = !next;
+    });
+  }
 
   const simSlider = document.getElementById("sim-delta");
   const simSource = document.getElementById("sim-source");

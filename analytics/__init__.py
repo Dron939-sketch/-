@@ -2,6 +2,7 @@
 
 from .benchmark import BenchmarkResult, CityMetric, CityRow, VectorStat, benchmark
 from .butterfly import Simulation, NodeDelta, simulate
+from .crisis import Alert, CrisisReport, detect_crises
 from .loops import analyze_loops, metrics_to_vectors
 from .model import build_graph
 from .root_cause import CauseHop, RootCauseTrace, trace as trace_root_cause
@@ -15,6 +16,9 @@ __all__ = [
     "CityRow",
     "VectorStat",
     "build_graph",
+    "detect_crises",
+    "Alert",
+    "CrisisReport",
     "metrics_to_vectors",
     "simulate",
     "Simulation",
