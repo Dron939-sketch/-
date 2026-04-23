@@ -1072,6 +1072,84 @@ body {
   .reputation-cols { grid-template-columns: 1fr; }
 }
 
+/* ------------------ INVESTMENT CARD ------------------ */
+.investment-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr 240px;
+  gap: 24px;
+  align-items: start;
+}
+.investment-score {
+  padding: 18px;
+  background: linear-gradient(160deg, rgba(212, 175, 55, 0.1), rgba(13, 33, 53, 0.7));
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 14px;
+  text-align: center;
+}
+.score-grade {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 900;
+  font-size: 4rem;
+  line-height: 1;
+  color: var(--gold-bright);
+  text-shadow: 0 0 20px rgba(212, 175, 55, 0.35);
+  margin-bottom: 8px;
+}
+.score-value { font-weight: 700; font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.score-value small { font-size: 0.85rem; color: var(--muted); margin-left: 4px; }
+.score-sublabel { color: var(--muted); font-size: 0.82rem; margin-top: 6px; }
+.score-grade[data-grade^="A"] { color: var(--good); text-shadow: 0 0 20px rgba(111, 207, 151, 0.4); }
+.score-grade[data-grade^="B"] { color: var(--gold-bright); }
+.score-grade[data-grade^="C"] { color: var(--warn); text-shadow: 0 0 20px rgba(232, 168, 95, 0.35); }
+.score-grade[data-grade="D"]  { color: var(--danger); text-shadow: 0 0 20px rgba(224, 91, 91, 0.35); }
+
+.investment-factors { display: grid; gap: 10px; align-content: start; }
+.invest-factor {
+  display: grid;
+  grid-template-columns: 140px 1fr 50px;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.92rem;
+}
+.invest-factor .label { color: var(--text); font-weight: 500; }
+.invest-factor .bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(10, 22, 40, 0.7);
+  position: relative;
+  overflow: hidden;
+}
+.invest-factor .bar-fill {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  border-radius: 999px;
+}
+.invest-factor.low  .bar-fill { background: linear-gradient(90deg, var(--danger), #F08A8A); }
+.invest-factor.mid  .bar-fill { background: linear-gradient(90deg, var(--warn), var(--gold)); }
+.invest-factor.high .bar-fill { background: linear-gradient(90deg, var(--gold), var(--good)); }
+.invest-factor .value { text-align: right; color: var(--gold-light); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.investment-sidebar { font-size: 0.9rem; }
+.investment-sidebar .section-title { margin-top: 0; }
+.investment-sidebar .section-title + .section-title { margin-top: 14px; }
+.invest-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.invest-list li {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  background: rgba(26, 58, 92, 0.45);
+  border: 1px solid rgba(197, 160, 89, 0.08);
+}
+.invest-list.strengths li  { border-left: 3px solid var(--good); color: var(--text); }
+.invest-list.weaknesses li { border-left: 3px solid var(--danger); color: var(--text); }
+
+@media (max-width: 1100px) {
+  .investment-layout { grid-template-columns: 1fr; }
+  .investment-score { max-width: 320px; }
+  .invest-factor { grid-template-columns: 120px 1fr 48px; }
+}
+
 /* ------------------ BENCHMARK CARD ------------------ */
 .benchmark-summary {
   display: flex;

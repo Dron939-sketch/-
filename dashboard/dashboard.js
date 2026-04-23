@@ -1005,6 +1005,72 @@ function _mentionsWord(n) {
   return "упоминаний";
 }
 
+function renderInvestment(data) {
+  const gradeEl = document.getElementById("investment-grade");
+  const indexEl = document.getElementById("investment-index");
+  const peerEl = document.getElementById("investment-peer");
+  const factorsEl = document.getElementById("investment-factors");
+  const strengthsEl = document.getElementById("investment-strengths");
+  const weaknessesEl = document.getElementById("investment-weaknesses");
+  const meta = document.getElementById("investment-meta");
+  if (!gradeEl || !factorsEl) return;
+
+  const grade = data?.grade || "—";
+  gradeEl.textContent = grade;
+  gradeEl.setAttribute("data-grade", grade);
+
+  indexEl.textContent = data?.overall_index != null
+    ? Number(data.overall_index).toFixed(1)
+    : "—";
+
+  if (data?.peer_rank && data.peer_rank.position && data.peer_rank.total) {
+    peerEl.textContent = `Место ${data.peer_rank.position} из ${data.peer_rank.total} пилотов`;
+  } else {
+    peerEl.textContent = data?.note || "";
+  }
+
+  factorsEl.innerHTML = "";
+  (data?.factors || []).forEach((f) => {
+    const row = document.createElement("div");
+    const pct = Math.round((Number(f.value) || 0) * 100);
+    const level = pct < 40 ? "low" : (pct < 65 ? "mid" : "high");
+    row.className = `invest-factor ${level}`;
+    row.innerHTML = `
+      <span class="label">${f.label}</span>
+      <span class="bar"><span class="bar-fill" style="width:${pct}%"></span></span>
+      <span class="value">${pct}%</span>
+    `;
+    factorsEl.appendChild(row);
+  });
+
+  strengthsEl.innerHTML = "";
+  (data?.strengths || []).forEach((s) => {
+    const li = document.createElement("li");
+    li.textContent = s;
+    strengthsEl.appendChild(li);
+  });
+  if (!strengthsEl.children.length) {
+    strengthsEl.innerHTML = `<li class="muted small">Пока ни один фактор не достиг 50%.</li>`;
+  }
+
+  weaknessesEl.innerHTML = "";
+  (data?.weaknesses || []).forEach((w) => {
+    const li = document.createElement("li");
+    li.textContent = w;
+    weaknessesEl.appendChild(li);
+  });
+  if (!weaknessesEl.children.length) {
+    weaknessesEl.innerHTML = `<li class="muted small">Все факторы выше порога — слабых мест нет.</li>`;
+  }
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+}
+
 function renderBenchmark(data) {
   const body = document.getElementById("benchmark-body");
   const meta = document.getElementById("benchmark-meta");
@@ -1192,6 +1258,12 @@ async function refresh() {
     renderReputation(reputation);
   } catch (e) {
     console.warn("reputation unavailable", e);
+  }
+  try {
+    const investment = await fetchJson(`/api/city/${slug}/investment`);
+    renderInvestment(investment);
+  } catch (e) {
+    console.warn("investment unavailable", e);
   }
   setUpdated();
 }
