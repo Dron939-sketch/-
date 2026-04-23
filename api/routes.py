@@ -20,6 +20,7 @@ Endpoints:
   GET  /api/city/{name}/budget
   POST /api/city/{name}/narratives
   GET  /api/city/{name}/topics
+  GET  /api/city/{name}/decisions
   GET  /api/city/{name}/market_gaps
   GET  /api/city/{name}/cases
   GET  /api/benchmark
@@ -45,7 +46,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import analyze_market_gaps, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
+from analytics import analyze_market_gaps, filter_decisions, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -917,6 +918,25 @@ async def city_topics(name: str, days: int = 7) -> dict:
         "window_days": days,
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/decisions")
+async def city_decisions(name: str, vector: Optional[str] = None) -> dict:
+    """Catalogue of 10 типичных управленческих решений с 3 сценариями каждое.
+
+    Optional `?vector=safety|economy|quality|social` filters the catalogue
+    to decisions that primarily affect that vector, or produce a non-trivial
+    realistic effect (|Δ| ≥ 0.15) on it.
+    """
+    cfg = _resolve_city(name)
+    decisions = filter_decisions(vector)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "filter_vector": vector,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "decisions": [d.to_dict() for d in decisions],
     }
 
 
