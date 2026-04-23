@@ -1150,6 +1150,83 @@ body {
   .invest-factor { grid-template-columns: 120px 1fr 48px; }
 }
 
+/* ------------------ FORESIGHT CARD ------------------ */
+.foresight-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+.scenarios { display: grid; gap: 14px; }
+.scenario {
+  padding: 14px 16px;
+  background: rgba(26, 58, 92, 0.45);
+  border: 1px solid rgba(197, 160, 89, 0.1);
+  border-radius: 12px;
+}
+.scenario.optimistic  { border-left: 4px solid var(--good); }
+.scenario.baseline    { border-left: 4px solid var(--gold); }
+.scenario.pessimistic { border-left: 4px solid var(--danger); }
+
+.scenario-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.scenario-title { font-weight: 700; font-size: 1.05rem; }
+.scenario-prob {
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.scenario-desc { color: var(--muted); font-size: 0.84rem; margin-bottom: 10px; }
+.scenario-vectors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px 14px;
+  font-size: 0.88rem;
+}
+.scenario-vectors .vec { font-variant-numeric: tabular-nums; }
+.scenario-vectors .vec .name { color: var(--muted); font-size: 0.76rem; margin-right: 6px; }
+.scenario-vectors .vec .now  { color: var(--muted); }
+.scenario-vectors .vec .arrow { color: var(--gold); margin: 0 4px; }
+.scenario-vectors .vec .then { color: var(--gold-light); font-weight: 700; }
+.scenario-vectors .vec.up   .then { color: var(--good); }
+.scenario-vectors .vec.down .then { color: var(--danger); }
+.scenario-composite {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.scenario-composite strong { color: var(--gold-light); font-weight: 700; }
+
+.megatrends .section-title { margin-top: 0; }
+.megatrend-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.megatrend-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 10px;
+  background: rgba(10, 22, 40, 0.55);
+  border-radius: 8px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  font-size: 0.86rem;
+}
+.megatrend-list .label { font-weight: 500; }
+.megatrend-list .weighted { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 0.8rem; }
+.megatrend-list li[data-dir="up"]   .weighted { color: var(--good); }
+.megatrend-list li[data-dir="down"] .weighted { color: var(--danger); }
+.megatrend-list li[data-dir="flat"] .weighted { color: var(--muted); }
+
+@media (max-width: 1000px) {
+  .foresight-layout { grid-template-columns: 1fr; }
+}
+
 /* ------------------ BENCHMARK CARD ------------------ */
 .benchmark-summary {
   display: flex;

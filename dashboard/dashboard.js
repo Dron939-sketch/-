@@ -1071,6 +1071,72 @@ function renderInvestment(data) {
   }
 }
 
+const FORESIGHT_VECTOR_ICON = {
+  safety:  "🛡️", economy: "💰", quality: "😊", social:  "🤝",
+};
+
+function renderForesight(data) {
+  const scenariosEl = document.getElementById("foresight-scenarios");
+  const megaEl = document.getElementById("foresight-megatrends");
+  const meta = document.getElementById("foresight-meta");
+  if (!scenariosEl || !megaEl) return;
+
+  const horizon = data?.horizon_years || 5;
+  const scenarios = Array.isArray(data?.scenarios) ? data.scenarios : [];
+  const megatrends = Array.isArray(data?.megatrends) ? data.megatrends : [];
+
+  scenariosEl.innerHTML = "";
+  scenarios.forEach((s) => {
+    const card = document.createElement("div");
+    card.className = `scenario ${s.key}`;
+    const prob = Math.round((Number(s.probability) || 0) * 100);
+    const compCur = s.composite_current != null ? Number(s.composite_current).toFixed(1) : "—";
+    const compY5 = s.composite_year_5 != null ? Number(s.composite_year_5).toFixed(1) : "—";
+    const vectorsHtml = (s.vectors || []).map((v) => {
+      const now = v.current != null ? Number(v.current).toFixed(1) : "—";
+      const then = v.year_5 != null ? Number(v.year_5).toFixed(1) : "—";
+      const dir = (v.current != null && v.year_5 != null)
+        ? (v.year_5 > v.current + 0.05 ? "up" : v.year_5 < v.current - 0.05 ? "down" : "flat")
+        : "flat";
+      return `<div class="vec ${dir}">
+        <span class="name">${FORESIGHT_VECTOR_ICON[v.key] || ""} ${v.label}</span>
+        <span class="now">${now}</span>
+        <span class="arrow">→</span>
+        <span class="then">${then}</span>
+      </div>`;
+    }).join("");
+    card.innerHTML = `
+      <div class="scenario-head">
+        <span class="scenario-title">${s.label}</span>
+        <span class="scenario-prob">${prob}% вероятность</span>
+      </div>
+      <div class="scenario-desc">${s.description || ""}</div>
+      <div class="scenario-vectors">${vectorsHtml}</div>
+      <div class="scenario-composite">Композит: <strong>${compCur} → ${compY5}</strong> · к ${horizon}-му году</div>
+    `;
+    scenariosEl.appendChild(card);
+  });
+
+  megaEl.innerHTML = "";
+  megatrends.forEach((m) => {
+    const li = document.createElement("li");
+    li.setAttribute("data-dir", m.direction || "flat");
+    const sign = m.weighted >= 0 ? "+" : "";
+    li.innerHTML = `
+      <span class="label" title="${m.description || ""}">${m.label}</span>
+      <span class="weighted">${sign}${Number(m.weighted).toFixed(2)}</span>
+    `;
+    megaEl.appendChild(li);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+}
+
 function renderBenchmark(data) {
   const body = document.getElementById("benchmark-body");
   const meta = document.getElementById("benchmark-meta");
@@ -1264,6 +1330,12 @@ async function refresh() {
     renderInvestment(investment);
   } catch (e) {
     console.warn("investment unavailable", e);
+  }
+  try {
+    const foresight = await fetchJson(`/api/city/${slug}/foresight`);
+    renderForesight(foresight);
+  } catch (e) {
+    console.warn("foresight unavailable", e);
   }
   setUpdated();
 }
