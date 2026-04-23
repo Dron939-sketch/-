@@ -5,6 +5,7 @@ from .butterfly import Simulation, NodeDelta, simulate
 from .crisis import Alert, CrisisReport, detect_crises
 from .loops import analyze_loops, metrics_to_vectors
 from .model import build_graph
+from .reputation import AuthorStat, ReputationReport, ViralPost, analyze as reputation_analyze
 from .root_cause import CauseHop, RootCauseTrace, trace as trace_root_cause
 from .transparency import Breakdown, Component, breakdown
 
@@ -20,6 +21,10 @@ __all__ = [
     "Alert",
     "CrisisReport",
     "metrics_to_vectors",
+    "reputation_analyze",
+    "AuthorStat",
+    "ReputationReport",
+    "ViralPost",
     "simulate",
     "Simulation",
     "NodeDelta",

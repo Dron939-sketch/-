@@ -160,6 +160,43 @@
       </div>
     </section>
 
+    <!-- row 5.5: media reputation guard -->
+    <section class="card wide reputation">
+      <div class="card-eyebrow">
+        <span>Репутация в медиа — 24 часа</span>
+        <span class="muted small" id="reputation-meta"></span>
+      </div>
+      <div class="reputation-head">
+        <div class="rep-stat">
+          <div class="muted small">Риск</div>
+          <div class="rep-risk" id="reputation-risk"><span class="rep-risk-dot"></span><span id="reputation-risk-label">—</span></div>
+        </div>
+        <div class="rep-stat">
+          <div class="muted small">Всего упоминаний</div>
+          <div class="rep-number" id="reputation-total">—</div>
+        </div>
+        <div class="rep-stat">
+          <div class="muted small">Средняя тональность</div>
+          <div class="rep-sentiment" id="reputation-sentiment">—</div>
+        </div>
+        <div class="rep-stat">
+          <div class="muted small">Доля негатива</div>
+          <div class="rep-share"><span id="reputation-share">—</span><span class="rep-trend" id="reputation-trend"></span></div>
+        </div>
+      </div>
+      <div class="rep-sources" id="reputation-sources"></div>
+      <div class="reputation-cols">
+        <div>
+          <h3 class="section-title">Громче всех критикуют</h3>
+          <ol class="rep-author-list" id="reputation-authors"></ol>
+        </div>
+        <div>
+          <h3 class="section-title">Самые «выстрелившие» посты</h3>
+          <ul class="rep-viral-list" id="reputation-viral"></ul>
+        </div>
+      </div>
+    </section>
+
     <!-- row 6: 3-month forecast -->
     <section class="card wide forecast">
       <div class="card-eyebrow">Прогноз на 3 месяца (алгоритм Мейстера)</div>

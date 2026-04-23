@@ -857,6 +857,153 @@ function renderCrisis(data) {
   list.hidden = !shouldOpen;
 }
 
+const REPUTATION_SOURCE_LABELS = {
+  telegram: "Telegram",
+  vk:       "ВКонтакте",
+  news_rss: "Новости",
+  gosuslugi: "Госуслуги",
+};
+const REPUTATION_RISK_LABELS = {
+  low:    "Низкий",
+  medium: "Средний",
+  high:   "Высокий",
+};
+
+function renderReputation(data) {
+  const head = document.getElementById("reputation-risk");
+  const riskLabel = document.getElementById("reputation-risk-label");
+  const total = document.getElementById("reputation-total");
+  const sentEl = document.getElementById("reputation-sentiment");
+  const shareEl = document.getElementById("reputation-share");
+  const trendEl = document.getElementById("reputation-trend");
+  const sourcesEl = document.getElementById("reputation-sources");
+  const authorsEl = document.getElementById("reputation-authors");
+  const viralEl = document.getElementById("reputation-viral");
+  const meta = document.getElementById("reputation-meta");
+  if (!head || !authorsEl || !viralEl) return;
+
+  const risk = data?.risk || "low";
+  head.setAttribute("data-risk", risk);
+  riskLabel.textContent = REPUTATION_RISK_LABELS[risk] || risk;
+
+  total.textContent = Number(data?.total_mentions || 0).toLocaleString("ru-RU");
+
+  if (data?.avg_sentiment != null) {
+    const s = Number(data.avg_sentiment);
+    sentEl.textContent = (s >= 0 ? "+" : "") + s.toFixed(2);
+    sentEl.classList.remove("positive", "negative", "neutral");
+    sentEl.classList.add(s > 0.1 ? "positive" : s < -0.1 ? "negative" : "neutral");
+  } else {
+    sentEl.textContent = "—";
+    sentEl.classList.remove("positive", "negative");
+    sentEl.classList.add("neutral");
+  }
+
+  if (data?.negative_share != null) {
+    const pct = Math.round(data.negative_share * 100);
+    shareEl.textContent = `${pct}%`;
+    trendEl.classList.remove("up", "down", "flat");
+    if (data.prior_negative_share != null) {
+      const delta = data.negative_share - data.prior_negative_share;
+      const deltaPct = Math.round(delta * 100);
+      if (deltaPct >= 5) {
+        trendEl.className = "rep-trend up";
+        trendEl.textContent = `▲ +${deltaPct} п.п. vs 7 дн.`;
+      } else if (deltaPct <= -5) {
+        trendEl.className = "rep-trend down";
+        trendEl.textContent = `▼ ${deltaPct} п.п. vs 7 дн.`;
+      } else {
+        trendEl.className = "rep-trend flat";
+        trendEl.textContent = "≈ без изменений";
+      }
+    } else {
+      trendEl.textContent = "";
+    }
+  } else {
+    shareEl.textContent = "—";
+    trendEl.textContent = "";
+  }
+
+  sourcesEl.innerHTML = "";
+  const bySource = data?.by_source || {};
+  Object.entries(bySource)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([kind, count]) => {
+      const chip = document.createElement("span");
+      chip.className = "rep-source-chip";
+      chip.innerHTML = `${REPUTATION_SOURCE_LABELS[kind] || kind}: <strong>${count}</strong>`;
+      sourcesEl.appendChild(chip);
+    });
+
+  authorsEl.innerHTML = "";
+  const authors = Array.isArray(data?.top_negative_authors) ? data.top_negative_authors : [];
+  if (!authors.length) {
+    authorsEl.innerHTML = `<li class="rep-empty">Негативных авторов за 24 часа не нашлось.</li>`;
+  } else {
+    authors.forEach((a) => {
+      const li = document.createElement("li");
+      const sourceLabel = REPUTATION_SOURCE_LABELS[a.source_kind] || a.source_kind || "";
+      const avgSent = a.avg_sentiment != null
+        ? (a.avg_sentiment >= 0 ? "+" : "") + Number(a.avg_sentiment).toFixed(2)
+        : "—";
+      li.innerHTML = `
+        <div class="author">${a.author}</div>
+        <div class="meta">
+          ${sourceLabel ? sourceLabel + " · " : ""}${a.mentions} ${_mentionsWord(a.mentions)}
+          <span class="pill">${a.negative} негатив${a.negative === 1 ? "" : "ных"}</span>
+          · средняя тональность ${avgSent}
+        </div>
+      `;
+      authorsEl.appendChild(li);
+    });
+  }
+
+  viralEl.innerHTML = "";
+  const viral = Array.isArray(data?.viral_negative) ? data.viral_negative : [];
+  if (!viral.length) {
+    viralEl.innerHTML = `<li class="rep-empty">«Выстрелов» с высокой серьёзностью пока нет.</li>`;
+  } else {
+    viral.forEach((v) => {
+      const li = document.createElement("li");
+      const sourceLabel = REPUTATION_SOURCE_LABELS[v.source_kind] || v.source_kind || "";
+      const titleHtml = v.url
+        ? `<a href="${v.url}" target="_blank" rel="noopener">${v.title}</a>`
+        : v.title;
+      const badges = [];
+      if (v.sentiment != null) {
+        const s = Number(v.sentiment);
+        badges.push(`<span class="badge neg">тональность ${s >= 0 ? "+" : ""}${s.toFixed(2)}</span>`);
+      }
+      if (v.severity != null) {
+        badges.push(`<span class="badge sev">severity ${Number(v.severity).toFixed(2)}</span>`);
+      }
+      li.innerHTML = `
+        <div class="title">${titleHtml}</div>
+        <div class="meta">
+          ${sourceLabel ? sourceLabel + " · " : ""}${v.author || "автор неизвестен"}
+          ${badges.join(" ")}
+        </div>
+      `;
+      viralEl.appendChild(li);
+    });
+  }
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+}
+
+function _mentionsWord(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "упоминание";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "упоминания";
+  return "упоминаний";
+}
+
 function renderBenchmark(data) {
   const body = document.getElementById("benchmark-body");
   const meta = document.getElementById("benchmark-meta");
@@ -1038,6 +1185,12 @@ async function refresh() {
   } catch (e) {
     console.warn("crisis unavailable", e);
     renderCrisis({ status: "ok", alerts: [] });
+  }
+  try {
+    const reputation = await fetchJson(`/api/city/${slug}/reputation`);
+    renderReputation(reputation);
+  } catch (e) {
+    console.warn("reputation unavailable", e);
   }
   setUpdated();
 }
