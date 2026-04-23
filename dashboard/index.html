@@ -219,6 +219,49 @@
       </div>
     </section>
 
+    <!-- row 5.75: roadmap planner -->
+    <section class="card wide roadmap">
+      <div class="card-eyebrow">
+        <span>Дорожная карта — квартальные вехи</span>
+        <span class="muted small">Постройте план закрытия разрыва по одному из векторов.</span>
+      </div>
+      <form class="roadmap-form" id="roadmap-form">
+        <label class="rm-field">
+          <span class="rm-label">Вектор</span>
+          <select id="rm-vector" required>
+            <option value="СБ">🛡️ Безопасность (СБ)</option>
+            <option value="ТФ">💰 Экономика (ТФ)</option>
+            <option value="УБ">😊 Качество жизни (УБ)</option>
+            <option value="ЧВ">🤝 Соцкапитал (ЧВ)</option>
+          </select>
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Текущий <span id="rm-start-val">3.5</span></span>
+          <input type="range" id="rm-start" min="1" max="6" step="0.1" value="3.5" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Цель <span id="rm-target-val">5.0</span></span>
+          <input type="range" id="rm-target" min="1" max="6" step="0.1" value="5.0" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Срок</span>
+          <input type="date" id="rm-deadline" required />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Сценарий</span>
+          <select id="rm-scenario">
+            <option value="baseline" selected>Базовый (линейный)</option>
+            <option value="optimistic">Оптимистичный (быстрый старт)</option>
+            <option value="pessimistic">Пессимистичный (разгон позже)</option>
+          </select>
+        </label>
+        <button type="submit" id="rm-run" class="rm-submit">Построить карту</button>
+      </form>
+      <div class="roadmap-output" id="roadmap-output">
+        <div class="muted small">Заполните форму и нажмите «Построить карту» — увидите квартальные вехи, интервенции и оценку стоимости.</div>
+      </div>
+    </section>
+
     <!-- row 6: 3-month forecast -->
     <section class="card wide forecast">
       <div class="card-eyebrow">Прогноз на 3 месяца (алгоритм Мейстера)</div>
