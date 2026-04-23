@@ -94,6 +94,31 @@
       </div>
     </section>
 
+    <!-- row 4.5: butterfly simulator -->
+    <section class="card wide simulator">
+      <div class="card-eyebrow">
+        <span>Что если… — симулятор эффекта бабочки</span>
+        <span class="muted small">Поверните ручку — увидите каскад по всему графу.</span>
+      </div>
+      <div class="sim-layout">
+        <div class="sim-controls">
+          <label class="sim-field">
+            <span class="sim-field-label">Элемент</span>
+            <select id="sim-source" class="sim-select" aria-label="Элемент модели"></select>
+          </label>
+          <label class="sim-field">
+            <span class="sim-field-label">Изменение <span id="sim-delta-value">+0.5</span></span>
+            <input id="sim-delta" class="sim-slider" type="range" min="-3" max="3" step="0.1" value="0.5" aria-label="Δ изменение" />
+            <div class="sim-scale"><span>−3</span><span>0</span><span>+3</span></div>
+          </label>
+          <button type="button" id="sim-run" class="sim-run">Рассчитать каскад</button>
+        </div>
+        <div class="sim-output" id="sim-output">
+          <div class="muted small">Выберите элемент и сдвиньте ручку, чтобы увидеть, как изменение пройдёт по 9-элементной модели.</div>
+        </div>
+      </div>
+    </section>
+
     <!-- row 5: trust + happiness -->
     <section class="card wide trust-happy">
       <div class="card-eyebrow">Индекс доверия и счастья</div>
@@ -151,6 +176,52 @@
         <div class="section-title">Рекомендуемые ресурсы</div>
         <ul class="chip-list" id="loop-modal-resources-list"></ul>
       </div>
+    </div>
+  </div>
+
+  <!-- Metric transparency modal: weighted breakdown of SB / TF / UB / CHV -->
+  <div class="modal" id="transparency-modal" aria-hidden="true" role="dialog" aria-labelledby="transparency-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">Откуда взялась эта цифра</div>
+      <h2 class="modal-title" id="transparency-title">—</h2>
+      <div class="transparency-final">
+        <span class="muted small">Итоговая оценка</span>
+        <span class="transparency-final-value" id="transparency-final">—</span>
+      </div>
+      <div class="transparency-formula" id="transparency-formula">—</div>
+      <ul class="breakdown-list" id="transparency-components"></ul>
+      <div class="transparency-missing muted small" id="transparency-missing" hidden></div>
+    </div>
+  </div>
+
+  <!-- Root-cause modal: backward chain of causes ("5 whys") -->
+  <div class="modal" id="root-cause-modal" aria-hidden="true" role="dialog" aria-labelledby="root-cause-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">Корневая причина</div>
+      <h2 class="modal-title" id="root-cause-title">—</h2>
+      <p class="modal-description" id="root-cause-subtitle"></p>
+      <ol class="cause-chain" id="root-cause-chain"></ol>
+      <div class="cause-root" id="root-cause-root" hidden>
+        <div class="section-title">Корень проблемы</div>
+        <div class="cause-root-body" id="root-cause-root-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simulator results modal: before/after per element + loops weakened -->
+  <div class="modal" id="simulator-modal" aria-hidden="true" role="dialog" aria-labelledby="simulator-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel simulator-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">Результат симуляции</div>
+      <h2 class="modal-title" id="simulator-title">—</h2>
+      <p class="modal-description" id="simulator-subtitle"></p>
+      <div class="sim-summary" id="simulator-summary"></div>
+      <ul class="sim-results" id="simulator-results"></ul>
     </div>
   </div>
 
