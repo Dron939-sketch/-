@@ -33,6 +33,19 @@
   </header>
 
   <main class="page">
+    <!-- row 0: crisis early-warning strip (status + alert list) -->
+    <section class="card wide crisis-strip" id="crisis-strip" data-status="ok">
+      <div class="crisis-head">
+        <span class="crisis-status-dot" id="crisis-dot" aria-hidden="true"></span>
+        <div class="crisis-heading">
+          <div class="crisis-label" id="crisis-label">Состояние города</div>
+          <div class="crisis-headline" id="crisis-headline">Всё в норме — кризисных сигналов нет</div>
+        </div>
+        <button type="button" class="crisis-toggle" id="crisis-toggle" aria-expanded="false" aria-controls="crisis-alerts" hidden>Подробнее</button>
+      </div>
+      <ul class="crisis-alerts" id="crisis-alerts" hidden></ul>
+    </section>
+
     <!-- row 1: greeting + weather -->
     <section class="card greeting">
       <div class="greeting-eyebrow" id="today-date">—</div>
