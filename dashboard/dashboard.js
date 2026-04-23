@@ -113,6 +113,12 @@ function renderVectors(metrics, trends) {
     const scaled = val != null ? (val * 6).toFixed(1) : "—";
     const tile = document.createElement("div");
     tile.className = "vector-tile";
+    tile.setAttribute("role", "button");
+    tile.setAttribute("tabindex", "0");
+    tile.setAttribute(
+      "aria-label",
+      `${v.name}: ${scaled} из 6. Нажмите, чтобы увидеть разбор по источникам.`,
+    );
     tile.innerHTML = `
       <div class="icon">${v.icon}</div>
       <div class="score">${scaled}<small> / 6</small></div>
@@ -120,6 +126,10 @@ function renderVectors(metrics, trends) {
       <svg class="sparkline empty" data-key="${v.dbKey}" viewBox="0 0 ${SPARKLINE_W} ${SPARKLINE_H}" preserveAspectRatio="none" aria-hidden="true"></svg>
       <div class="trend ${trend.cls}">${trend.label}</div>
     `;
+    tile.addEventListener("click", () => openTransparency(v.key));
+    tile.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTransparency(v.key); }
+    });
     grid.appendChild(tile);
   });
 }
@@ -329,6 +339,26 @@ function renderMeisterGraph(graph) {
   cyInstance.on("tap", (evt) => {
     if (evt.target === cyInstance) _resetLegend();
   });
+
+  _populateSimulatorSources(graph);
+}
+
+function _populateSimulatorSources(graph) {
+  const sel = document.getElementById("sim-source");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  (graph.nodes || []).forEach((n) => {
+    const opt = document.createElement("option");
+    opt.value = String(n.id);
+    const title = n.short || n.title || `Элемент ${n.id}`;
+    opt.textContent = `${n.id}. ${title}`;
+    sel.appendChild(opt);
+  });
+  if (prev && (graph.nodes || []).some((n) => String(n.id) === prev)) {
+    sel.value = prev;
+  }
+  _updateSimPreview();
 }
 
 function _showNodeInLegend(node) {
@@ -350,6 +380,12 @@ function _showNodeInLegend(node) {
       <p>${node.description || "Описание появится, когда ядро заполнит контекст элемента."}</p>
     </div>
   `;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "legend-action";
+  btn.textContent = "Почему такой показатель?";
+  btn.addEventListener("click", () => openRootCause(node.id, node.title));
+  box.appendChild(btn);
 }
 
 function _resetLegend() {
@@ -359,6 +395,296 @@ function _resetLegend() {
     <div class="legend-title">Выберите элемент</div>
     <div class="legend-hint muted small">Нажмите на узел графа, чтобы увидеть детали.</div>
   `;
+}
+
+// -------------------------------------------------- Generic modal helpers
+
+function openModal(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.classList.add("open");
+  m.setAttribute("aria-hidden", "false");
+}
+function closeModal(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.classList.remove("open");
+  m.setAttribute("aria-hidden", "true");
+}
+function closeAllModals() {
+  document.querySelectorAll(".modal.open").forEach((m) => {
+    m.classList.remove("open");
+    m.setAttribute("aria-hidden", "true");
+  });
+}
+
+// -------------------------------------------------- Transparency (vector breakdown)
+
+async function openTransparency(vector) {
+  if (!currentCity) return;
+  const meta = VECTOR_META.find((v) => v.key === vector);
+  document.getElementById("transparency-title").textContent =
+    meta ? `${meta.icon} ${meta.name}` : vector;
+  document.getElementById("transparency-final").textContent = "…";
+  document.getElementById("transparency-formula").textContent = "Считаем разбор…";
+  document.getElementById("transparency-components").innerHTML = "";
+  document.getElementById("transparency-missing").hidden = true;
+  openModal("transparency-modal");
+
+  try {
+    const data = await fetchJson(
+      `/api/city/${currentCity.slug}/metric/${vector}/breakdown`,
+    );
+    renderTransparency(data);
+  } catch (e) {
+    console.warn("transparency unavailable", e);
+    document.getElementById("transparency-formula").textContent =
+      "Нет данных для разбора — попробуйте позже.";
+  }
+}
+
+function renderTransparency(data) {
+  document.getElementById("transparency-title").textContent =
+    data.vector_label || data.vector;
+  document.getElementById("transparency-final").textContent =
+    `${Number(data.final).toFixed(1)} / 6`;
+  document.getElementById("transparency-formula").textContent =
+    data.formula || `baseline ${data.baseline} + Σ(weight × source)`;
+
+  const list = document.getElementById("transparency-components");
+  list.innerHTML = "";
+  (data.components || []).forEach((c) => {
+    const row = document.createElement("li");
+    const missing = c.raw === 0 && (data.missing_sources || []).includes(c.source);
+    row.className = "breakdown-row" + (missing ? " missing" : "");
+    const contribution = Number(c.contribution || 0);
+    // ±2.5 spans the visible half-bar; clamp to [-1, 1].
+    const frac = Math.max(-1, Math.min(1, contribution / 2.5));
+    const halfPct = Math.abs(frac) * 50;
+    const leftPct = frac >= 0 ? 50 : 50 - halfPct;
+    const fillClass = frac < 0 ? "breakdown-bar-fill negative" : "breakdown-bar-fill";
+    const sign = contribution >= 0 ? "+" : "";
+    row.innerHTML = `
+      <div class="breakdown-row-head">
+        <span class="label">${c.label || c.source}</span>
+        <span class="weight">вес ${(Number(c.weight) * 100).toFixed(0)}%</span>
+      </div>
+      <div class="breakdown-bar">
+        <span class="breakdown-bar-center"></span>
+        <span class="${fillClass}" style="left:${leftPct}%;width:${halfPct}%;"></span>
+      </div>
+      <div class="detail">${sign}${contribution.toFixed(2)} · ${c.detail || ""}</div>
+    `;
+    list.appendChild(row);
+  });
+
+  const missingBox = document.getElementById("transparency-missing");
+  const missingLabels = (data.missing_sources || []).map((s) => {
+    const found = (data.components || []).find((c) => c.source === s);
+    return found?.label || s;
+  });
+  if (missingLabels.length) {
+    missingBox.textContent =
+      `Нет свежих данных: ${missingLabels.join(", ")}. Показываем baseline до прибытия сигнала.`;
+    missingBox.hidden = false;
+  } else {
+    missingBox.hidden = true;
+  }
+}
+
+// -------------------------------------------------- Root-cause trace
+
+async function openRootCause(nodeId, nodeTitle) {
+  if (!currentCity) return;
+  document.getElementById("root-cause-title").textContent =
+    nodeTitle ? `Почему «${nodeTitle}»?` : `Элемент №${nodeId}`;
+  document.getElementById("root-cause-subtitle").textContent = "Идём по графу назад…";
+  document.getElementById("root-cause-chain").innerHTML = "";
+  document.getElementById("root-cause-root").hidden = true;
+  openModal("root-cause-modal");
+
+  try {
+    const data = await fetchJson(
+      `/api/city/${currentCity.slug}/root_cause/${encodeURIComponent(nodeId)}`,
+    );
+    renderRootCause(data, nodeTitle);
+  } catch (e) {
+    console.warn("root cause unavailable", e);
+    document.getElementById("root-cause-subtitle").textContent =
+      "Не удалось построить цепочку причин.";
+  }
+}
+
+function renderRootCause(data, nodeTitle) {
+  const chain = Array.isArray(data.chain) ? data.chain : [];
+  const sub = document.getElementById("root-cause-subtitle");
+  if (!chain.length) {
+    sub.textContent = "Этот элемент не имеет входящих связей — это уже корневая причина.";
+  } else {
+    sub.textContent = `Цепочка из ${chain.length} ${_hopsWord(chain.length)} · от следствия к корню.`;
+  }
+
+  const ol = document.getElementById("root-cause-chain");
+  ol.innerHTML = "";
+  chain.forEach((hop) => {
+    const li = document.createElement("li");
+    li.className = "cause-hop";
+    const strengthPct = Math.round((Number(hop.strength) || 0) * 100);
+    li.innerHTML = `
+      <span class="depth-badge">${hop.depth}</span>
+      <div class="why">${hop.effect_title} <small class="muted">(следствие)</small></div>
+      <div class="because">потому что: <strong>${hop.cause_title}</strong> <span class="strength">${strengthPct}%</span></div>
+      <div class="because">${hop.because || ""}</div>
+    `;
+    ol.appendChild(li);
+  });
+
+  const rootBox = document.getElementById("root-cause-root");
+  if (data.root && chain.length) {
+    rootBox.hidden = false;
+    document.getElementById("root-cause-root-body").innerHTML = `
+      <div class="name">${data.root.title || data.root.short || data.root.id}</div>
+      <div class="desc">${data.root.description || "Дальше граф не ведёт — здесь начинается цепочка."}</div>
+    `;
+  } else {
+    rootBox.hidden = true;
+  }
+}
+
+function _hopsWord(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "шага";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "шагов";
+  return "шагов";
+}
+
+// -------------------------------------------------- Butterfly simulator
+
+function _updateSimPreview() {
+  const slider = document.getElementById("sim-delta");
+  const label = document.getElementById("sim-delta-value");
+  if (!slider || !label) return;
+  const v = Number(slider.value);
+  label.textContent = (v >= 0 ? "+" : "") + v.toFixed(1);
+
+  const out = document.getElementById("sim-output");
+  if (!out) return;
+  if (!currentGraph || !(currentGraph.nodes || []).length) {
+    out.innerHTML = '<div class="sim-hint">Граф ещё не загружен.</div>';
+    return;
+  }
+  const sel = document.getElementById("sim-source");
+  const id = sel?.value;
+  const node = (currentGraph.nodes || []).find((n) => String(n.id) === String(id));
+  if (!node) return;
+  const name = node.short || node.title || `Элемент ${node.id}`;
+  const sign = v >= 0 ? "+" : "";
+  out.innerHTML = `
+    <div class="sim-ready">
+      <span class="title">${name}</span>
+      <span class="effect">${sign}${v.toFixed(1)} на шкале 1–6</span>
+      <span class="muted small" style="grid-column:1/-1;">Нажмите «Рассчитать каскад», чтобы увидеть эффект на всех 9 элементах.</span>
+    </div>
+  `;
+}
+
+async function runSimulation() {
+  if (!currentCity || !currentGraph) return;
+  const sel = document.getElementById("sim-source");
+  const slider = document.getElementById("sim-delta");
+  const btn = document.getElementById("sim-run");
+  const out = document.getElementById("sim-output");
+  const source_node_id = sel?.value;
+  const delta = Number(slider?.value || 0);
+  if (!source_node_id) return;
+  if (Math.abs(delta) < 0.05) {
+    out.innerHTML = '<div class="sim-error">Сдвиньте ручку хотя бы на 0.1 — иначе симулировать нечего.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  const prevText = btn.textContent;
+  btn.textContent = "Считаю…";
+  try {
+    const res = await fetch(`/api/city/${currentCity.slug}/simulate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ source_node_id, delta }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    renderSimulationResults(data, source_node_id, delta);
+    openModal("simulator-modal");
+  } catch (e) {
+    console.warn("simulate failed", e);
+    out.innerHTML = '<div class="sim-error">Не удалось рассчитать каскад. Попробуйте позже.</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevText;
+  }
+}
+
+function renderSimulationResults(data, sourceId, delta) {
+  const nodes = data.nodes || [];
+  const sourceNode = (currentGraph?.nodes || []).find((n) => String(n.id) === String(sourceId));
+  const sourceName = sourceNode?.short || sourceNode?.title || `Элемент ${sourceId}`;
+  const sign = delta >= 0 ? "+" : "";
+
+  document.getElementById("simulator-title").textContent =
+    `«${sourceName}» ${sign}${Number(delta).toFixed(1)}`;
+
+  const loops = Number(data.loops_weakened || 0);
+  document.getElementById("simulator-subtitle").textContent =
+    data.note ||
+    (nodes.length
+      ? `Каскад достиг ${nodes.length} ${_elementsWord(nodes.length)} графа.`
+      : "Изменение гасится графом — каскада нет.");
+
+  const summary = document.getElementById("simulator-summary");
+  summary.innerHTML = "";
+  const chips = [
+    `Источник: ${sourceName}`,
+    `Δ ${sign}${Number(delta).toFixed(1)}`,
+    `Затронуто: ${nodes.length}`,
+  ];
+  if (loops > 0) chips.push(`Ослаблено петель: ${loops}`);
+  chips.forEach((txt) => {
+    const el = document.createElement("span");
+    el.className = "chip";
+    el.textContent = txt;
+    summary.appendChild(el);
+  });
+
+  const list = document.getElementById("simulator-results");
+  list.innerHTML = "";
+  nodes.forEach((n) => {
+    const row = document.createElement("li");
+    row.className = `sim-result-row ${n.direction || "flat"}`;
+    if (String(n.node_id) === String(sourceId)) row.classList.add("source");
+    const deltaSign = (n.delta >= 0) ? "+" : "";
+    row.innerHTML = `
+      <div>
+        <div class="title">${n.title}</div>
+        <div class="depth">глубина ${n.depth} · Δ ${deltaSign}${Number(n.delta).toFixed(2)}</div>
+      </div>
+      <div class="prediction">
+        <span class="before">${Number(n.before).toFixed(1)}</span>
+        <span class="arrow">→</span>
+        <span class="after">${Number(n.after).toFixed(1)}</span>
+      </div>
+      <div class="depth">из 6</div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function _elementsWord(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "элемента";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "элементов";
+  return "элементов";
 }
 
 // -------------------------------------------------- Loops & modal
@@ -425,15 +751,11 @@ function openLoopModal(idx) {
     resourcesBox.hidden = true;
   }
 
-  const modal = document.getElementById("loop-modal");
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden", "false");
+  openModal("loop-modal");
 }
 
 function closeLoopModal() {
-  const modal = document.getElementById("loop-modal");
-  modal.classList.remove("open");
-  modal.setAttribute("aria-hidden", "true");
+  closeModal("loop-modal");
 }
 
 // -------------------------------------------------- Misc
@@ -570,12 +892,22 @@ async function init() {
     btn.setAttribute("aria-expanded", "false");
   });
 
-  document.querySelectorAll("#loop-modal [data-dismiss]").forEach((el) => {
-    el.addEventListener("click", closeLoopModal);
+  document.querySelectorAll(".modal [data-dismiss]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      const modal = e.currentTarget.closest(".modal");
+      if (modal) closeModal(modal.id);
+    });
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeLoopModal();
+    if (e.key === "Escape") closeAllModals();
   });
+
+  const simSlider = document.getElementById("sim-delta");
+  const simSource = document.getElementById("sim-source");
+  const simRun    = document.getElementById("sim-run");
+  if (simSlider) simSlider.addEventListener("input", _updateSimPreview);
+  if (simSource) simSource.addEventListener("change", _updateSimPreview);
+  if (simRun)    simRun.addEventListener("click", runSimulation);
 
   refreshTimer = setInterval(refresh, REFRESH_MS);
 }
