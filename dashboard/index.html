@@ -79,7 +79,22 @@
       <div class="loop-action muted small">Нажмите на петлю, чтобы увидеть точки разрыва.</div>
     </section>
 
-    <!-- row 4: trust + happiness -->
+    <!-- row 4: 9-element Meister graph -->
+    <section class="card wide model-graph">
+      <div class="card-eyebrow">
+        <span>Модель Мейстера — 9 элементов</span>
+        <span class="muted small" id="graph-meta"></span>
+      </div>
+      <div class="graph-layout">
+        <div id="meister-graph" class="meister-graph" aria-label="Граф 9 элементов"></div>
+        <aside class="graph-legend" id="graph-legend">
+          <div class="legend-title">Выберите элемент</div>
+          <div class="legend-hint muted small">Нажмите на узел графа, чтобы увидеть детали.</div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- row 5: trust + happiness -->
     <section class="card wide trust-happy">
       <div class="card-eyebrow">Индекс доверия и счастья</div>
       <div class="trust-row">
@@ -107,7 +122,7 @@
       </div>
     </section>
 
-    <!-- row 5: 3-month forecast -->
+    <!-- row 6: 3-month forecast -->
     <section class="card wide forecast">
       <div class="card-eyebrow">Прогноз на 3 месяца (алгоритм Мейстера)</div>
       <p class="forecast-summary" id="forecast-summary">—</p>
@@ -139,6 +154,10 @@
     </div>
   </div>
 
-  <script src="/dashboard.js"></script>
+  <!-- Cytoscape.js for the Meister graph (loaded once from CDN) -->
+  <script
+    src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"
+    defer></script>
+  <script src="/dashboard.js" defer></script>
 </body>
 </html>
