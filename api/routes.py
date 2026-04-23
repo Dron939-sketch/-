@@ -11,6 +11,7 @@ Endpoints:
   GET  /api/city/{name}/model
   POST /api/city/{name}/simulate
   GET  /api/city/{name}/root_cause/{node_id}
+  GET  /api/city/{name}/metric/{vector}/breakdown
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
 """
@@ -28,6 +29,7 @@ from pydantic import BaseModel, Field
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher
+from analytics import breakdown as breakdown_metric
 from analytics import build_graph, simulate, trace_root_cause
 from collectors import (
     AppealsCollector,
@@ -43,6 +45,7 @@ from db.queries import (
     metrics_history,
     metrics_trend_7d,
     news_counts_last_24h,
+    news_window,
     top_recent_summaries,
 )
 from db.seed import city_id_by_name
@@ -53,9 +56,26 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 
 _AGENDA_ENRICHMENT_TIMEOUT_S = 10
+
+# Vector → the news categories that dominate its signal. Mirrors the
+# grouping in `metrics/snapshot.py` so the transparency endpoint and
+# the snapshot aggregator agree on which news items count where.
+_VECTOR_NEWS_CATEGORIES: Dict[str, Set[str]] = {
+    "safety":  {"incidents", "utilities", "complaints"},
+    "economy": {"business", "official"},
+    "quality": {"transport", "culture", "utilities"},
+    "social":  {"culture", "sport"},
+}
+
+_VECTOR_METRIC_COLUMN = {
+    "safety":  "sb",
+    "economy": "tf",
+    "quality": "ub",
+    "social":  "chv",
+}
 
 
 def _resolve_city(name_or_slug: str):
@@ -353,12 +373,7 @@ async def city_root_cause(
     node_id: str,
     max_depth: int = Query(default=5, ge=1, le=10),
 ) -> dict:
-    """Root-cause trace: walk backward from the problem node up to `max_depth`.
-
-    The result matches the «5 почему» panel in the TZ mock-up: a chain
-    of `CauseHop` items with "because ..." sentences and a terminal
-    `root` node the dashboard highlights as the primary lever.
-    """
+    """Root-cause trace backward from the problem node."""
     cfg = _resolve_city(name)
     graph = await _build_city_graph(cfg)
     if graph.get("disabled"):
@@ -367,6 +382,75 @@ async def city_root_cause(
             detail=f"confinement graph unavailable ({graph.get('reason')})",
         )
     result = trace_root_cause(graph, node_id, max_depth=max_depth)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/metric/{vector}/breakdown")
+async def city_metric_breakdown(name: str, vector: str) -> dict:
+    """Transparency breakdown: where each piece of the metric came from.
+
+    Gathers live signals from the DB (news window, latest snapshot) and
+    pipes them into the pure `analytics.breakdown` function, which knows
+    the source weights from TZ §3.1. When the DB has no data we still
+    return a well-formed response where every component is marked as
+    missing — the UI renders "нет данных" badges instead of crashing.
+    """
+    cfg = _resolve_city(name)
+    if vector not in _VECTOR_NEWS_CATEGORIES:
+        raise HTTPException(
+            status_code=422,
+            detail="vector must be one of safety / economy / quality / social",
+        )
+
+    context: Dict[str, Any] = {}
+    city_id = await city_id_by_name(cfg["name"])
+    if city_id is not None:
+        # News stats for this vector in the last 24h.
+        items = await news_window(city_id, hours=24)
+        cats = _VECTOR_NEWS_CATEGORIES[vector]
+        sentiments: List[float] = []
+        neg = pos = 0
+        for it in items:
+            enr = it.enrichment or {}
+            cat = enr.get("category") or it.category
+            if cat not in cats:
+                continue
+            sent = enr.get("sentiment") or it.raw.get("sentiment") if isinstance(getattr(it, "raw", None), dict) else enr.get("sentiment")
+            if sent is None:
+                continue
+            try:
+                sent_f = float(sent)
+            except (TypeError, ValueError):
+                continue
+            sentiments.append(sent_f)
+            if sent_f < -0.1:
+                neg += 1
+            elif sent_f > 0.1:
+                pos += 1
+        if sentiments:
+            context["news_avg_sentiment"] = sum(sentiments) / len(sentiments)
+            context["news_count"] = len(sentiments)
+            context["news_negative"] = neg
+            context["news_positive"] = pos
+
+        # Latest metric snapshot — drives forecast + happiness + trust.
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            col = _VECTOR_METRIC_COLUMN[vector]
+            val = metric_row.get(col)
+            if val is not None:
+                # Translate the 1..6 value into a [-1..+1] forecast signal.
+                context["forecast_signal"] = (float(val) - 3.5) / 2.5
+            if metric_row.get("happiness_index") is not None:
+                context["happiness_index"] = float(metric_row["happiness_index"])
+            if metric_row.get("trust_index") is not None:
+                context["trust_index"] = float(metric_row["trust_index"])
+
+    result = breakdown_metric(vector, context)
     return {
         "city": cfg["name"],
         "slug": cfg.get("slug"),
