@@ -328,6 +328,16 @@
       <div class="muted small" id="budget-note"></div>
     </section>
 
+    <!-- row 6.23: deep forecast — per-vector confidence bands -->
+    <section class="card wide deep-forecast">
+      <div class="card-eyebrow">
+        <span>Прогноз с интервалом уверенности — 7 / 30 / 90 дней</span>
+        <span class="muted small" id="deep-forecast-meta"></span>
+      </div>
+      <div class="muted small" style="margin-bottom: 12px;">Точечное значение + диапазон ±σ. Метод подбирается по объёму истории: Holt → тренд → константа. Ширина диапазона растёт с горизонтом.</div>
+      <div class="df-grid" id="deep-forecast-grid"></div>
+    </section>
+
     <!-- row 6.24: decision simulator — action templates with scenarios -->
     <section class="card wide decisions">
       <div class="card-eyebrow">

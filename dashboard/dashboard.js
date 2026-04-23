@@ -1208,6 +1208,89 @@ function renderBudget(data) {
   }
 }
 
+// -------------------------------------------------- Deep forecast
+
+const DF_VECTOR_LABELS = {
+  safety:  "🛡️ Безопасность",
+  economy: "💰 Экономика",
+  quality: "😊 Качество жизни",
+  social:  "🤝 Соцкапитал",
+};
+const DF_CONFIDENCE_LABELS = {
+  high:               "Высокая уверенность",
+  medium:             "Средняя уверенность",
+  low:                "Низкая уверенность",
+};
+const DF_METHOD_LABELS = {
+  holt:               "Holt (тренд + уровень)",
+  trend:              "линейный тренд",
+  flat:               "константа",
+  insufficient_data:  "нет истории",
+};
+
+function renderDeepForecast(data) {
+  const grid = document.getElementById("deep-forecast-grid");
+  const meta = document.getElementById("deep-forecast-meta");
+  if (!grid) return;
+
+  const vectors = Array.isArray(data?.vectors) ? data.vectors : [];
+  grid.innerHTML = "";
+
+  if (!vectors.length) {
+    grid.innerHTML = `<div class="dec-empty">${data?.note || "Нет данных."}</div>`;
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  vectors.forEach((v) => {
+    const card = document.createElement("div");
+    card.className = "df-card";
+
+    const horizonsHtml = ["7", "30", "90"].map((h) => {
+      const f = (v.forecasts || {})[h];
+      if (!f) return "";
+      // Scale bar to the 1..6 axis. Point and band positioned as % of (max-min=5).
+      const pointPct  = Math.max(0, Math.min(100, ((f.point - 1) / 5) * 100));
+      const lowerPct  = Math.max(0, Math.min(100, ((f.lower - 1) / 5) * 100));
+      const upperPct  = Math.max(0, Math.min(100, ((f.upper - 1) / 5) * 100));
+      const bandWidth = Math.max(0.5, upperPct - lowerPct);
+      return `
+        <div class="df-horizon">
+          <span class="h-label">${h} дней</span>
+          <span class="bar">
+            <span class="band" style="left:${lowerPct}%; width:${bandWidth}%;"></span>
+            <span class="point-mark" style="left:${pointPct}%;"></span>
+          </span>
+          <span class="h-point">${Number(f.point).toFixed(1)}</span>
+        </div>
+      `;
+    }).join("");
+
+    const confidenceCls = v.confidence || "low";
+    const current = v.current != null
+      ? `${Number(v.current).toFixed(1)}<small>из 6</small>`
+      : "—";
+
+    card.innerHTML = `
+      <div class="df-head">
+        <span class="df-label">${DF_VECTOR_LABELS[v.key] || v.key}</span>
+        <span class="df-confidence ${confidenceCls}">${DF_CONFIDENCE_LABELS[confidenceCls] || v.confidence}</span>
+      </div>
+      <div class="df-current">Сейчас: ${current}</div>
+      <div class="df-horizons">${horizonsHtml}</div>
+      <div class="df-method">Метод: ${DF_METHOD_LABELS[v.method] || v.method} · ${v.samples_used} наблюдений</div>
+    `;
+    grid.appendChild(card);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+}
+
 // -------------------------------------------------- Decision simulator
 
 const DEC_FILTERS = [
@@ -2210,6 +2293,12 @@ async function refresh() {
     renderDecisions(decisions);
   } catch (e) {
     console.warn("decisions unavailable", e);
+  }
+  try {
+    const df = await fetchJson(`/api/city/${slug}/deep_forecast`);
+    renderDeepForecast(df);
+  } catch (e) {
+    console.warn("deep forecast unavailable", e);
   }
   setUpdated();
 }
