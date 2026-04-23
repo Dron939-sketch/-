@@ -156,6 +156,30 @@
         <span id="forecast-rec">—</span>
       </div>
     </section>
+
+    <!-- row 7: cross-city benchmark -->
+    <section class="card wide benchmark">
+      <div class="card-eyebrow">
+        <span>Юго-восток Подмосковья — бенчмарк 6 городов</span>
+        <span class="muted small" id="benchmark-meta"></span>
+      </div>
+      <div class="benchmark-summary" id="benchmark-summary"></div>
+      <div class="benchmark-table-wrap">
+        <table class="benchmark-table" id="benchmark-table" aria-label="Сравнение городов">
+          <thead>
+            <tr>
+              <th scope="col" class="col-city">Город</th>
+              <th scope="col" data-vector="safety">🛡️ СБ</th>
+              <th scope="col" data-vector="economy">💰 ТФ</th>
+              <th scope="col" data-vector="quality">😊 УБ</th>
+              <th scope="col" data-vector="social">🤝 ЧВ</th>
+              <th scope="col" class="col-composite">Композит</th>
+            </tr>
+          </thead>
+          <tbody id="benchmark-body"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
