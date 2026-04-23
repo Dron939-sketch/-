@@ -12,25 +12,31 @@ Every iteration is wrapped in a generous try/except — a failure for
 one city never stops the others, a failure one iteration never stops
 the loop.
 
-Note on disabled collectors
----------------------------
-Telegram and VK collectors are intentionally NOT plugged in here. The
-VK API token currently returns `error_code=5` (invalid access_token)
-and the Telegram client would also warn on every cycle without
-credentials. Removing them from the list stops the log spam without
-touching the collector modules — flip them back on by restoring the
-two lines marked `# --- re-enable ...` below.
+Note on disabled collectors + AI replacement
+--------------------------------------------
+Telegram and VK collectors are intentionally NOT plugged in here — the
+VK token returns `error_code=5` (invalid) and the Telegram client would
+warn on every cycle without credentials.
+
+Instead, once the real news + appeals pass enrichment, we run an
+`AIPulseCollector` that asks DeepSeek to synthesize plausible local
+social-pulse posts from the same context. Those items are tagged
+`source_kind="ai_pulse"` + `ai_synth=True` so the UI can label them
+honestly. Flip the old TG/VK collectors back on by restoring the lines
+marked `# --- re-enable ...` below.
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from typing import List, Optional
 
 from ai.enricher import NewsEnricher
 from analytics.loops import analyze_loops
 from collectors import (
+    AIPulseCollector,
     AppealsCollector,
     NewsCollector,
 )
@@ -100,6 +106,27 @@ async def collect_city(city_name: str, enricher: Optional[NewsEnricher] = None) 
         except Exception:  # noqa: BLE001
             logger.warning("enricher failed for %s", city_name, exc_info=False)
 
+    # AI social-pulse: synthesize 5 plausible local voice posts from the
+    # enriched reference. Reuses the NewsEnricher's DeepSeek client, so no
+    # extra config. Fail-safe when DeepSeek is disabled or times out.
+    if items and enricher.enabled:
+        pulse = AIPulseCollector(
+            city_name,
+            reference_items=items,
+            client=enricher.client,
+        )
+        try:
+            synth = await asyncio.wait_for(pulse.collect(), timeout=30)
+            items.extend(synth)
+            if synth:
+                logger.info("ai_pulse %s: synthesized %d posts", city_name, len(synth))
+        except asyncio.TimeoutError:
+            logger.warning("ai_pulse timed out for %s", city_name)
+        except Exception:  # noqa: BLE001
+            logger.warning("ai_pulse failed for %s", city_name, exc_info=False)
+        finally:
+            await pulse.close()
+
     written = await upsert_news_batch(city_id, items)
     logger.info("collect_city %s: collected=%d written=%d", city_name, len(items), written)
     return written
@@ -160,8 +187,11 @@ async def analyze_loops_for_city(city_name: str) -> int:
         "ub": metric_row.get("ub"),
         "chv": metric_row.get("chv"),
     }
+    # city_id is keyword-only on analyze_loops — wrap in a partial so the
+    # executor call doesn't pass it positionally (raises TypeError).
     loops = await asyncio.get_running_loop().run_in_executor(
-        None, analyze_loops, city_name, snapshot, city_id
+        None,
+        functools.partial(analyze_loops, city_name, snapshot, city_id=city_id),
     )
     if not loops:
         return 0
