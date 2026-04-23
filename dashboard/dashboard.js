@@ -862,6 +862,7 @@ const REPUTATION_SOURCE_LABELS = {
   vk:       "ВКонтакте",
   news_rss: "Новости",
   gosuslugi: "Госуслуги",
+  ai_pulse: "🤖 AI-пульс",
 };
 const REPUTATION_RISK_LABELS = {
   low:    "Низкий",
@@ -930,7 +931,7 @@ function renderReputation(data) {
     .sort((a, b) => b[1] - a[1])
     .forEach(([kind, count]) => {
       const chip = document.createElement("span");
-      chip.className = "rep-source-chip";
+      chip.className = "rep-source-chip" + (kind === "ai_pulse" ? " ai" : "");
       chip.innerHTML = `${REPUTATION_SOURCE_LABELS[kind] || kind}: <strong>${count}</strong>`;
       sourcesEl.appendChild(chip);
     });
