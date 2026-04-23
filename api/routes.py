@@ -22,6 +22,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
@@ -336,8 +337,11 @@ async def _build_city_graph(cfg: Dict[str, Any]) -> Dict[str, Any]:
                     snapshot[key] = float(val)
 
     loop = asyncio.get_running_loop()
+    # city_id is keyword-only on build_graph — wrap in a partial so the
+    # executor call doesn't pass it positionally (raises TypeError).
     graph = await loop.run_in_executor(
-        None, build_graph, cfg["name"], snapshot, city_id
+        None,
+        functools.partial(build_graph, cfg["name"], snapshot, city_id=city_id),
     )
     graph["slug"] = cfg.get("slug")
     graph["snapshot"] = snapshot
