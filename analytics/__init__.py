@@ -4,6 +4,7 @@ from .benchmark import BenchmarkResult, CityMetric, CityRow, VectorStat, benchma
 from .butterfly import Simulation, NodeDelta, simulate
 from .crisis import Alert, CrisisReport, detect_crises
 from .decisions import Decision, DecisionScenario, filter_for as filter_decisions, list_decisions, get_decision
+from .deep_forecast import DeepForecastReport, VectorForecast, forecast as deep_forecast
 from .foresight import ForesightReport, MegatrendRow, Scenario, VectorProjection, forecast as foresight_forecast
 from .investment import Factor, InvestmentProfile, compute as investment_compute
 from .knowledge import Case, Recommendation, library_size, recommend as recommend_cases
@@ -32,6 +33,9 @@ __all__ = [
     "get_decision",
     "Decision",
     "DecisionScenario",
+    "deep_forecast",
+    "DeepForecastReport",
+    "VectorForecast",
     "foresight_forecast",
     "ForesightReport",
     "MegatrendRow",
