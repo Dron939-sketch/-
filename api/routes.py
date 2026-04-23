@@ -13,6 +13,7 @@ Endpoints:
   GET  /api/city/{name}/root_cause/{node_id}
   GET  /api/city/{name}/metric/{vector}/breakdown
   GET  /api/city/{name}/crisis
+  GET  /api/city/{name}/reputation
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
@@ -34,6 +35,7 @@ from ai import NewsEnricher
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
+from analytics import reputation_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -50,6 +52,7 @@ from db.queries import (
     metrics_trend_7d,
     news_counts_last_24h,
     news_negative_count,
+    news_total_count,
     news_window,
     top_recent_summaries,
 )
@@ -527,6 +530,55 @@ async def city_crisis(name: str) -> dict:
     return {
         "city": cfg["name"],
         "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/reputation")
+async def city_reputation(name: str) -> dict:
+    """Media-reputation rollup: top negative authors + viral posts + risk.
+
+    Reads `news_window(24h)` rows, unpacks sentiment/severity/category from
+    either flat columns or the enrichment JSONB, and optionally computes the
+    7-day negative-share baseline so the rules can detect a fresh spike.
+    Returns the pure `analytics.reputation.analyze` output + a generated_at
+    timestamp. Everything is fail-safe: no DB means zero-mentions, risk=low.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    mentions: List[Dict[str, Any]] = []
+    prior_share: Optional[float] = None
+
+    if city_id is not None:
+        items = await news_window(city_id, hours=24)
+        for item in items:
+            enr = item.enrichment or {}
+            raw = item.raw if isinstance(getattr(item, "raw", None), dict) else {}
+            mentions.append(
+                {
+                    "author": item.author,
+                    "source_kind": item.source_kind,
+                    "source_handle": item.source_handle,
+                    "title": item.title,
+                    "url": item.url,
+                    "category": enr.get("category") or item.category,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                }
+            )
+
+        total_7d = await news_total_count(city_id, hours=24 * 7)
+        if total_7d > 0:
+            neg_7d = await news_negative_count(city_id, hours=24 * 7)
+            prior_share = neg_7d / total_7d
+
+    report = reputation_analyze(mentions, prior_negative_share=prior_share)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "window_hours": 24,
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
     }
