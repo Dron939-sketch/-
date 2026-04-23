@@ -28,6 +28,19 @@
 
     <div class="topbar-right">
       <span class="updated" id="updated-at">—</span>
+      <div class="system-health" id="system-health">
+        <button type="button" class="sh-button" id="sh-button" aria-haspopup="true" aria-expanded="false" title="Состояние системы">
+          <span class="sh-dot" id="sh-dot" data-status="unknown"></span>
+          <span class="sh-label" id="sh-label">—</span>
+        </button>
+        <div class="sh-panel" id="sh-panel" hidden role="dialog">
+          <div class="sh-panel-head">
+            <div class="sh-overall" id="sh-overall">—</div>
+            <div class="muted small" id="sh-generated">—</div>
+          </div>
+          <ul class="sh-list" id="sh-list"></ul>
+        </div>
+      </div>
       <span class="avatar" title="Профиль">👤</span>
     </div>
   </header>

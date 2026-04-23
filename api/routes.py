@@ -2,6 +2,7 @@
 
 Endpoints:
   GET  /health
+  GET  /api/health/system
   GET  /api/cities
   GET  /api/city/{name}
   GET  /api/city/by-slug/{slug}
@@ -37,6 +38,7 @@ from pydantic import BaseModel, Field
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher, generate_narratives
+from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
@@ -63,7 +65,9 @@ from db.queries import (
     top_recent_summaries,
 )
 from db.seed import city_id_by_name
+from db.pool import get_pool
 from metrics.forecast import build_forecast_block
+from ops.status import collect_health
 
 from . import schemas
 
@@ -107,6 +111,28 @@ def _resolve_city(name_or_slug: str):
 async def health() -> schemas.HealthResponse:
     return schemas.HealthResponse(
         status="ok", version=VERSION, default_city=settings.default_city
+    )
+
+
+# Lazily-built singleton; the first /api/health/system call instantiates it
+# and every subsequent call reuses the same redis client for fast PINGs.
+_HEALTH_CACHE: Optional[ResponseCache] = None
+
+
+def _health_cache() -> ResponseCache:
+    global _HEALTH_CACHE
+    if _HEALTH_CACHE is None:
+        _HEALTH_CACHE = ResponseCache.from_settings()
+    return _HEALTH_CACHE
+
+
+@router.get("/api/health/system")
+async def system_health() -> dict:
+    """Full health check: DB ping + Redis ping + DeepSeek key + scheduler heartbeat."""
+    return await collect_health(
+        pool=get_pool(),
+        cache=_health_cache(),
+        deepseek_api_key=settings.deepseek_api_key,
     )
 
 

@@ -55,6 +55,7 @@ from db.queries import (
 from db.seed import city_id_by_name
 from metrics.openweather import fetch_current
 from metrics.snapshot import snapshot_from_news
+from ops.status import Heartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +220,7 @@ async def _collection_loop(interval_s: int) -> None:
                 await collect_city(city_name, enricher=enricher)
             except Exception:  # noqa: BLE001
                 logger.exception("collection_loop failed for %s", city_name)
+        Heartbeat.tick("collection")
         await asyncio.sleep(interval_s)
 
 
@@ -230,6 +232,7 @@ async def _weather_loop(interval_s: int) -> None:
                 await refresh_weather(city_name)
             except Exception:  # noqa: BLE001
                 logger.exception("weather_loop failed for %s", city_name)
+        Heartbeat.tick("weather")
         await asyncio.sleep(interval_s)
 
 
@@ -243,6 +246,7 @@ async def _snapshot_loop(interval_s: int) -> None:
                     await analyze_loops_for_city(city_name)
             except Exception:  # noqa: BLE001
                 logger.exception("snapshot_loop failed for %s", city_name)
+        Heartbeat.tick("snapshot")
         await asyncio.sleep(interval_s)
 
 

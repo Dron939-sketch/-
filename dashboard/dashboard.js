@@ -5,6 +5,7 @@
 // ============================================================
 
 const REFRESH_MS = 10 * 60 * 1000;
+const HEALTH_REFRESH_MS = 60 * 1000;       // ping health every minute
 const STORAGE_KEY = "cityMind.selectedCitySlug";
 
 const VECTOR_META = [
@@ -1373,6 +1374,99 @@ async function submitRoadmap(event) {
   }
 }
 
+// -------------------------------------------------- System health indicator
+
+const HEALTH_COMPONENT_LABELS = {
+  database:  "База данных",
+  redis:     "Redis-кэш",
+  deepseek:  "DeepSeek AI",
+  scheduler: "Планировщик",
+};
+const HEALTH_STATUS_LABELS = {
+  ok:       "Всё в норме",
+  degraded: "Частично деградировано",
+  down:     "Есть отказы",
+  starting: "Запускается",
+  unknown:  "Проверяю…",
+};
+const HEALTH_SCHEDULER_LOOP_LABELS = {
+  collection: "Сбор новостей",
+  weather:    "Погода",
+  snapshot:   "Снимок метрик",
+};
+
+function _fmtAge(seconds) {
+  if (seconds == null) return "—";
+  const s = Number(seconds);
+  if (s < 60) return `${s} сек. назад`;
+  if (s < 3600) return `${Math.floor(s / 60)} мин. назад`;
+  if (s < 86400) return `${Math.floor(s / 3600)} ч. назад`;
+  return `${Math.floor(s / 86400)} дн. назад`;
+}
+
+function renderSystemHealth(data) {
+  const dotEl = document.getElementById("sh-dot");
+  const labelEl = document.getElementById("sh-label");
+  const overallEl = document.getElementById("sh-overall");
+  const genEl = document.getElementById("sh-generated");
+  const listEl = document.getElementById("sh-list");
+  if (!dotEl || !listEl) return;
+
+  const status = data?.status || "unknown";
+  dotEl.setAttribute("data-status", status);
+  labelEl.textContent = HEALTH_STATUS_LABELS[status] || status;
+  overallEl.textContent = HEALTH_STATUS_LABELS[status] || status;
+
+  if (data?.generated_at) {
+    const t = new Date(data.generated_at);
+    genEl.textContent = `проверка в ${t.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+  } else {
+    genEl.textContent = "";
+  }
+
+  const components = data?.components || {};
+  listEl.innerHTML = "";
+  Object.entries(components).forEach(([key, info]) => {
+    const li = document.createElement("li");
+    li.setAttribute("data-status", info.status || "unknown");
+    const name = HEALTH_COMPONENT_LABELS[key] || key;
+    const detail = info.detail || info.status || "";
+    li.innerHTML = `
+      <span class="dot"></span>
+      <span class="sh-name">${name}</span>
+      <span class="sh-detail">${info.status || ""}</span>
+    `;
+    listEl.appendChild(li);
+
+    // Expand scheduler to show per-loop status.
+    if (key === "scheduler" && info.loops) {
+      const loops = document.createElement("div");
+      loops.className = "sh-loops";
+      Object.entries(info.loops).forEach(([loopName, loopInfo]) => {
+        const line = document.createElement("div");
+        line.className = "loop";
+        const displayName = HEALTH_SCHEDULER_LOOP_LABELS[loopName] || loopName;
+        const ageStr = loopInfo.last_tick
+          ? _fmtAge(loopInfo.age_seconds)
+          : "ещё не запускался";
+        line.innerHTML = `<span>${displayName}</span><span class="${loopInfo.status || ""}">${ageStr}</span>`;
+        loops.appendChild(line);
+      });
+      listEl.appendChild(loops);
+    }
+  });
+}
+
+async function refreshSystemHealth() {
+  try {
+    const data = await fetchJson("/api/health/system");
+    renderSystemHealth(data);
+  } catch (e) {
+    console.warn("system health unavailable", e);
+    renderSystemHealth({ status: "unknown" });
+  }
+}
+
 // -------------------------------------------------- Narratives
 
 function _narrativesPrefillFromAgenda(agenda) {
@@ -1786,6 +1880,27 @@ async function init() {
   if (simSlider) simSlider.addEventListener("input", _updateSimPreview);
   if (simSource) simSource.addEventListener("change", _updateSimPreview);
   if (simRun)    simRun.addEventListener("click", runSimulation);
+
+  // System health indicator: click toggles the panel; Esc/outside-click closes.
+  const shBtn = document.getElementById("sh-button");
+  const shPanel = document.getElementById("sh-panel");
+  if (shBtn && shPanel) {
+    shBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = !shPanel.hidden;
+      shPanel.hidden = open;
+      shBtn.setAttribute("aria-expanded", String(!open));
+    });
+    document.addEventListener("click", (e) => {
+      if (shPanel.hidden) return;
+      if (shPanel.contains(e.target) || shBtn.contains(e.target)) return;
+      shPanel.hidden = true;
+      shBtn.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  refreshSystemHealth();
+  setInterval(refreshSystemHealth, HEALTH_REFRESH_MS);
 
   refreshTimer = setInterval(refresh, REFRESH_MS);
 }
