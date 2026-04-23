@@ -1164,6 +1164,69 @@ function renderBudget(data) {
   }
 }
 
+const MG_CONFIDENCE_LABELS = {
+  high:   "Высокая уверенность",
+  medium: "Средняя уверенность",
+  low:    "Низкая уверенность",
+};
+const MG_TOPIC_LABELS = {
+  transport: "Транспорт", utilities: "ЖКХ", safety: "Безопасность",
+  culture: "Культура",   education: "Образование",
+  economy: "Экономика",   social: "Социальное",
+};
+
+function renderMarketGaps(data) {
+  const grid = document.getElementById("market-gaps-grid");
+  const meta = document.getElementById("market-gaps-meta");
+  if (!grid) return;
+
+  const niches = Array.isArray(data?.niches) ? data.niches : [];
+  grid.innerHTML = "";
+
+  if (!niches.length) {
+    grid.innerHTML = `<div class="mg-empty">${data?.note || "Пока нет сигнала о дефиците — подождите накопления жалоб."}</div>`;
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  niches.forEach((n) => {
+    const card = document.createElement("div");
+    const conf = n.confidence || "low";
+    card.className = `mg-card ${conf}-confidence`;
+    const fillPct = Math.max(0, Math.min(100, Math.round((Number(n.demand_score) || 0) * 100)));
+    const topicLabel = MG_TOPIC_LABELS[n.linked_topic] || n.linked_topic;
+
+    const evidenceHtml = (n.evidence || []).slice(0, 2).map((e) => {
+      const t = (e.title || "").replace(/</g, "&lt;");
+      return e.url
+        ? `<li>· <a href="${e.url}" target="_blank" rel="noopener">${t}</a></li>`
+        : `<li>· ${t}</li>`;
+    }).join("");
+
+    card.innerHTML = `
+      <div class="mg-head">
+        <span class="mg-label">${n.label}</span>
+        <span class="mg-confidence ${conf}">${MG_CONFIDENCE_LABELS[conf] || conf}</span>
+      </div>
+      <div class="mg-rationale">${n.rationale || ""}</div>
+      <div class="mg-meter"><span class="fill" style="width:${fillPct}%"></span></div>
+      ${evidenceHtml ? `<ul class="mg-evidence">${evidenceHtml}</ul>` : ""}
+      <span class="mg-topic-tag">Источник: ${topicLabel}</span>
+    `;
+    grid.appendChild(card);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const total = data?.window_items || 0;
+    meta.textContent = ts
+      ? `${total} упоминаний за ${data?.window_days || 30} дней · обновлено ${ts}`
+      : "";
+  }
+}
+
 const TOPIC_EMOJIS = {
   transport: "🚌", utilities: "🏠", safety: "🛡️",
   culture:   "🎭", education: "📚", economy:  "💼",
@@ -1959,6 +2022,12 @@ async function refresh() {
     renderTopics(topics);
   } catch (e) {
     console.warn("topics unavailable", e);
+  }
+  try {
+    const gaps = await fetchJson(`/api/city/${slug}/market_gaps`);
+    renderMarketGaps(gaps);
+  } catch (e) {
+    console.warn("market gaps unavailable", e);
   }
   setUpdated();
 }
