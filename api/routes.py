@@ -9,6 +9,7 @@ Endpoints:
   GET  /api/city/{name}/all_metrics
   GET  /api/city/{name}/history
   GET  /api/city/{name}/model
+  POST /api/city/{name}/simulate
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
 
@@ -25,11 +26,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher
-from analytics import build_graph
+from analytics import build_graph, simulate
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -54,9 +56,8 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
-# How long a single /agenda call may wait for the DeepSeek enricher.
 _AGENDA_ENRICHMENT_TIMEOUT_S = 10
 
 
@@ -297,20 +298,11 @@ async def city_history(
     return {"city": cfg["name"], "days": days, "series": series}
 
 
-@router.get("/api/city/{name}/model")
-async def city_model(name: str) -> dict:
-    """9-element Meister graph for the dashboard's Cytoscape widget.
+async def _build_city_graph(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Shared helper: pull the latest snapshot and build the graph.
 
-    Feeds the latest metrics snapshot into `ConfinementModel9` and returns
-    nodes + edges in a shape the frontend can plug straight into
-    Cytoscape. The build is CPU-bound (legacy core), so we push it to
-    the default executor to keep the event loop free.
-
-    When the DB has no snapshot yet, the graph is built from a neutral
-    baseline so the widget still renders something meaningful.
+    Used by both `/model` (GET) and `/simulate` (POST).
     """
-    cfg = _resolve_city(name)
-
     snapshot: Dict[str, float] = {"sb": 3.5, "tf": 3.5, "ub": 3.5, "chv": 3.5}
     city_id = await city_id_by_name(cfg["name"])
     if city_id is not None:
@@ -325,10 +317,45 @@ async def city_model(name: str) -> dict:
     graph = await loop.run_in_executor(
         None, build_graph, cfg["name"], snapshot, city_id
     )
-    # Inject city slug for the frontend so it can cache per-slug.
     graph["slug"] = cfg.get("slug")
     graph["snapshot"] = snapshot
     return graph
+
+
+@router.get("/api/city/{name}/model")
+async def city_model(name: str) -> dict:
+    """9-element Meister graph for the dashboard's Cytoscape widget."""
+    cfg = _resolve_city(name)
+    return await _build_city_graph(cfg)
+
+
+class SimulateRequest(BaseModel):
+    source_node_id: str = Field(..., description="Node id (1..9) the mayor turns the dial on")
+    delta: float = Field(..., ge=-6.0, le=6.0, description="Absolute change in 1..6 scale")
+
+
+@router.post("/api/city/{name}/simulate")
+async def city_simulate(name: str, req: SimulateRequest) -> dict:
+    """Butterfly-effect simulator.
+
+    Given an element id (1..9) and a delta on the 1..6 scale, propagates
+    the change across the confinement graph and returns per-node
+    predictions sorted by impact. No DB writes — purely speculative.
+    """
+    cfg = _resolve_city(name)
+    graph = await _build_city_graph(cfg)
+    if graph.get("disabled"):
+        raise HTTPException(
+            status_code=503,
+            detail=f"confinement graph unavailable ({graph.get('reason')})",
+        )
+
+    sim = simulate(graph, req.source_node_id, req.delta)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        **sim.to_dict(),
+    }
 
 
 # ---------------------------------------------------------------------------
