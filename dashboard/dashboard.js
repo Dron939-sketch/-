@@ -7,8 +7,6 @@
 const REFRESH_MS = 10 * 60 * 1000;
 const STORAGE_KEY = "cityMind.selectedCitySlug";
 
-// Dashboard keys (safety/economy/quality/social) → DB keys (sb/tf/ub/chv)
-// for the sparkline history endpoint.
 const VECTOR_META = [
   { key: "safety",  dbKey: "sb",  name: "Безопасность",   icon: "🛡️" },
   { key: "economy", dbKey: "tf",  name: "Экономика",       icon: "💰" },
@@ -63,7 +61,7 @@ function applyCity(city) {
   }
 }
 
-// -------------------------------------------------- Rendering
+// -------------------------------------------------- Rendering helpers
 
 function fmtPct(v) { return v == null ? "—" : `${Math.round(v * 100)}%`; }
 function fmtTrend(v) {
@@ -127,7 +125,6 @@ function renderVectors(metrics, trends) {
 }
 
 function renderSparklines(history) {
-  // history: {sb:[[ts, v], ...], tf:[...], ub:[...], chv:[...]}
   VECTOR_META.forEach((v) => {
     const svg = document.querySelector(`.sparkline[data-key="${v.dbKey}"]`);
     if (!svg) return;
@@ -160,6 +157,208 @@ function renderSparklines(history) {
       <polyline points="${points.join(" ")}"/>
     `;
   });
+}
+
+// -------------------------------------------------- Meister graph (Cytoscape)
+
+// Group → colour on the graph. Keeps the visual language consistent with
+// the TZ mock-up: vectors in gold, context ring cooler, closure red.
+const GROUP_COLORS = {
+  outcome: "#D4AF37",
+  vector:  "#C5A059",
+  system:  "#00B4D8",
+  context: "#1A3A5C",
+  closure: "#E05B5B",
+};
+
+let cyInstance = null;
+let currentGraph = null;
+
+function _edgeWidth(strength) {
+  return Math.max(1.2, Math.min(5, 1 + Number(strength || 0) * 4));
+}
+
+function _nodeSize(scaled) {
+  const v = Number(scaled || 3.5);
+  return 54 + Math.max(0, Math.min(6, v)) * 4;
+}
+
+function renderMeisterGraph(graph) {
+  currentGraph = graph;
+  const host = document.getElementById("meister-graph");
+  const meta = document.getElementById("graph-meta");
+  if (!host) return;
+
+  if (!graph || graph.disabled || !Array.isArray(graph.nodes) || !graph.nodes.length) {
+    host.innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:0.9rem;padding:24px;text-align:center;">
+         Граф недоступен${graph?.reason ? ` (${graph.reason})` : ""}. Соберём после первого snapshot'а метрик.
+       </div>`;
+    if (meta) meta.textContent = "";
+    _resetLegend();
+    return;
+  }
+
+  if (meta) {
+    const loops = graph.loops_count || 0;
+    const closure = graph.closure_score != null
+      ? `закрытие ${(graph.closure_score * 100).toFixed(0)}%`
+      : "";
+    meta.textContent = [
+      `${graph.nodes.length} узлов`,
+      `${graph.edges?.length || 0} связей`,
+      loops ? `${loops} петель` : "",
+      closure,
+    ].filter(Boolean).join(" · ");
+  }
+
+  if (typeof window.cytoscape !== "function") {
+    host.innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);">
+         Cytoscape.js ещё грузится…
+       </div>`;
+    return;
+  }
+
+  const elements = [
+    ...graph.nodes.map((n) => ({
+      data: {
+        id: n.id,
+        label: n.short || n.title || n.id,
+        title: n.title,
+        description: n.description || "",
+        group: n.group || "system",
+        strength: n.strength,
+        scaled: n.scaled,
+      },
+    })),
+    ...(graph.edges || []).map((e, i) => ({
+      data: {
+        id: `e${i}`,
+        source: String(e.source),
+        target: String(e.target),
+        strength: e.strength,
+        label: e.label || "",
+      },
+    })),
+  ];
+
+  if (cyInstance) {
+    cyInstance.destroy();
+    cyInstance = null;
+  }
+
+  host.innerHTML = "";
+  cyInstance = window.cytoscape({
+    container: host,
+    elements,
+    wheelSensitivity: 0.15,
+    layout: {
+      name: "cose",
+      animate: true,
+      animationDuration: 500,
+      fit: true,
+      padding: 30,
+      nodeRepulsion: 12000,
+      idealEdgeLength: 110,
+    },
+    style: [
+      {
+        selector: "node",
+        style: {
+          "background-color": (ele) => GROUP_COLORS[ele.data("group")] || "#C5A059",
+          "border-color": "#0A1628",
+          "border-width": 2,
+          "color": "#0A1628",
+          "label": "data(label)",
+          "text-valign": "center",
+          "text-halign": "center",
+          "font-family": "Manrope, sans-serif",
+          "font-size": 11,
+          "font-weight": 700,
+          "width": (ele) => _nodeSize(ele.data("scaled")),
+          "height": (ele) => _nodeSize(ele.data("scaled")),
+          "text-wrap": "wrap",
+          "text-max-width": 70,
+          "transition-property": "background-color border-color border-width",
+          "transition-duration": "200ms",
+        },
+      },
+      {
+        selector: "node:selected",
+        style: {
+          "border-color": "#D4AF37",
+          "border-width": 4,
+          "background-color": "#E8D5A3",
+        },
+      },
+      {
+        selector: "edge",
+        style: {
+          "width": (ele) => _edgeWidth(ele.data("strength")),
+          "line-color": "rgba(197, 160, 89, 0.45)",
+          "target-arrow-color": "rgba(197, 160, 89, 0.8)",
+          "target-arrow-shape": "triangle",
+          "curve-style": "bezier",
+          "opacity": 0.85,
+        },
+      },
+      {
+        selector: "edge:selected",
+        style: {
+          "line-color": "#D4AF37",
+          "target-arrow-color": "#D4AF37",
+          "opacity": 1,
+        },
+      },
+    ],
+  });
+
+  cyInstance.on("tap", "node", (evt) => {
+    const node = evt.target;
+    _showNodeInLegend({
+      id: node.data("id"),
+      title: node.data("title"),
+      description: node.data("description"),
+      group: node.data("group"),
+      strength: node.data("strength"),
+      scaled: node.data("scaled"),
+    });
+  });
+
+  cyInstance.on("tap", (evt) => {
+    if (evt.target === cyInstance) _resetLegend();
+  });
+}
+
+function _showNodeInLegend(node) {
+  const box = document.getElementById("graph-legend");
+  if (!box) return;
+  const groupLabels = {
+    outcome: "Итоговый элемент",
+    vector:  "Ключевой вектор",
+    system:  "Системная причина",
+    context: "Контекст",
+    closure: "Замыкание",
+  };
+  box.innerHTML = `
+    <div class="legend-title">Элемент №${node.id}</div>
+    <div class="legend-body">
+      <div class="legend-group">${groupLabels[node.group] || ""}</div>
+      <div class="name">${node.title || node.id}</div>
+      <div class="badge-score">${(node.scaled ?? 3.5).toFixed(1)}<small> / 6</small></div>
+      <p>${node.description || "Описание появится, когда ядро заполнит контекст элемента."}</p>
+    </div>
+  `;
+}
+
+function _resetLegend() {
+  const box = document.getElementById("graph-legend");
+  if (!box) return;
+  box.innerHTML = `
+    <div class="legend-title">Выберите элемент</div>
+    <div class="legend-hint muted small">Нажмите на узел графа, чтобы увидеть детали.</div>
+  `;
 }
 
 // -------------------------------------------------- Loops & modal
@@ -323,6 +522,13 @@ async function refresh() {
   } catch (e) {
     console.warn("agenda unavailable", e);
   }
+  try {
+    const graph = await fetchJson(`/api/city/${slug}/model`);
+    renderMeisterGraph(graph);
+  } catch (e) {
+    console.warn("model graph unavailable", e);
+    renderMeisterGraph(null);
+  }
   setUpdated();
 }
 
@@ -351,7 +557,6 @@ async function init() {
   const city = cities.find((c) => c.slug === slug) || cities[0];
   await switchCity(city);
 
-  // Toggle the dropdown on button click.
   const btn = document.getElementById("city-button");
   const menu = document.getElementById("city-menu");
   btn.addEventListener("click", (e) => {
@@ -365,7 +570,6 @@ async function init() {
     btn.setAttribute("aria-expanded", "false");
   });
 
-  // Modal dismissal — backdrop click, close button, Esc.
   document.querySelectorAll("#loop-modal [data-dismiss]").forEach((el) => {
     el.addEventListener("click", closeLoopModal);
   });
