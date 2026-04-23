@@ -8,6 +8,7 @@ Endpoints:
   GET  /api/city/{name}/news
   GET  /api/city/{name}/all_metrics
   GET  /api/city/{name}/history
+  GET  /api/city/{name}/model
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
 
@@ -28,6 +29,7 @@ from fastapi import APIRouter, HTTPException, Query
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher
+from analytics import build_graph
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -52,12 +54,9 @@ from . import schemas
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.6.2"
+VERSION = "0.7.0"
 
 # How long a single /agenda call may wait for the DeepSeek enricher.
-# Hard-capped so a slow or broken upstream doesn't block the mayor's
-# dashboard for half a minute. When the timeout fires we serve the
-# agenda without AI-assigned severity/summary fields.
 _AGENDA_ENRICHMENT_TIMEOUT_S = 10
 
 
@@ -296,6 +295,40 @@ async def city_history(
         for key, points in hist.items()
     }
     return {"city": cfg["name"], "days": days, "series": series}
+
+
+@router.get("/api/city/{name}/model")
+async def city_model(name: str) -> dict:
+    """9-element Meister graph for the dashboard's Cytoscape widget.
+
+    Feeds the latest metrics snapshot into `ConfinementModel9` and returns
+    nodes + edges in a shape the frontend can plug straight into
+    Cytoscape. The build is CPU-bound (legacy core), so we push it to
+    the default executor to keep the event loop free.
+
+    When the DB has no snapshot yet, the graph is built from a neutral
+    baseline so the widget still renders something meaningful.
+    """
+    cfg = _resolve_city(name)
+
+    snapshot: Dict[str, float] = {"sb": 3.5, "tf": 3.5, "ub": 3.5, "chv": 3.5}
+    city_id = await city_id_by_name(cfg["name"])
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for key in ("sb", "tf", "ub", "chv"):
+                val = metric_row.get(key)
+                if val is not None:
+                    snapshot[key] = float(val)
+
+    loop = asyncio.get_running_loop()
+    graph = await loop.run_in_executor(
+        None, build_graph, cfg["name"], snapshot, city_id
+    )
+    # Inject city slug for the frontend so it can cache per-slug.
+    graph["slug"] = cfg.get("slug")
+    graph["snapshot"] = snapshot
+    return graph
 
 
 # ---------------------------------------------------------------------------
