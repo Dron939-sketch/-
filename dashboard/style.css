@@ -1333,6 +1333,67 @@ body {
   .budget-list .amount { grid-column: 1 / -1; text-align: left; }
 }
 
+/* ------------------ TOPICS CARD ------------------ */
+.topics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.topic-card {
+  padding: 14px 16px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.topic-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px;
+}
+.topic-label {
+  font-weight: 700;
+  font-size: 1.02rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.topic-label .emoji { font-size: 1.1rem; }
+.topic-trend {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.topic-trend.up   { background: rgba(224, 91, 91, 0.15); color: #F4B5B5; border: 1px solid rgba(224, 91, 91, 0.3); }
+.topic-trend.down { background: rgba(111, 207, 151, 0.15); color: var(--good); border: 1px solid rgba(111, 207, 151, 0.3); }
+.topic-trend.flat { background: rgba(139, 155, 180, 0.15); color: var(--muted); border: 1px solid rgba(139, 155, 180, 0.25); }
+
+.topic-stats {
+  display: flex; gap: 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.topic-stats strong { color: var(--text); font-weight: 700; }
+.topic-sent.positive { color: var(--good); }
+.topic-sent.negative { color: var(--danger); }
+.topic-sent.neutral  { color: var(--muted); }
+
+.topic-titles { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 4px; font-size: 0.86rem; }
+.topic-titles li {
+  padding: 4px 0;
+  border-top: 1px dashed rgba(139, 155, 180, 0.15);
+  color: var(--text);
+  line-height: 1.35;
+}
+.topic-titles li:first-child { border-top: none; }
+.topic-titles a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dashed rgba(197, 160, 89, 0.3); }
+.topic-titles a:hover { color: var(--gold-bright); border-bottom-color: var(--gold-bright); }
+.topics-empty { color: var(--muted); padding: 16px; text-align: center; font-style: italic; grid-column: 1 / -1; }
+
 /* ------------------ KNOWLEDGE BANK CARD ------------------ */
 .kb-signals { margin-bottom: 12px; }
 .kb-signals .kb-tag {

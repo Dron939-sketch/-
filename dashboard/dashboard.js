@@ -1164,6 +1164,81 @@ function renderBudget(data) {
   }
 }
 
+const TOPIC_EMOJIS = {
+  transport: "🚌", utilities: "🏠", safety: "🛡️",
+  culture:   "🎭", education: "📚", economy:  "💼",
+  social:    "🤝", other:     "💬",
+};
+
+function renderTopics(data) {
+  const grid = document.getElementById("topics-grid");
+  const meta = document.getElementById("topics-meta");
+  if (!grid) return;
+
+  const topics = Array.isArray(data?.topics) ? data.topics : [];
+  grid.innerHTML = "";
+
+  if (!topics.length || data?.total_current === 0) {
+    grid.innerHTML = `<div class="topics-empty">${data?.note || "Нет новостей в окне."}</div>`;
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  topics.forEach((t) => {
+    const card = document.createElement("div");
+    card.className = "topic-card";
+
+    const trendCls = t.trend || "flat";
+    let trendLabel;
+    if (t.count_prior === 0 && t.count > 0) {
+      trendLabel = "новое";
+    } else if (t.trend_ratio != null) {
+      const pct = Math.round(t.trend_ratio * 100);
+      trendLabel = pct >= 0 ? `▲ +${pct}%` : `▼ ${pct}%`;
+    } else {
+      trendLabel = "≈ стабильно";
+    }
+
+    const sentVal = t.avg_sentiment;
+    let sentStr = "—", sentCls = "neutral";
+    if (sentVal != null) {
+      sentStr = (sentVal >= 0 ? "+" : "") + Number(sentVal).toFixed(2);
+      sentCls = sentVal > 0.1 ? "positive" : sentVal < -0.1 ? "negative" : "neutral";
+    }
+
+    const titlesHtml = (t.top_titles || []).map((item) => {
+      const text = (item.title || "").replace(/</g, "&lt;");
+      return item.url
+        ? `<li><a href="${item.url}" target="_blank" rel="noopener">${text}</a></li>`
+        : `<li>${text}</li>`;
+    }).join("");
+
+    card.innerHTML = `
+      <div class="topic-card-head">
+        <span class="topic-label">
+          <span class="emoji">${TOPIC_EMOJIS[t.key] || "💬"}</span>
+          <span>${t.label}</span>
+        </span>
+        <span class="topic-trend ${trendCls}">${trendLabel}</span>
+      </div>
+      <div class="topic-stats">
+        <span><strong>${t.count}</strong> за неделю</span>
+        <span class="topic-sent ${sentCls}">тональность ${sentStr}</span>
+      </div>
+      ${titlesHtml ? `<ul class="topic-titles">${titlesHtml}</ul>` : ""}
+    `;
+    grid.appendChild(card);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const tot = data?.total_current || 0;
+    meta.textContent = ts ? `${tot} новостей · обновлено ${ts}` : "";
+  }
+}
+
 const KB_VECTOR_LABELS = {
   safety: "Безопасность",
   economy: "Экономика",
@@ -1878,6 +1953,12 @@ async function refresh() {
     renderCases(cases);
   } catch (e) {
     console.warn("cases unavailable", e);
+  }
+  try {
+    const topics = await fetchJson(`/api/city/${slug}/topics`);
+    renderTopics(topics);
+  } catch (e) {
+    console.warn("topics unavailable", e);
   }
   setUpdated();
 }
