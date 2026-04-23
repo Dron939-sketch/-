@@ -242,13 +242,35 @@ body {
   border: 1px solid rgba(197, 160, 89, 0.12);
   border-radius: 12px;
   transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
-  cursor: default;
+  cursor: pointer;
 }
 .vector-tile:hover {
   transform: translateY(-4px);
   border-color: rgba(197, 160, 89, 0.35);
   box-shadow: 0 12px 32px -12px rgba(197, 160, 89, 0.25);
 }
+.vector-tile:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2), 0 12px 32px -12px rgba(197, 160, 89, 0.3);
+}
+.vector-tile::after {
+  content: "?";
+  position: absolute;
+  top: 12px; right: 14px;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: rgba(197, 160, 89, 0.12);
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  color: var(--gold);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  opacity: 0.55;
+  transition: opacity 0.25s ease, background 0.25s ease;
+}
+.vector-tile:hover::after { opacity: 1; background: rgba(212, 175, 55, 0.22); }
 .vector-tile .icon { font-size: 1.4rem; }
 .vector-tile .name { margin-top: 8px; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
 .vector-tile .score {
@@ -423,6 +445,134 @@ body {
   border-top: 1px solid rgba(197, 160, 89, 0.08);
 }
 
+/* ------------------ SIMULATOR CARD ("Что если") ------------------ */
+.simulator .sim-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+.sim-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: linear-gradient(160deg, rgba(26, 58, 92, 0.45), rgba(13, 33, 53, 0.7));
+  border-radius: 12px;
+  border: 1px solid rgba(197, 160, 89, 0.12);
+}
+.sim-field { display: block; }
+.sim-field-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.sim-select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(10, 22, 40, 0.8);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+.sim-select:hover, .sim-select:focus { border-color: var(--gold); outline: none; }
+.sim-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--danger) 0%, rgba(197, 160, 89, 0.35) 50%, var(--good) 100%);
+  outline: none;
+  margin: 6px 0 2px;
+}
+.sim-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--gold-bright);
+  border: 2px solid #0A1628;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+}
+.sim-slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--gold-bright);
+  border: 2px solid #0A1628;
+  cursor: pointer;
+}
+.sim-scale {
+  display: flex; justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.7rem;
+  margin-top: 4px;
+}
+.sim-run {
+  align-self: stretch;
+  padding: 11px 18px;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: #0A1628;
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.sim-run:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -6px rgba(212, 175, 55, 0.45); filter: brightness(1.05); }
+.sim-run:disabled { opacity: 0.5; cursor: wait; transform: none; }
+
+.sim-output {
+  padding: 16px;
+  background: rgba(10, 22, 40, 0.55);
+  border-radius: 12px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  min-height: 120px;
+  display: flex; align-items: center;
+  font-size: 0.95rem;
+}
+.sim-output .sim-hint { color: var(--muted); }
+.sim-output .sim-error { color: var(--danger); }
+.sim-output .sim-ready {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 18px;
+  align-items: center;
+  width: 100%;
+}
+.sim-output .sim-ready .title { font-weight: 600; }
+.sim-output .sim-ready .effect { color: var(--gold-light); font-weight: 700; }
+
+.legend-action {
+  margin-top: 12px;
+  padding: 8px 14px;
+  background: rgba(197, 160, 89, 0.12);
+  color: var(--gold-light);
+  border: 1px solid rgba(197, 160, 89, 0.3);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.legend-action:hover { background: rgba(212, 175, 55, 0.2); color: var(--gold-bright); }
+
+@media (max-width: 900px) {
+  .simulator .sim-layout { grid-template-columns: 1fr; }
+}
+
 /* ------------------ MODAL ------------------ */
 .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 100; }
 .modal.open { display: flex; }
@@ -504,6 +654,182 @@ body {
 @media (max-width: 640px) {
   .modal-panel { padding: 24px 20px 20px; }
   .modal-details .detail-row { grid-template-columns: 1fr; gap: 4px; }
+}
+
+/* ------------------ TRANSPARENCY MODAL ------------------ */
+.transparency-final {
+  display: flex; align-items: baseline; gap: 12px;
+  margin: 4px 0 14px;
+}
+.transparency-final-value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+.transparency-formula {
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px dashed rgba(197, 160, 89, 0.25);
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.breakdown-list { list-style: none; padding: 0; margin: 0 0 4px; display: grid; gap: 10px; }
+.breakdown-row {
+  padding: 12px 14px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+}
+.breakdown-row-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.breakdown-row .label { font-weight: 600; color: var(--text); }
+.breakdown-row .weight {
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+}
+.breakdown-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(10, 22, 40, 0.7);
+  overflow: hidden;
+}
+.breakdown-bar-center {
+  position: absolute;
+  top: -2px; bottom: -2px;
+  left: 50%;
+  width: 1px;
+  background: rgba(197, 160, 89, 0.3);
+}
+.breakdown-bar-fill {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  border-radius: 999px;
+}
+.breakdown-bar-fill.negative { background: linear-gradient(90deg, var(--danger), #F08A8A); }
+.breakdown-row .detail {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.breakdown-row.missing { opacity: 0.55; border-style: dashed; }
+
+/* ------------------ ROOT-CAUSE MODAL ------------------ */
+.cause-chain {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+  display: grid;
+  gap: 12px;
+}
+.cause-hop {
+  position: relative;
+  padding: 12px 14px 12px 48px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+}
+.cause-hop .depth-badge {
+  position: absolute;
+  left: 12px; top: 50%;
+  transform: translateY(-50%);
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: #0A1628;
+  font-weight: 800;
+  font-size: 0.82rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cause-hop .why { font-weight: 600; color: var(--text); }
+.cause-hop .because { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
+.cause-hop .strength {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--gold-light);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.cause-root {
+  padding: 14px 16px;
+  background: rgba(224, 91, 91, 0.08);
+  border-radius: 10px;
+  border: 1px solid rgba(224, 91, 91, 0.25);
+}
+.cause-root .section-title { color: #F08A8A; margin-bottom: 6px; }
+.cause-root-body .name { font-weight: 700; color: var(--text); }
+.cause-root-body .desc { color: var(--muted); margin-top: 4px; font-size: 0.9rem; }
+
+/* ------------------ SIMULATOR RESULTS MODAL ------------------ */
+.simulator-panel { max-width: 640px; }
+.sim-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 2px 0 14px;
+}
+.sim-summary .chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(197, 160, 89, 0.1);
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  color: var(--gold-light);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.sim-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.sim-result-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+  font-size: 0.92rem;
+}
+.sim-result-row .title { font-weight: 600; }
+.sim-result-row .depth {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sim-result-row .prediction {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.sim-result-row .prediction .before { color: var(--muted); }
+.sim-result-row .prediction .arrow { color: var(--gold); }
+.sim-result-row .prediction .after { color: var(--gold-light); font-weight: 700; }
+.sim-result-row.up    { border-left: 3px solid var(--good); }
+.sim-result-row.down  { border-left: 3px solid var(--danger); }
+.sim-result-row.flat  { border-left: 3px solid rgba(139, 155, 180, 0.35); }
+.sim-result-row.source { background: linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(26, 58, 92, 0.55)); border-color: rgba(212, 175, 55, 0.35); }
+@media (max-width: 640px) {
+  .sim-result-row { grid-template-columns: 1fr auto; }
+  .sim-result-row .depth { grid-column: 1 / -1; }
 }
 
 /* ------------------ ANIMATIONS ------------------ */
