@@ -1333,6 +1333,65 @@ body {
   .budget-list .amount { grid-column: 1 / -1; text-align: left; }
 }
 
+/* ------------------ MARKET GAPS CARD ------------------ */
+.mg-hint { margin-bottom: 12px; font-style: italic; }
+.mg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.mg-card {
+  padding: 14px 16px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mg-card.high-confidence    { border-left: 3px solid var(--good); }
+.mg-card.medium-confidence  { border-left: 3px solid var(--gold); }
+.mg-card.low-confidence     { border-left: 3px solid rgba(139, 155, 180, 0.4); }
+.mg-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px;
+}
+.mg-label { font-weight: 700; font-size: 1rem; line-height: 1.3; }
+.mg-confidence {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.mg-confidence.high    { background: rgba(111, 207, 151, 0.15); color: var(--good); border: 1px solid rgba(111, 207, 151, 0.3); }
+.mg-confidence.medium  { background: rgba(212, 175, 55, 0.15); color: var(--gold-bright); border: 1px solid rgba(212, 175, 55, 0.3); }
+.mg-confidence.low     { background: rgba(139, 155, 180, 0.15); color: var(--muted); border: 1px solid rgba(139, 155, 180, 0.25); }
+.mg-rationale { color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+.mg-meter {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(10, 22, 40, 0.7);
+  overflow: hidden;
+}
+.mg-meter .fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.mg-evidence { list-style: none; padding: 0; margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); }
+.mg-evidence li { padding: 2px 0; }
+.mg-evidence a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dashed rgba(197, 160, 89, 0.3); }
+.mg-evidence a:hover { color: var(--gold-bright); border-bottom-color: var(--gold-bright); }
+.mg-topic-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  color: var(--gold-light);
+  margin-top: auto;
+  align-self: flex-start;
+}
+.mg-empty { color: var(--muted); padding: 14px; text-align: center; font-style: italic; grid-column: 1 / -1; }
+
 /* ------------------ TOPICS CARD ------------------ */
 .topics-grid {
   display: grid;

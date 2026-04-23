@@ -20,6 +20,7 @@ Endpoints:
   GET  /api/city/{name}/budget
   POST /api/city/{name}/narratives
   GET  /api/city/{name}/topics
+  GET  /api/city/{name}/market_gaps
   GET  /api/city/{name}/cases
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
@@ -44,7 +45,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
+from analytics import analyze_market_gaps, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -855,6 +856,50 @@ async def city_topics(name: str, days: int = 7) -> dict:
         prior_items = _flatten(prior)
 
     report = topics_analyze(current_items, prior_items)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "window_days": days,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/market_gaps")
+async def city_market_gaps(name: str, days: int = 30, top_k: int = 6) -> dict:
+    """Recommend business niches inferred from 30d of citizen pain signals.
+
+    Runs topic clustering on a 30-day news window, then maps topics with
+    high negative sentiment to curated niches (кейсов-примеров нет в
+    открытых данных — рекомендации формируются из боли горожан, не из
+    POI-базы, это прокси-сигнал).
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+    days = max(7, min(90, int(days)))
+    hours = days * 24
+
+    topics_payload: Dict[str, Any] = {}
+    if city_id is not None:
+        items = await news_window(city_id, hours=hours)
+        prior = await news_window_range(city_id, hours_from=hours, hours_to=hours * 2)
+
+        def _flatten(lst):
+            out = []
+            for it in lst:
+                enr = it.enrichment or {}
+                raw = it.raw if isinstance(getattr(it, "raw", None), dict) else {}
+                out.append({
+                    "title": it.title, "content": it.content, "url": it.url,
+                    "category": it.category,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                })
+            return out
+
+        topics_payload = topics_analyze(_flatten(items), _flatten(prior)).to_dict()
+
+    report = analyze_market_gaps(topics_payload, top_k=max(1, min(12, int(top_k))))
     return {
         "city": cfg["name"],
         "slug": cfg.get("slug"),
