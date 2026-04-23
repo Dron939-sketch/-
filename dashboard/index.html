@@ -262,6 +262,28 @@
       </div>
     </section>
 
+    <!-- row 5.8: narrative engineering -->
+    <section class="card wide narratives">
+      <div class="card-eyebrow">
+        <span>Готовые формулировки — 3 варианта заявления</span>
+        <span class="muted small">AI подготовит черновики для пресс-релиза, соцсетей и мобилизации.</span>
+      </div>
+      <form class="narratives-form" id="narratives-form">
+        <label class="nr-field">
+          <span class="rm-label">Тема</span>
+          <input type="text" id="nr-topic" maxlength="200" required placeholder="Например: перебои с горячей водой на Фрунзе" />
+        </label>
+        <label class="nr-field">
+          <span class="rm-label">Контекст (что случилось)</span>
+          <textarea id="nr-context" rows="2" maxlength="1500" placeholder="Коротко: 3 дома, с утра, работы до конца дня."></textarea>
+        </label>
+        <button type="submit" id="nr-run" class="rm-submit">Сгенерировать варианты</button>
+      </form>
+      <div class="narratives-output" id="narratives-output">
+        <div class="muted small">Заполните тему (можно скопировать из «Приоритета дня») и нажмите «Сгенерировать» — получите три готовых черновика в разных регистрах.</div>
+      </div>
+    </section>
+
     <!-- row 6: 3-month forecast -->
     <section class="card wide forecast">
       <div class="card-eyebrow">Прогноз на 3 месяца (алгоритм Мейстера)</div>
