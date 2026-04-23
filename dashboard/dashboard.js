@@ -194,7 +194,33 @@ function _nodeSize(scaled) {
   return 54 + Math.max(0, Math.min(6, v)) * 4;
 }
 
+// Cheap structural fingerprint so we can skip Cytoscape re-renders when
+// node + edge ids match — preserves the user's cose layout on auto-refresh.
+function _graphFingerprint(graph) {
+  if (!graph || !Array.isArray(graph.nodes)) return "";
+  const nodeIds = graph.nodes.map((n) => String(n.id)).sort().join(",");
+  const edgeIds = (graph.edges || [])
+    .map((e) => `${e.source}>${e.target}`)
+    .sort()
+    .join(",");
+  return `${nodeIds}|${edgeIds}`;
+}
+
+// Update node scaled values in place (no layout disruption).
+function _updateGraphScaledValues(graph) {
+  if (!cyInstance || !graph || !Array.isArray(graph.nodes)) return;
+  graph.nodes.forEach((n) => {
+    const node = cyInstance.getElementById(String(n.id));
+    if (node && node.length) {
+      node.data("scaled", n.scaled);
+      node.data("strength", n.strength);
+    }
+  });
+}
+
 function renderMeisterGraph(graph) {
+  const prevFingerprint = _graphFingerprint(currentGraph);
+  const newFingerprint = _graphFingerprint(graph);
   currentGraph = graph;
   const host = document.getElementById("meister-graph");
   const meta = document.getElementById("graph-meta");
@@ -221,6 +247,13 @@ function renderMeisterGraph(graph) {
       loops ? `${loops} петель` : "",
       closure,
     ].filter(Boolean).join(" · ");
+  }
+
+  // Same topology as last render → only refresh per-node values, keep layout.
+  if (cyInstance && prevFingerprint && prevFingerprint === newFingerprint) {
+    _updateGraphScaledValues(graph);
+    _populateSimulatorSources(graph);
+    return;
   }
 
   if (typeof window.cytoscape !== "function") {
@@ -565,16 +598,21 @@ function _hopsWord(n) {
 function _updateSimPreview() {
   const slider = document.getElementById("sim-delta");
   const label = document.getElementById("sim-delta-value");
+  const runBtn = document.getElementById("sim-run");
   if (!slider || !label) return;
   const v = Number(slider.value);
   label.textContent = (v >= 0 ? "+" : "") + v.toFixed(1);
 
   const out = document.getElementById("sim-output");
   if (!out) return;
-  if (!currentGraph || !(currentGraph.nodes || []).length) {
-    out.innerHTML = '<div class="sim-hint">Граф ещё не загружен.</div>';
+  const graphReady = currentGraph && !currentGraph.disabled
+    && Array.isArray(currentGraph.nodes) && currentGraph.nodes.length;
+  if (!graphReady) {
+    out.innerHTML = '<div class="sim-hint">Граф ещё не загружен — симулятор активируется после первого snapshot\'а метрик.</div>';
+    if (runBtn) runBtn.disabled = true;
     return;
   }
+  if (runBtn) runBtn.disabled = false;
   const sel = document.getElementById("sim-source");
   const id = sel?.value;
   const node = (currentGraph.nodes || []).find((n) => String(n.id) === String(id));
@@ -717,19 +755,25 @@ function openLoopModal(idx) {
   const loop = currentLoops[idx];
   if (!loop) return;
   document.getElementById("loop-modal-title").textContent = loop.name || "Петля";
-  document.getElementById("loop-modal-description").textContent = loop.description || "";
+  document.getElementById("loop-modal-description").textContent =
+    loop.description || "Описание появится, когда будет собрано больше данных по петле.";
 
   const bp = loop.break_points || {};
   const details = document.getElementById("loop-modal-details");
   details.innerHTML = "";
   const rows = [];
   if (loop.strength != null) rows.push(["Сила петли", `${Math.round(loop.strength * 100)}%`]);
+  if (loop.level) {
+    const levelLabel = { critical: "Критично", warn: "Внимание", info: "К сведению" }[loop.level] || loop.level;
+    rows.push(["Уровень", levelLabel]);
+  }
   if (bp.strategic_priority) rows.push(["Приоритет", bp.strategic_priority]);
   if (bp.break_timeline) rows.push(["Горизонт разрыва", bp.break_timeline]);
   if (bp.effort_required) rows.push(["Требуемые усилия", bp.effort_required]);
   if (bp.advice) rows.push(["Совет", bp.advice]);
   if (bp.length != null) rows.push(["Длина цикла", String(bp.length)]);
   if (bp.impact != null) rows.push(["Влияние", `${Math.round(bp.impact * 100)}%`]);
+  if (!rows.length) rows.push(["Детали", "появятся после накопления истории"]);
 
   rows.forEach(([label, value]) => {
     const row = document.createElement("div");
