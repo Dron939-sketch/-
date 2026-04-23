@@ -14,6 +14,7 @@ __all__ = [
     "VKCollector",
     "NewsCollector",
     "AppealsCollector",
+    "AIPulseCollector",
 ]
 
 
@@ -30,4 +31,7 @@ def __getattr__(name):  # PEP 562
     if name == "AppealsCollector":
         from .appeals_collector import AppealsCollector
         return AppealsCollector
+    if name == "AIPulseCollector":
+        from .ai_pulse import AIPulseCollector
+        return AIPulseCollector
     raise AttributeError(f"module 'collectors' has no attribute {name!r}")
