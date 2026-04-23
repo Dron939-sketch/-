@@ -394,6 +394,43 @@ async def news_counts_last_24h(city_id: int) -> Dict[str, int]:
         return {"negative": 0, "positive": 0, "total": 0}
 
 
+async def news_negative_count(city_id: int, hours: int) -> int:
+    """Negative-sentiment (< -0.3) news count over the last `hours` hours."""
+    pool = get_pool()
+    if pool is None:
+        return 0
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT COUNT(*) AS n FROM news "
+                "WHERE city_id=$1 AND published_at >= $2 "
+                "AND sentiment IS NOT NULL AND sentiment < -0.3",
+                city_id, since,
+            )
+        return int(row["n"] or 0) if row else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+async def appeals_count(city_id: int, hours: int) -> int:
+    """Number of citizen appeals collected over the last `hours` hours."""
+    pool = get_pool()
+    if pool is None:
+        return 0
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT COUNT(*) AS n FROM appeals "
+                "WHERE city_id=$1 AND published_at >= $2",
+                city_id, since,
+            )
+        return int(row["n"] or 0) if row else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 async def top_recent_summaries(
     city_id: int,
     *,

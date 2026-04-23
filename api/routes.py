@@ -12,6 +12,7 @@ Endpoints:
   POST /api/city/{name}/simulate
   GET  /api/city/{name}/root_cause/{node_id}
   GET  /api/city/{name}/metric/{vector}/breakdown
+  GET  /api/city/{name}/crisis
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
@@ -22,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -32,7 +33,7 @@ from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
-from analytics import build_graph, simulate, trace_root_cause
+from analytics import build_graph, detect_crises, simulate, trace_root_cause
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -42,11 +43,13 @@ from config.cities import CITIES, get_city, get_city_by_slug
 from config.settings import settings
 from db.loops_queries import latest_loops
 from db.queries import (
+    appeals_count,
     latest_metrics,
     latest_weather,
     metrics_history,
     metrics_trend_7d,
     news_counts_last_24h,
+    news_negative_count,
     news_window,
     top_recent_summaries,
 )
@@ -457,6 +460,75 @@ async def city_metric_breakdown(name: str, vector: str) -> dict:
         "city": cfg["name"],
         "slug": cfg.get("slug"),
         **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/crisis")
+async def city_crisis(name: str) -> dict:
+    """Early-warning report: metric drops + sentiment spike + severity + complaints.
+
+    Runs the pure `analytics.detect_crises` over live signals:
+      - latest_metrics + last-7-days history for metric_drop
+      - news window (24h + 7d negative baseline) for sentiment_spike
+      - same news window for high_severity (reads item.severity directly)
+      - appeals_count (24h + 7d baseline) for complaint_surge
+
+    All signals are optional — missing DB / empty window silently skip their
+    detector. The returned status is one of ok / watch / attention.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    current: Dict[str, float] = {}
+    history_7d: Dict[str, List[float]] = {}
+    news_24h: List[Dict[str, Any]] = []
+    neg_7d: Optional[int] = None
+    appeals_24h = 0
+    appeals_7d_avg = 0.0
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv"):
+                val = metric_row.get(col)
+                if val is not None:
+                    current[col] = float(val)
+
+        history = await metrics_history(city_id, days=7)
+        for col in ("sb", "tf", "ub", "chv"):
+            history_7d[col] = [val for _ts, val in history.get(col, [])]
+
+        window = await news_window(city_id, hours=24)
+        for item in window:
+            enr = item.enrichment or {}
+            raw = item.raw if isinstance(getattr(item, "raw", None), dict) else {}
+            news_24h.append(
+                {
+                    "title": item.title,
+                    "url": item.url,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                }
+            )
+
+        neg_7d = await news_negative_count(city_id, hours=24 * 7)
+        appeals_24h = await appeals_count(city_id, hours=24)
+        appeals_7d = await appeals_count(city_id, hours=24 * 7)
+        appeals_7d_avg = appeals_7d / 7.0
+
+    report = detect_crises(
+        current_metrics=current,
+        metrics_history_7d=history_7d,
+        news_24h=news_24h,
+        news_7d_neg_count=neg_7d,
+        appeals_24h=appeals_24h,
+        appeals_7d_avg=appeals_7d_avg,
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
     }
 
 
