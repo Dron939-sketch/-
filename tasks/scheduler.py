@@ -25,6 +25,7 @@ two lines marked `# --- re-enable ...` below.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from typing import List, Optional
 
@@ -160,8 +161,11 @@ async def analyze_loops_for_city(city_name: str) -> int:
         "ub": metric_row.get("ub"),
         "chv": metric_row.get("chv"),
     }
+    # city_id is keyword-only on analyze_loops — wrap in a partial so the
+    # executor call doesn't pass it positionally (raises TypeError).
     loops = await asyncio.get_running_loop().run_in_executor(
-        None, analyze_loops, city_name, snapshot, city_id
+        None,
+        functools.partial(analyze_loops, city_name, snapshot, city_id=city_id),
     )
     if not loops:
         return 0
