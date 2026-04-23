@@ -413,6 +413,39 @@ async def news_negative_count(city_id: int, hours: int) -> int:
         return 0
 
 
+async def news_category_sentiment_counts(
+    city_id: int, category: str, hours: int,
+) -> Dict[str, int]:
+    """Return {positive, negative, total} for news in a single category."""
+    empty = {"positive": 0, "negative": 0, "total": 0}
+    pool = get_pool()
+    if pool is None:
+        return empty
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE sentiment IS NOT NULL AND sentiment > 0.1) AS positive,
+                    COUNT(*) FILTER (WHERE sentiment IS NOT NULL AND sentiment < -0.1) AS negative,
+                    COUNT(*) AS total
+                FROM news
+                WHERE city_id = $1 AND published_at >= $2 AND category = $3
+                """,
+                city_id, since, category,
+            )
+        if row is None:
+            return empty
+        return {
+            "positive": int(row["positive"] or 0),
+            "negative": int(row["negative"] or 0),
+            "total": int(row["total"] or 0),
+        }
+    except Exception:  # noqa: BLE001
+        return empty
+
+
 async def news_total_count(city_id: int, hours: int) -> int:
     """Total news count over the last `hours` hours."""
     pool = get_pool()

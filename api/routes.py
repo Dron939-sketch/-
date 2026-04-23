@@ -14,6 +14,7 @@ Endpoints:
   GET  /api/city/{name}/metric/{vector}/breakdown
   GET  /api/city/{name}/crisis
   GET  /api/city/{name}/reputation
+  GET  /api/city/{name}/investment
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
@@ -36,7 +37,7 @@ from ai import NewsEnricher
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import reputation_analyze
+from analytics import investment_compute, reputation_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -51,6 +52,7 @@ from db.queries import (
     latest_weather,
     metrics_history,
     metrics_trend_7d,
+    news_category_sentiment_counts,
     news_counts_last_24h,
     news_negative_count,
     news_total_count,
@@ -586,6 +588,83 @@ async def city_reputation(name: str) -> dict:
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
     }
+
+
+@router.get("/api/city/{name}/investment")
+async def city_investment(name: str) -> dict:
+    """Investment-attractiveness profile: 6 factors + overall 0..100 + grade.
+
+    Assembles signals from:
+      - latest_metrics (sb / tf / ub / chv / trust / happiness)
+      - 7d business-category news sentiment counts
+      - population from CITIES config
+      - benchmark composite rank across all pilots (peer_rank)
+      - crisis_status from the rules-based detector
+
+    All signal fetches are fail-safe — missing ones neutralise their factor
+    at 0.5 in the pure analyzer, so a brand-new city reports as "mid-pack".
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    signals: Dict[str, Any] = {
+        "population": cfg.get("population"),
+    }
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv", "trust_index", "happiness_index"):
+                if metric_row.get(col) is not None:
+                    signals[col] = metric_row[col]
+
+        biz = await news_category_sentiment_counts(city_id, "business", hours=24 * 7)
+        signals["business_news_positive"] = biz["positive"]
+        signals["business_news_negative"] = biz["negative"]
+
+    # Peer rank from the existing benchmark — lightweight, same DB hits we
+    # already cache in /api/benchmark so this is effectively free.
+    try:
+        peer = await _peer_rank_for(cfg.get("slug"))
+        if peer is not None:
+            signals["peer_rank"] = peer
+    except Exception:  # noqa: BLE001
+        logger.warning("investment: peer_rank unavailable", exc_info=False)
+
+    # Crisis status: re-use the same data-gathering the /crisis endpoint does,
+    # but we only need the headline status (ok/watch/attention).
+    try:
+        crisis = await city_crisis(cfg["name"])
+        signals["crisis_status"] = crisis.get("status")
+    except Exception:  # noqa: BLE001
+        logger.warning("investment: crisis_status unavailable", exc_info=False)
+
+    profile = investment_compute(signals)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **profile.to_dict(),
+    }
+
+
+async def _peer_rank_for(slug: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Return `{position, total, leader_slug}` for this city vs the 6 pilots."""
+    if not slug:
+        return None
+    data = await cross_city_benchmark()
+    cities = data.get("cities") or []
+    if not cities:
+        return None
+    total = len([c for c in cities if c.get("composite") is not None])
+    leader = cities[0].get("slug") if cities else None
+    position = next(
+        (c.get("composite_rank") for c in cities if c.get("slug") == slug),
+        None,
+    )
+    if position is None:
+        return None
+    return {"position": position, "total": total or len(cities), "leader_slug": leader}
 
 
 @router.get("/api/benchmark")
