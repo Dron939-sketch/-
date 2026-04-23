@@ -832,6 +832,101 @@ body {
   .sim-result-row .depth { grid-column: 1 / -1; }
 }
 
+/* ------------------ BENCHMARK CARD ------------------ */
+.benchmark-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin: 4px 0 14px;
+}
+.benchmark-summary .chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.22);
+  color: var(--gold-light);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.benchmark-summary .chip strong { color: var(--text); }
+.benchmark-summary .chip.laggard { border-color: rgba(224, 91, 91, 0.35); color: #F4B5B5; background: rgba(224, 91, 91, 0.08); }
+
+.benchmark-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+}
+.benchmark-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(13, 33, 53, 0.45);
+  font-size: 0.92rem;
+}
+.benchmark-table thead th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: rgba(10, 22, 40, 0.55);
+  border-bottom: 1px solid rgba(197, 160, 89, 0.12);
+}
+.benchmark-table tbody td {
+  padding: 10px 12px;
+  border-top: 1px solid rgba(197, 160, 89, 0.06);
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+.benchmark-table tbody tr:hover { background: rgba(26, 58, 92, 0.35); }
+.benchmark-table tbody tr.current { background: rgba(212, 175, 55, 0.08); }
+.benchmark-table tbody tr.current td:first-child {
+  border-left: 3px solid var(--gold);
+  padding-left: 9px;
+}
+
+.benchmark-city { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; }
+.benchmark-city .emoji { font-size: 1.15rem; }
+.benchmark-city .pop { display: block; color: var(--muted); font-size: 0.76rem; font-weight: 400; }
+
+.benchmark-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.benchmark-cell .value { font-weight: 700; color: var(--gold-light); }
+.benchmark-cell .rank {
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: rgba(197, 160, 89, 0.1);
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(197, 160, 89, 0.2);
+}
+.benchmark-cell.leader .value { color: var(--gold-bright); }
+.benchmark-cell.leader .rank {
+  background: rgba(212, 175, 55, 0.25);
+  border-color: rgba(212, 175, 55, 0.5);
+  color: #0A1628;
+  font-weight: 700;
+}
+.benchmark-cell.laggard .value { color: #F4B5B5; }
+.benchmark-cell.laggard .rank {
+  background: rgba(224, 91, 91, 0.15);
+  border-color: rgba(224, 91, 91, 0.35);
+  color: #F4B5B5;
+}
+.benchmark-cell.missing .value { color: var(--muted); opacity: 0.6; }
+
+.benchmark-composite { font-weight: 800; color: var(--gold-bright); }
+.benchmark-composite.laggard { color: #F4B5B5; }
+
+@media (max-width: 720px) {
+  .benchmark-table { font-size: 0.82rem; }
+  .benchmark-table thead th, .benchmark-table tbody td { padding: 8px 8px; }
+  .benchmark-city .pop { display: none; }
+}
+
 /* ------------------ ANIMATIONS ------------------ */
 @keyframes card-rise {
   from { opacity: 0; transform: translateY(10px); }

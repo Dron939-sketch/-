@@ -795,6 +795,119 @@ function renderForecast(data) {
     data.forecast_3m?.recommendation || "";
 }
 
+function renderBenchmark(data) {
+  const body = document.getElementById("benchmark-body");
+  const meta = document.getElementById("benchmark-meta");
+  const summary = document.getElementById("benchmark-summary");
+  if (!body) return;
+
+  const cities = Array.isArray(data.cities) ? data.cities : [];
+  const stats = Array.isArray(data.vector_stats) ? data.vector_stats : [];
+  const statsByKey = {};
+  stats.forEach((s) => { statsByKey[s.key] = s; });
+
+  if (!cities.length) {
+    body.innerHTML =
+      `<tr><td colspan="6" class="muted small" style="padding:16px;text-align:center;">
+         Данных для сравнения ещё нет — метрики появятся после первого snapshot'а.
+       </td></tr>`;
+    if (meta) meta.textContent = "";
+    if (summary) summary.innerHTML = "";
+    return;
+  }
+
+  const total = cities.length;
+  body.innerHTML = "";
+  cities.forEach((city) => {
+    const tr = document.createElement("tr");
+    if (currentCity && city.slug === currentCity.slug) tr.classList.add("current");
+
+    const pop = city.population
+      ? `${Math.round(city.population / 1000)} тыс.`
+      : "";
+    const cityCell = document.createElement("td");
+    cityCell.className = "col-city";
+    cityCell.innerHTML =
+      `<span class="benchmark-city">
+         <span class="emoji">${city.emoji || "🏙️"}</span>
+         <span>
+           ${city.name}
+           ${pop ? `<span class="pop">${pop}</span>` : ""}
+         </span>
+       </span>`;
+    tr.appendChild(cityCell);
+
+    ["safety", "economy", "quality", "social"].forEach((key) => {
+      const cell = document.createElement("td");
+      const m = city.metrics?.[key];
+      if (!m || m.value == null) {
+        cell.innerHTML =
+          `<span class="benchmark-cell missing"><span class="value">—</span></span>`;
+      } else {
+        const isLeader  = statsByKey[key]?.leader_slug  === city.slug;
+        const isLaggard = statsByKey[key]?.laggard_slug === city.slug && total > 1;
+        const cls = isLeader ? "leader" : (isLaggard ? "laggard" : "");
+        cell.innerHTML =
+          `<span class="benchmark-cell ${cls}">
+             <span class="value">${Number(m.value).toFixed(1)}</span>
+             <span class="rank">${m.rank ? "#" + m.rank : "—"}</span>
+           </span>`;
+      }
+      tr.appendChild(cell);
+    });
+
+    const compCell = document.createElement("td");
+    compCell.className = "col-composite";
+    if (city.composite == null) {
+      compCell.innerHTML = `<span class="muted">—</span>`;
+    } else {
+      const isBottom = city.composite_rank === total && total > 1;
+      compCell.innerHTML =
+        `<span class="benchmark-composite${isBottom ? " laggard" : ""}">
+           ${Number(city.composite).toFixed(1)}
+           <span class="rank" style="margin-left:6px;">#${city.composite_rank}</span>
+         </span>`;
+    }
+    tr.appendChild(compCell);
+
+    body.appendChild(tr);
+  });
+
+  if (meta) {
+    const ts = data.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+
+  if (summary) {
+    summary.innerHTML = "";
+    const leader = cities[0];
+    const laggard = cities.filter((c) => c.composite != null).slice(-1)[0];
+    if (leader && leader.composite != null) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `Лидер: <strong>${leader.emoji || "🏙️"} ${leader.name}</strong> · ${Number(leader.composite).toFixed(1)}`;
+      summary.appendChild(chip);
+    }
+    if (laggard && laggard.slug !== leader?.slug) {
+      const chip = document.createElement("span");
+      chip.className = "chip laggard";
+      chip.innerHTML = `Отстаёт: <strong>${laggard.emoji || "🏙️"} ${laggard.name}</strong> · ${Number(laggard.composite).toFixed(1)}`;
+      summary.appendChild(chip);
+    }
+    const spreads = stats
+      .filter((s) => s.spread != null)
+      .sort((a, b) => b.spread - a.spread);
+    if (spreads[0]) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `Макс. разрыв: <strong>${spreads[0].label}</strong> · Δ ${Number(spreads[0].spread).toFixed(1)}`;
+      summary.appendChild(chip);
+    }
+  }
+}
+
 function renderAgenda(agenda) {
   document.getElementById("agenda-headline").textContent = agenda.headline || "—";
   document.getElementById("agenda-description").textContent = agenda.description || "";
@@ -850,6 +963,12 @@ async function refresh() {
   } catch (e) {
     console.warn("model graph unavailable", e);
     renderMeisterGraph(null);
+  }
+  try {
+    const bench = await fetchJson(`/api/benchmark`);
+    renderBenchmark(bench);
+  } catch (e) {
+    console.warn("benchmark unavailable", e);
   }
   setUpdated();
 }
