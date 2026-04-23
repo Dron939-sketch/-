@@ -1150,6 +1150,100 @@ body {
   .invest-factor { grid-template-columns: 120px 1fr 48px; }
 }
 
+/* ------------------ BUDGET CARD ------------------ */
+.budget-head {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  align-items: center;
+  margin: 6px 0 14px;
+}
+.budget-total { padding: 0 4px; }
+.budget-amount {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 700;
+  font-size: 1.9rem;
+  color: var(--gold-light);
+  margin: 2px 0 4px;
+}
+.budget-bar {
+  padding: 4px 0;
+}
+.budget-bar-track {
+  display: flex;
+  height: 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(197, 160, 89, 0.12);
+  background: rgba(10, 22, 40, 0.6);
+}
+.budget-bar-track .seg {
+  height: 100%;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+.budget-bar-track .seg.safety   { background: linear-gradient(90deg, #8B9BB4, #5C7A9B); }
+.budget-bar-track .seg.economy  { background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.budget-bar-track .seg.quality  { background: linear-gradient(90deg, #6FCF97, #4FAA7A); }
+.budget-bar-track .seg.social   { background: linear-gradient(90deg, #00B4D8, #0088A6); }
+.budget-bar-track .seg.reserve  { background: repeating-linear-gradient(45deg, rgba(197, 160, 89, 0.3), rgba(197, 160, 89, 0.3) 6px, rgba(10, 22, 40, 0.4) 6px, rgba(10, 22, 40, 0.4) 12px); }
+.budget-bar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.budget-bar-legend .dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.budget-bar-legend .dot.safety  { background: #5C7A9B; }
+.budget-bar-legend .dot.economy { background: var(--gold-bright); }
+.budget-bar-legend .dot.quality { background: #6FCF97; }
+.budget-bar-legend .dot.social  { background: #00B4D8; }
+.budget-bar-legend .dot.reserve { background: var(--gold); opacity: 0.6; }
+
+.budget-list { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 10px; }
+.budget-list li {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+}
+.budget-list .priority-pill {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  font-size: 0.72rem;
+}
+.budget-list li[data-priority="critical"] .priority-pill { background: var(--danger); color: #fff; }
+.budget-list li[data-priority="high"]     .priority-pill { background: var(--warn); color: #0A1628; }
+.budget-list li[data-priority="medium"]   .priority-pill { background: var(--gold); color: #0A1628; }
+.budget-list li[data-priority="low"]      .priority-pill { background: rgba(139, 155, 180, 0.4); color: var(--text); }
+.budget-list li[data-priority="critical"] { border-left: 3px solid var(--danger); }
+.budget-list li[data-priority="high"]     { border-left: 3px solid var(--warn); }
+
+.budget-list .label { font-weight: 600; }
+.budget-list .rationale { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+.budget-list .amount { text-align: right; font-weight: 700; color: var(--gold-light); font-variant-numeric: tabular-nums; }
+.budget-list .share  { color: var(--muted); font-size: 0.78rem; }
+
+@media (max-width: 900px) {
+  .budget-head { grid-template-columns: 1fr; }
+  .budget-list li { grid-template-columns: 28px 1fr; }
+  .budget-list .amount { grid-column: 1 / -1; text-align: left; }
+}
+
 /* ------------------ FORESIGHT CARD ------------------ */
 .foresight-layout {
   display: grid;

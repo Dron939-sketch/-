@@ -16,6 +16,7 @@ Endpoints:
   GET  /api/city/{name}/reputation
   GET  /api/city/{name}/investment
   GET  /api/city/{name}/foresight
+  GET  /api/city/{name}/budget
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
@@ -38,7 +39,7 @@ from ai import NewsEnricher
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import foresight_forecast, investment_compute, reputation_analyze
+from analytics import foresight_forecast, investment_compute, reputation_analyze, resource_plan
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -709,6 +710,51 @@ async def city_foresight(name: str) -> dict:
         "slug": cfg.get("slug"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/budget")
+async def city_budget(name: str, per_capita_rub: int = 30_000) -> dict:
+    """Recommended annual budget allocation across the 4 Meister vectors.
+
+    Assembles signals:
+      - latest_metrics → per-vector scores for the low-boost / high-trim rules
+      - city_crisis alerts (filtered by .vector) → which vectors need a bump
+      - CITIES[name].population → total budget = population × per_capita_rub
+
+    Everything is fail-safe — a brand-new city still gets a plausible
+    baseline plan (equal 22.5% per vector + 10% reserve).
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    current: Dict[str, float] = {}
+    alerts: List[Dict[str, Any]] = []
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv"):
+                if metric_row.get(col) is not None:
+                    current[col] = float(metric_row[col])
+
+    try:
+        crisis = await city_crisis(cfg["name"])
+        alerts = crisis.get("alerts") or []
+    except Exception:  # noqa: BLE001
+        logger.warning("budget: crisis alerts unavailable", exc_info=False)
+
+    result = resource_plan(
+        current_metrics=current,
+        crisis_alerts=alerts,
+        population=cfg.get("population"),
+        per_capita_rub=per_capita_rub,
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **result.to_dict(),
     }
 
 

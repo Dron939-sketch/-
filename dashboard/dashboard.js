@@ -1071,6 +1071,98 @@ function renderInvestment(data) {
   }
 }
 
+const BUDGET_PRIORITY_LABELS = {
+  critical: "Критично", high: "Высокий", medium: "Средний", low: "Низкий",
+};
+
+function _fmtRub(n) {
+  if (n == null) return "—";
+  const v = Number(n);
+  if (v >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1).replace(".0", "") + " млрд ₽";
+  if (v >= 1_000_000)     return (v / 1_000_000).toFixed(1).replace(".0", "") + " млн ₽";
+  if (v >= 1_000)         return (v / 1_000).toFixed(0) + " тыс. ₽";
+  return v.toFixed(0) + " ₽";
+}
+
+function renderBudget(data) {
+  const totalEl = document.getElementById("budget-total");
+  const perCapitaEl = document.getElementById("budget-per-capita");
+  const trackEl = document.getElementById("budget-bar-track");
+  const legendEl = document.getElementById("budget-bar-legend");
+  const listEl = document.getElementById("budget-list");
+  const noteEl = document.getElementById("budget-note");
+  const meta = document.getElementById("budget-meta");
+  if (!totalEl || !trackEl || !listEl) return;
+
+  totalEl.textContent = _fmtRub(data?.total_budget_rub);
+  if (perCapitaEl) {
+    if (data?.population && data?.per_capita_rub) {
+      perCapitaEl.textContent =
+        `${_fmtRub(data.per_capita_rub)} / жителя × ${Number(data.population).toLocaleString("ru-RU")} чел.`;
+    } else {
+      perCapitaEl.textContent = "";
+    }
+  }
+
+  // Proportional stacked bar: 4 vector segments + reserve segment.
+  const allocations = Array.isArray(data?.allocations) ? data.allocations : [];
+  trackEl.innerHTML = "";
+  legendEl.innerHTML = "";
+  allocations.forEach((a) => {
+    const seg = document.createElement("div");
+    seg.className = `seg ${a.key}`;
+    seg.style.width = `${(a.recommended_share * 100).toFixed(1)}%`;
+    seg.title = `${a.label}: ${(a.recommended_share * 100).toFixed(1)}% · ${_fmtRub(a.recommended_rub)}`;
+    trackEl.appendChild(seg);
+
+    const legendItem = document.createElement("span");
+    legendItem.innerHTML = `<span class="dot ${a.key}"></span>${a.label.split(" (")[0]} ${(a.recommended_share * 100).toFixed(1)}%`;
+    legendEl.appendChild(legendItem);
+  });
+  if (data?.reserve_share) {
+    const reserveSeg = document.createElement("div");
+    reserveSeg.className = "seg reserve";
+    reserveSeg.style.width = `${(data.reserve_share * 100).toFixed(1)}%`;
+    reserveSeg.title = `Резерв: ${(data.reserve_share * 100).toFixed(1)}% · ${_fmtRub(data.reserve_rub)}`;
+    trackEl.appendChild(reserveSeg);
+
+    const legendItem = document.createElement("span");
+    legendItem.innerHTML = `<span class="dot reserve"></span>Резерв ${(data.reserve_share * 100).toFixed(1)}%`;
+    legendEl.appendChild(legendItem);
+  }
+
+  // Per-vector list ordered by rub desc so critical/underfunded usually top.
+  const sorted = [...allocations].sort((a, b) => b.recommended_rub - a.recommended_rub);
+  listEl.innerHTML = "";
+  sorted.forEach((a) => {
+    const li = document.createElement("li");
+    li.setAttribute("data-priority", a.priority);
+    const icon = a.priority === "critical" ? "!" : a.priority === "high" ? "!" : a.priority === "medium" ? "●" : "•";
+    li.innerHTML = `
+      <span class="priority-pill">${icon}</span>
+      <div>
+        <div class="label">${a.label} ${a.has_crisis ? '<span style="color: var(--danger); font-size: 0.78rem; margin-left: 6px;">⚡ кризис</span>' : ''}</div>
+        <div class="rationale">${a.rationale}</div>
+      </div>
+      <div>
+        <div class="amount">${_fmtRub(a.recommended_rub)}</div>
+        <div class="share">${(a.recommended_share * 100).toFixed(1)}% · ${BUDGET_PRIORITY_LABELS[a.priority] || ""}</div>
+      </div>
+    `;
+    listEl.appendChild(li);
+  });
+
+  if (noteEl) {
+    noteEl.textContent = data?.note || "";
+  }
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+}
+
 const FORESIGHT_VECTOR_ICON = {
   safety:  "🛡️", economy: "💰", quality: "😊", social:  "🤝",
 };
@@ -1336,6 +1428,12 @@ async function refresh() {
     renderForesight(foresight);
   } catch (e) {
     console.warn("foresight unavailable", e);
+  }
+  try {
+    const budget = await fetchJson(`/api/city/${slug}/budget`);
+    renderBudget(budget);
+  } catch (e) {
+    console.warn("budget unavailable", e);
   }
   setUpdated();
 }

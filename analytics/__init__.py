@@ -8,6 +8,7 @@ from .investment import Factor, InvestmentProfile, compute as investment_compute
 from .loops import analyze_loops, metrics_to_vectors
 from .model import build_graph
 from .reputation import AuthorStat, ReputationReport, ViralPost, analyze as reputation_analyze
+from .resources import ResourcePlan, VectorAllocation, plan as resource_plan
 from .root_cause import CauseHop, RootCauseTrace, trace as trace_root_cause
 from .transparency import Breakdown, Component, breakdown
 
@@ -35,6 +36,9 @@ __all__ = [
     "AuthorStat",
     "ReputationReport",
     "ViralPost",
+    "resource_plan",
+    "ResourcePlan",
+    "VectorAllocation",
     "simulate",
     "Simulation",
     "NodeDelta",
