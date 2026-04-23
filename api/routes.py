@@ -22,6 +22,7 @@ Endpoints:
   GET  /api/city/{name}/topics
   GET  /api/city/{name}/decisions
   GET  /api/city/{name}/deep_forecast
+  GET  /api/city/{name}/tasks
   GET  /api/city/{name}/market_gaps
   GET  /api/city/{name}/cases
   GET  /api/benchmark
@@ -47,7 +48,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import analyze_market_gaps, deep_forecast, filter_decisions, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
+from analytics import analyze_market_gaps, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -919,6 +920,41 @@ async def city_topics(name: str, days: int = 7) -> dict:
         "window_days": days,
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/tasks")
+async def city_tasks(name: str) -> dict:
+    """Prioritised task list derived from current agenda + crisis alerts.
+
+    Pulls the agenda via daily_agenda route + crisis via city_crisis route,
+    hands both to analytics.derive_tasks. Roadmap input is skipped here
+    because roadmaps are on-demand (need vector + target + deadline); the
+    derive function accepts them if the UI later sends a roadmap snapshot.
+    """
+    cfg = _resolve_city(name)
+
+    agenda: Optional[Dict[str, Any]] = None
+    crisis: Optional[Dict[str, Any]] = None
+
+    try:
+        agenda_resp = await daily_agenda(cfg["name"])
+        # daily_agenda returns a pydantic AgendaResponse — convert to dict.
+        agenda = agenda_resp.model_dump() if hasattr(agenda_resp, "model_dump") else dict(agenda_resp)
+    except Exception:  # noqa: BLE001
+        logger.warning("tasks: agenda unavailable", exc_info=False)
+
+    try:
+        crisis = await city_crisis(cfg["name"])
+    except Exception:  # noqa: BLE001
+        logger.warning("tasks: crisis unavailable", exc_info=False)
+
+    result = derive_tasks(agenda=agenda, crisis=crisis)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **result.to_dict(),
     }
 
 
