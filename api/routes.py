@@ -19,6 +19,7 @@ Endpoints:
   GET  /api/city/{name}/foresight
   GET  /api/city/{name}/budget
   POST /api/city/{name}/narratives
+  GET  /api/city/{name}/cases
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
@@ -42,7 +43,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import foresight_forecast, investment_compute, reputation_analyze, resource_plan
+from analytics import foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -810,6 +811,54 @@ async def city_narratives(name: str, req: NarrativesRequest) -> dict:
         "slug": cfg.get("slug"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/cases")
+async def city_cases(name: str, limit: int = 3) -> dict:
+    """Recommend 3 best-practice cases tailored to this city's weak vectors.
+
+    Signals assembled:
+      - weak_vectors: from latest_metrics — any vector with score < 3.5
+      - crisis_vectors: from the rules-based crisis detector alerts
+
+    When the city has no metrics yet, falls back to top cases by evidence
+    level (the recommender's no-signal branch).
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    weak: List[str] = []
+    crisis: List[str] = []
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for vkey, col in _VECTOR_METRIC_COLUMN.items():
+                v = metric_row.get(col)
+                if v is not None and float(v) < 3.5:
+                    weak.append(vkey)
+
+    try:
+        rep = await city_crisis(cfg["name"])
+        for alert in rep.get("alerts") or []:
+            if isinstance(alert, dict) and alert.get("vector"):
+                crisis.append(alert["vector"])
+    except Exception:  # noqa: BLE001
+        logger.warning("cases: crisis alerts unavailable", exc_info=False)
+
+    recs = recommend_cases(
+        weak_vectors=weak or None,
+        crisis_vectors=crisis or None,
+        limit=max(1, min(10, int(limit))),
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "weak_vectors": weak,
+        "crisis_vectors": list(dict.fromkeys(crisis)),  # preserve order, dedupe
+        "recommendations": [r.to_dict() for r in recs],
     }
 
 
