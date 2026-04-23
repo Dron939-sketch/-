@@ -936,6 +936,137 @@ body {
   color: var(--gold-light);
 }
 
+/* ------------------ REPUTATION CARD ------------------ */
+.reputation-head {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 12px 16px;
+  margin: 2px 0 14px;
+  background: rgba(10, 22, 40, 0.55);
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  border-radius: 12px;
+}
+.rep-stat .muted.small { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
+.rep-risk {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 4px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-transform: capitalize;
+}
+.rep-risk-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+.reputation .reputation[data-risk],
+.rep-risk[data-risk="low"]    { color: var(--good); }
+.rep-risk[data-risk="low"]    .rep-risk-dot { background: var(--good); }
+.rep-risk[data-risk="medium"] { color: var(--warn); }
+.rep-risk[data-risk="medium"] .rep-risk-dot { background: var(--warn); }
+.rep-risk[data-risk="high"]   { color: var(--danger); }
+.rep-risk[data-risk="high"]   .rep-risk-dot { background: var(--danger); animation: crisis-pulse 1.6s ease-in-out infinite; }
+
+.rep-number { font-family: "Playfair Display", Georgia, serif; font-weight: 700; font-size: 1.6rem; margin-top: 2px; }
+.rep-sentiment {
+  font-weight: 700;
+  font-size: 1.25rem;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.rep-sentiment.positive { color: var(--good); }
+.rep-sentiment.negative { color: var(--danger); }
+.rep-sentiment.neutral  { color: var(--muted); }
+
+.rep-share {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  margin-top: 2px;
+  font-weight: 700;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.rep-trend { font-size: 0.78rem; font-weight: 600; }
+.rep-trend.up   { color: var(--danger); }
+.rep-trend.down { color: var(--good); }
+.rep-trend.flat { color: var(--muted); }
+
+.rep-sources { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.rep-source-chip {
+  padding: 4px 10px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--gold-light);
+}
+.rep-source-chip strong { color: var(--text); margin-left: 4px; }
+
+.reputation-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.rep-author-list { list-style: none; padding: 0; margin: 0; counter-reset: repauth; display: grid; gap: 8px; }
+.rep-author-list li {
+  counter-increment: repauth;
+  position: relative;
+  padding: 10px 14px 10px 40px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  font-size: 0.9rem;
+}
+.rep-author-list li::before {
+  content: counter(repauth);
+  position: absolute;
+  left: 10px; top: 50%;
+  transform: translateY(-50%);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(197, 160, 89, 0.12);
+  color: var(--gold-light);
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.rep-author-list .author { font-weight: 700; }
+.rep-author-list .meta { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+.rep-author-list .meta .pill {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: rgba(224, 91, 91, 0.12);
+  border: 1px solid rgba(224, 91, 91, 0.3);
+  color: #F4B5B5;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.rep-viral-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.rep-viral-list li {
+  padding: 10px 14px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  font-size: 0.9rem;
+}
+.rep-viral-list .title { font-weight: 600; line-height: 1.35; }
+.rep-viral-list .title a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dashed rgba(197, 160, 89, 0.3); }
+.rep-viral-list .title a:hover { border-bottom-color: var(--gold-bright); color: var(--gold-bright); }
+.rep-viral-list .meta { color: var(--muted); font-size: 0.78rem; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.rep-viral-list .meta .badge { padding: 1px 8px; border-radius: 999px; }
+.rep-viral-list .meta .badge.neg  { background: rgba(224, 91, 91, 0.15); border: 1px solid rgba(224, 91, 91, 0.3); color: #F4B5B5; }
+.rep-viral-list .meta .badge.sev  { background: rgba(232, 168, 95, 0.15); border: 1px solid rgba(232, 168, 95, 0.3); color: #F3CDA0; }
+
+.rep-empty { color: var(--muted); padding: 10px 0; font-size: 0.88rem; }
+
+@media (max-width: 900px) {
+  .reputation-head { grid-template-columns: repeat(2, 1fr); }
+  .reputation-cols { grid-template-columns: 1fr; }
+}
+
 /* ------------------ BENCHMARK CARD ------------------ */
 .benchmark-summary {
   display: flex;
