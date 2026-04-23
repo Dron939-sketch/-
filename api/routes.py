@@ -12,6 +12,7 @@ Endpoints:
   POST /api/city/{name}/simulate
   GET  /api/city/{name}/root_cause/{node_id}
   GET  /api/city/{name}/metric/{vector}/breakdown
+  GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
 """
@@ -29,6 +30,7 @@ from pydantic import BaseModel, Field
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher
+from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, simulate, trace_root_cause
 from collectors import (
@@ -456,6 +458,37 @@ async def city_metric_breakdown(name: str, vector: str) -> dict:
         "slug": cfg.get("slug"),
         **result.to_dict(),
     }
+
+
+@router.get("/api/benchmark")
+async def cross_city_benchmark() -> dict:
+    """Rank the 6 pilots by SB / ТФ / УБ / ЧВ + composite.
+
+    Pulls the latest metric snapshot for every pilot city and hands the
+    batch to `analytics.benchmark`. Cities without a snapshot yet are
+    still included (with null values) so the dashboard can render them
+    greyed-out instead of hiding them.
+    """
+    snapshots: List[Dict[str, Any]] = []
+    for cfg in CITIES.values():
+        snap: Dict[str, Any] = {
+            "slug": cfg.get("slug"),
+            "name": cfg.get("name"),
+            "emoji": cfg.get("emoji") or "🏙️",
+            "population": cfg.get("population"),
+        }
+        city_id = await city_id_by_name(cfg["name"])
+        if city_id is not None:
+            row = await latest_metrics(city_id)
+            if row is not None:
+                for col in ("sb", "tf", "ub", "chv", "trust_index", "happiness_index"):
+                    if row.get(col) is not None:
+                        snap[col] = row[col]
+        snapshots.append(snap)
+
+    result = benchmark_cities(snapshots).to_dict()
+    result["generated_at"] = datetime.now(tz=timezone.utc).isoformat()
+    return result
 
 
 # ---------------------------------------------------------------------------
