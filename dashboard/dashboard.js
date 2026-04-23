@@ -1229,6 +1229,150 @@ function renderForesight(data) {
   }
 }
 
+// -------------------------------------------------- Roadmap
+
+// Mirror of python VECTOR → DB column, used to prefill "текущий" from metrics.
+const ROADMAP_DB_COLUMN = { "СБ": "sb", "ТФ": "tf", "УБ": "ub", "ЧВ": "chv" };
+
+function _defaultDeadline() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function _roadmapPrefillFromMetrics(metrics) {
+  const select = document.getElementById("rm-vector");
+  const start  = document.getElementById("rm-start");
+  const startVal = document.getElementById("rm-start-val");
+  const targetEl = document.getElementById("rm-target");
+  const targetVal = document.getElementById("rm-target-val");
+  const dl = document.getElementById("rm-deadline");
+  if (!select || !start || !metrics) return;
+  const col = ROADMAP_DB_COLUMN[select.value];
+  const cur = Number(metrics[col]);
+  if (Number.isFinite(cur)) {
+    start.value = cur.toFixed(1);
+    if (startVal) startVal.textContent = cur.toFixed(1);
+    // Auto-set target ~1.2 above current, clamped to 6.
+    const target = Math.min(6, Math.max(cur + 0.1, cur * 1.2));
+    targetEl.value = target.toFixed(1);
+    if (targetVal) targetVal.textContent = target.toFixed(1);
+  }
+  if (dl && !dl.value) dl.value = _defaultDeadline();
+}
+
+function _fmtRubMln(n) {
+  if (n == null) return "—";
+  const v = Number(n);
+  if (v >= 1_000_000_000) return (v / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "") + " млрд ₽";
+  if (v >= 1_000_000)     return (v / 1_000_000).toFixed(1).replace(".0", "") + " млн ₽";
+  return v.toLocaleString("ru-RU") + " ₽";
+}
+
+function _fmtQuarterPeriod(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const mo = d.toLocaleDateString("ru-RU", { month: "short" });
+  return `${mo} ${d.getFullYear()}`;
+}
+
+function renderRoadmap(roadmap) {
+  const out = document.getElementById("roadmap-output");
+  if (!out) return;
+  if (!roadmap || typeof roadmap !== "object") {
+    out.innerHTML = `<div class="roadmap-error">Не удалось построить дорожную карту.</div>`;
+    return;
+  }
+
+  const vectorName = roadmap.vector_name || roadmap.vector || "—";
+  const scenarioLabels = {
+    optimistic: "Оптимистичный",
+    baseline: "Базовый",
+    pessimistic: "Пессимистичный",
+  };
+  const scenario = scenarioLabels[roadmap.scenario] || roadmap.scenario || "";
+  const dl = roadmap.deadline
+    ? new Date(roadmap.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })
+    : "—";
+
+  const chips = [
+    `Вектор: <strong>${vectorName}</strong>`,
+    `${Number(roadmap.start_level).toFixed(1)} → <strong>${Number(roadmap.target_level).toFixed(1)}</strong>`,
+    `Срок: <strong>${dl}</strong>`,
+    `Сценарий: <strong>${scenario}</strong>`,
+    `Итого: <strong>${_fmtRubMln(roadmap.total_cost_rub)}</strong>`,
+  ];
+
+  const milestones = Array.isArray(roadmap.milestones) ? roadmap.milestones : [];
+  const milestonesHtml = milestones.map((m) => {
+    const interventionsHtml = (m.interventions || []).map((i) => `<li>${i}</li>`).join("");
+    const risksHtml = (m.risks || []).length
+      ? `<div class="quarter-risks">⚠ ${(m.risks || []).join(" · ")}</div>`
+      : "";
+    return `
+      <li>
+        <span></span>
+        <div>
+          <div class="quarter-period">${_fmtQuarterPeriod(m.quarter_start)} — ${_fmtQuarterPeriod(m.quarter_end)}</div>
+          <div class="quarter-target">Цель к концу квартала: ${Number(m.target_level).toFixed(1)}</div>
+          ${interventionsHtml ? `<ul class="quarter-interventions">${interventionsHtml}</ul>` : ""}
+          ${risksHtml}
+        </div>
+        <div class="quarter-cost">${_fmtRubMln(m.estimated_cost_rub)}</div>
+      </li>
+    `;
+  }).join("");
+
+  out.innerHTML = `
+    <div class="roadmap-summary">
+      ${chips.map((c) => `<span class="chip">${c}</span>`).join("")}
+    </div>
+    ${milestones.length
+      ? `<ol class="roadmap-timeline">${milestonesHtml}</ol>`
+      : `<div class="muted small">Карта сгенерирована без квартальных вех.</div>`}
+    ${(roadmap.notes || []).length
+      ? `<div class="muted small" style="margin-top: 10px;">${(roadmap.notes || []).join(" · ")}</div>`
+      : ""}
+  `;
+}
+
+async function submitRoadmap(event) {
+  event.preventDefault();
+  if (!currentCity) return;
+  const out = document.getElementById("roadmap-output");
+  const btn = document.getElementById("rm-run");
+  const body = {
+    vector: document.getElementById("rm-vector").value,
+    start_level: Number(document.getElementById("rm-start").value),
+    target_level: Number(document.getElementById("rm-target").value),
+    deadline: document.getElementById("rm-deadline").value,
+    scenario: document.getElementById("rm-scenario").value,
+  };
+  if (body.target_level <= body.start_level) {
+    out.innerHTML = `<div class="roadmap-error">Цель должна быть выше текущего уровня.</div>`;
+    return;
+  }
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = "Строю…";
+  try {
+    const res = await fetch(`/api/city/${currentCity.slug}/roadmap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    renderRoadmap(data.roadmap || data);
+  } catch (e) {
+    console.warn("roadmap failed", e);
+    out.innerHTML = `<div class="roadmap-error">Не удалось построить карту: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
 function renderBenchmark(data) {
   const body = document.getElementById("benchmark-body");
   const meta = document.getElementById("benchmark-meta");
@@ -1376,6 +1520,16 @@ async function refresh() {
     renderLoops(metrics.loops);
     renderTrustHappy(metrics);
     renderForecast(metrics);
+    // Snapshot raw vector values so the roadmap form can prefill "текущий".
+    window.__LATEST_METRICS__ = metrics.city_metrics
+      ? {
+          sb:  metrics.city_metrics.safety  != null ? metrics.city_metrics.safety  * 6 : null,
+          tf:  metrics.city_metrics.economy != null ? metrics.city_metrics.economy * 6 : null,
+          ub:  metrics.city_metrics.quality != null ? metrics.city_metrics.quality * 6 : null,
+          chv: metrics.city_metrics.social  != null ? metrics.city_metrics.social  * 6 : null,
+        }
+      : null;
+    _roadmapPrefillFromMetrics(window.__LATEST_METRICS__);
   } catch (e) {
     console.warn("metrics unavailable", e);
   }
@@ -1485,6 +1639,20 @@ async function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeAllModals();
   });
+
+  // Roadmap form wiring: live slider labels + submit + vector-change prefill.
+  const rmVec     = document.getElementById("rm-vector");
+  const rmStart   = document.getElementById("rm-start");
+  const rmStartV  = document.getElementById("rm-start-val");
+  const rmTarget  = document.getElementById("rm-target");
+  const rmTargetV = document.getElementById("rm-target-val");
+  const rmDeadline = document.getElementById("rm-deadline");
+  const rmForm = document.getElementById("roadmap-form");
+  if (rmStart && rmStartV) rmStart.addEventListener("input", () => { rmStartV.textContent = Number(rmStart.value).toFixed(1); });
+  if (rmTarget && rmTargetV) rmTarget.addEventListener("input", () => { rmTargetV.textContent = Number(rmTarget.value).toFixed(1); });
+  if (rmVec) rmVec.addEventListener("change", () => _roadmapPrefillFromMetrics(window.__LATEST_METRICS__));
+  if (rmDeadline && !rmDeadline.value) rmDeadline.value = _defaultDeadline();
+  if (rmForm) rmForm.addEventListener("submit", submitRoadmap);
 
   const crisisToggle = document.getElementById("crisis-toggle");
   const crisisList   = document.getElementById("crisis-alerts");
