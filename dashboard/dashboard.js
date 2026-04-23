@@ -1164,6 +1164,84 @@ function renderBudget(data) {
   }
 }
 
+const KB_VECTOR_LABELS = {
+  safety: "Безопасность",
+  economy: "Экономика",
+  quality: "Качество жизни",
+  social: "Социальный капитал",
+};
+const KB_EVIDENCE_LABELS = {
+  proven:     "Проверенная",
+  documented: "Подтверждённая",
+  practice:   "Практика",
+};
+
+function renderCases(data) {
+  const signalsEl = document.getElementById("kb-signals");
+  const casesEl = document.getElementById("kb-cases");
+  const meta = document.getElementById("cases-meta");
+  if (!casesEl) return;
+
+  const weak = Array.isArray(data?.weak_vectors) ? data.weak_vectors : [];
+  const crisis = Array.isArray(data?.crisis_vectors) ? data.crisis_vectors : [];
+  const recs = Array.isArray(data?.recommendations) ? data.recommendations : [];
+
+  // Signals strip explains why these cases were picked.
+  if (signalsEl) {
+    const tags = [];
+    if (weak.length) {
+      tags.push(`<span class="muted">Слабые векторы:</span> ` +
+        weak.map((v) => `<span class="kb-tag">${KB_VECTOR_LABELS[v] || v}</span>`).join(" "));
+    }
+    if (crisis.length) {
+      tags.push(`<span class="muted">Кризис:</span> ` +
+        crisis.map((v) => `<span class="kb-tag crisis">${KB_VECTOR_LABELS[v] || v}</span>`).join(" "));
+    }
+    if (!weak.length && !crisis.length) {
+      tags.push(`<span class="muted">Сигналов нет — показаны практики с самым высоким уровнем подтверждения.</span>`);
+    }
+    signalsEl.innerHTML = tags.join(" · ");
+  }
+
+  casesEl.innerHTML = "";
+  if (!recs.length) {
+    casesEl.innerHTML = `<div class="kb-empty">Нет подходящих кейсов. Попробуйте позже, когда появятся метрики или сигналы.</div>`;
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  recs.forEach((r) => {
+    const c = r.case || {};
+    const matchChips = [];
+    (r.matched_vectors || []).forEach((v) => {
+      matchChips.push(`<span class="match">${KB_VECTOR_LABELS[v] || v}</span>`);
+    });
+    (r.matched_tags || []).forEach((t) => {
+      matchChips.push(`<span class="match">#${t}</span>`);
+    });
+    const evidenceLabel = KB_EVIDENCE_LABELS[c.evidence_level] || c.evidence_level;
+    const card = document.createElement("div");
+    card.className = "kb-case";
+    card.innerHTML = `
+      <div class="kb-case-head">
+        <div class="kb-case-title">${c.title || "Кейс"}</div>
+        <span class="kb-evidence" data-level="${c.evidence_level}">${evidenceLabel}</span>
+      </div>
+      <div class="kb-problem">Проблема: ${c.problem || ""}</div>
+      <div class="kb-approach">${c.approach || ""}</div>
+      ${matchChips.length ? `<div class="kb-case-foot">${matchChips.join("")}</div>` : ""}
+    `;
+    casesEl.appendChild(card);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+}
+
 const FORESIGHT_VECTOR_ICON = {
   safety:  "🛡️", economy: "💰", quality: "😊", social:  "🤝",
 };
@@ -1794,6 +1872,12 @@ async function refresh() {
     renderBudget(budget);
   } catch (e) {
     console.warn("budget unavailable", e);
+  }
+  try {
+    const cases = await fetchJson(`/api/city/${slug}/cases`);
+    renderCases(cases);
+  } catch (e) {
+    console.warn("cases unavailable", e);
   }
   setUpdated();
 }
