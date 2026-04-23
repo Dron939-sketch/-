@@ -17,6 +17,7 @@ Endpoints:
   GET  /api/city/{name}/investment
   GET  /api/city/{name}/foresight
   GET  /api/city/{name}/budget
+  POST /api/city/{name}/narratives
   GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
@@ -35,7 +36,7 @@ from pydantic import BaseModel, Field
 
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
-from ai import NewsEnricher
+from ai import NewsEnricher, generate_narratives
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
@@ -752,6 +753,34 @@ async def city_budget(name: str, per_capita_rub: int = 30_000) -> dict:
     )
     return {
         "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **result.to_dict(),
+    }
+
+
+class NarrativesRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=200,
+                       description="Тема заявления (1-2 строки).")
+    context: str = Field("", max_length=1500,
+                         description="Короткий контекст / что именно случилось.")
+
+
+@router.post("/api/city/{name}/narratives")
+async def city_narratives(name: str, req: NarrativesRequest) -> dict:
+    """Generate 3 statement drafts (formal / empathetic / mobilizing) via DeepSeek.
+
+    Fully fail-safe — no DeepSeek key / API error / bad JSON all produce a
+    well-shaped response with the error field populated. The dashboard
+    renders the error as a friendly message instead of a 500.
+    """
+    cfg = _resolve_city(name)
+    result = await generate_narratives(
+        city=cfg["name"],
+        topic=req.topic,
+        context=req.context,
+    )
+    return {
         "slug": cfg.get("slug"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **result.to_dict(),

@@ -1373,6 +1373,117 @@ async function submitRoadmap(event) {
   }
 }
 
+// -------------------------------------------------- Narratives
+
+function _narrativesPrefillFromAgenda(agenda) {
+  const topicEl = document.getElementById("nr-topic");
+  const ctxEl = document.getElementById("nr-context");
+  if (!topicEl || !ctxEl) return;
+  // Only prefill when the user hasn't typed anything yet.
+  if (!topicEl.value && agenda?.headline) topicEl.value = agenda.headline;
+  if (!ctxEl.value && agenda?.description) ctxEl.value = agenda.description;
+}
+
+async function copyNarrativeText(btn, text) {
+  try {
+    await navigator.clipboard.writeText(text || "");
+    const prev = btn.textContent;
+    btn.classList.add("copied");
+    btn.textContent = "Скопировано ✓";
+    setTimeout(() => {
+      btn.classList.remove("copied");
+      btn.textContent = prev;
+    }, 1600);
+  } catch (e) {
+    console.warn("clipboard unavailable", e);
+    btn.textContent = "Ошибка";
+    setTimeout(() => { btn.textContent = "Копировать"; }, 1600);
+  }
+}
+
+function renderNarratives(data) {
+  const out = document.getElementById("narratives-output");
+  if (!out) return;
+  if (data?.error && !(data.variants || []).some((v) => v.text)) {
+    out.innerHTML = `<div class="narratives-error">${data.error}</div>`;
+    return;
+  }
+  const variants = Array.isArray(data?.variants) ? data.variants : [];
+  if (!variants.length) {
+    out.innerHTML = `<div class="narratives-error">Ответ пустой — попробуйте ещё раз.</div>`;
+    return;
+  }
+
+  const cardsHtml = variants.map((v) => {
+    const hasText = Boolean(v.text);
+    const textHtml = hasText
+      ? `<div class="nc-text">${v.text.replace(/</g, "&lt;")}</div>`
+      : `<div class="nc-text nc-empty">Модель не вернула этот вариант — попробуйте ещё раз.</div>`;
+    return `
+      <div class="narrative-card ${v.tone}">
+        <div class="nc-head">
+          <span class="nc-label">${v.label}</span>
+          <span class="nc-hint">${v.length_chars || 0} симв.</span>
+        </div>
+        <div class="nc-hint">${v.description || ""}</div>
+        ${textHtml}
+        <div class="nc-foot">
+          <span>${v.tone}</span>
+          <button type="button" class="nc-copy" data-tone="${v.tone}" ${hasText ? "" : "disabled"}>Копировать</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  out.innerHTML = `
+    ${data.error ? `<div class="narratives-error">${data.error}</div>` : ""}
+    <div class="narratives-grid">${cardsHtml}</div>
+  `;
+
+  // Attach copy handlers.
+  out.querySelectorAll(".nc-copy").forEach((btn) => {
+    const tone = btn.getAttribute("data-tone");
+    const variant = variants.find((v) => v.tone === tone);
+    if (variant?.text) {
+      btn.addEventListener("click", () => copyNarrativeText(btn, variant.text));
+    }
+  });
+}
+
+async function submitNarratives(event) {
+  event.preventDefault();
+  if (!currentCity) return;
+  const out = document.getElementById("narratives-output");
+  const btn = document.getElementById("nr-run");
+  const body = {
+    topic: document.getElementById("nr-topic").value.trim(),
+    context: document.getElementById("nr-context").value.trim(),
+  };
+  if (!body.topic) {
+    out.innerHTML = `<div class="narratives-error">Заполните тему заявления.</div>`;
+    return;
+  }
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = "Генерирую…";
+  try {
+    const res = await fetch(`/api/city/${currentCity.slug}/narratives`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    renderNarratives(data);
+  } catch (e) {
+    console.warn("narratives failed", e);
+    out.innerHTML = `<div class="narratives-error">Не удалось сгенерировать: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
 function renderBenchmark(data) {
   const body = document.getElementById("benchmark-body");
   const meta = document.getElementById("benchmark-meta");
@@ -1542,6 +1653,7 @@ async function refresh() {
   try {
     const agenda = await fetchJson(`/api/city/${slug}/agenda`);
     renderAgenda(agenda);
+    _narrativesPrefillFromAgenda(agenda);
   } catch (e) {
     console.warn("agenda unavailable", e);
   }
@@ -1653,6 +1765,9 @@ async function init() {
   if (rmVec) rmVec.addEventListener("change", () => _roadmapPrefillFromMetrics(window.__LATEST_METRICS__));
   if (rmDeadline && !rmDeadline.value) rmDeadline.value = _defaultDeadline();
   if (rmForm) rmForm.addEventListener("submit", submitRoadmap);
+
+  const nrForm = document.getElementById("narratives-form");
+  if (nrForm) nrForm.addEventListener("submit", submitNarratives);
 
   const crisisToggle = document.getElementById("crisis-toggle");
   const crisisList   = document.getElementById("crisis-alerts");
