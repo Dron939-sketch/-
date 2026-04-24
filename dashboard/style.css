@@ -86,6 +86,85 @@ body {
 }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 0.85rem; }
 
+/* ------------------ AUTH CHIP + MODAL ------------------ */
+.auth-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  background: rgba(10, 22, 40, 0.5);
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  border-radius: 999px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.auth-chip:hover { border-color: var(--gold); background: rgba(197, 160, 89, 0.08); }
+.auth-chip .avatar { width: 28px; height: 28px; font-size: 0.95rem; }
+.auth-chip .auth-label { color: var(--gold-light); font-weight: 600; white-space: nowrap; }
+.auth-chip.logged-in { background: rgba(111, 207, 151, 0.08); border-color: rgba(111, 207, 151, 0.35); }
+.auth-chip.logged-in .auth-label { color: var(--good); }
+
+.auth-panel { max-width: 460px; }
+.auth-sub { font-size: 0.88rem; line-height: 1.55; }
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(10, 22, 40, 0.55);
+  border: 1px solid rgba(197, 160, 89, 0.15);
+  border-radius: 999px;
+  margin: 6px 0 16px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.auth-tab:hover { color: var(--gold-light); }
+.auth-tab.active {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: #0A1628;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+.auth-form input[type="email"],
+.auth-form input[type="password"],
+.auth-form input[type="text"] {
+  padding: 10px 12px;
+  background: rgba(10, 22, 40, 0.75);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+}
+.auth-form input:focus {
+  border-color: var(--gold); outline: none;
+}
+.auth-form .rm-submit { margin-top: 4px; }
+.auth-error {
+  padding: 10px 12px;
+  background: rgba(224, 91, 91, 0.08);
+  border: 1px solid rgba(224, 91, 91, 0.3);
+  color: #F4B5B5;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
 /* ------------------ HELP BUTTON ------------------ */
 .help-button {
   width: 32px; height: 32px;

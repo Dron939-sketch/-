@@ -211,6 +211,17 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at   TIMESTAMPTZ
 );
 
+-- @SEGMENT user_sessions_table
+CREATE TABLE IF NOT EXISTS user_sessions (
+    token_hash      TEXT PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id);
+CREATE INDEX IF NOT EXISTS user_sessions_expires_idx ON user_sessions (expires_at);
+
 -- Retention policies removed: on TimescaleDB Apache edition
 -- add_retention_policy raises FeatureNotSupportedError (Enterprise-only)
 -- before the DO block's exception handler can see it. We don't need

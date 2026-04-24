@@ -42,7 +42,10 @@
           <ul class="sh-list" id="sh-list"></ul>
         </div>
       </div>
-      <span class="avatar" title="Профиль">👤</span>
+      <button type="button" class="auth-chip" id="auth-chip" title="Вход / профиль">
+        <span class="avatar">👤</span>
+        <span class="auth-label" id="auth-label">Войти</span>
+      </button>
     </div>
   </header>
 
@@ -487,6 +490,61 @@
         <div class="section-title">Корень проблемы</div>
         <div class="cause-root-body" id="root-cause-root-body"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Auth modal: login + registration -->
+  <div class="modal" id="auth-modal" aria-hidden="true" role="dialog" aria-labelledby="auth-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel auth-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">Доступ к инструментам</div>
+      <h2 class="modal-title" id="auth-title">Вход</h2>
+      <p class="modal-description auth-sub" id="auth-sub">
+        Чтение дашборда — свободное. Авторизация нужна для действий:
+        постановка дорожной карты, запуск симулятора, генерация формулировок,
+        запуск сбора данных.
+      </p>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-tab="login">Вход</button>
+        <button type="button" class="auth-tab" data-tab="register">Регистрация</button>
+      </div>
+
+      <form class="auth-form" id="login-form">
+        <label class="rm-field">
+          <span class="rm-label">Email</span>
+          <input type="email" id="login-email" required autocomplete="email" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Пароль</span>
+          <input type="password" id="login-password" required minlength="6" autocomplete="current-password" />
+        </label>
+        <button type="submit" class="rm-submit">Войти</button>
+        <div class="auth-error" id="login-error" hidden></div>
+      </form>
+
+      <form class="auth-form" id="register-form" hidden>
+        <label class="rm-field">
+          <span class="rm-label">Полное имя</span>
+          <input type="text" id="register-name" maxlength="120" autocomplete="name" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Email</span>
+          <input type="email" id="register-email" required autocomplete="email" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Пароль (≥8 символов)</span>
+          <input type="password" id="register-password" required minlength="8" autocomplete="new-password" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Код регистрации</span>
+          <input type="text" id="register-code" required autocomplete="off" />
+        </label>
+        <button type="submit" class="rm-submit">Создать аккаунт</button>
+        <div class="auth-error" id="register-error" hidden></div>
+        <div class="muted small">Код регистрации выдаёт администратор (переменная окружения <code>AUTH_REGISTRATION_CODE</code>).</div>
+      </form>
     </div>
   </div>
 

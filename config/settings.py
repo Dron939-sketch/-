@@ -51,6 +51,11 @@ class Settings:
     api_host: str = _env("API_HOST", "0.0.0.0")
     api_port: int = _env_int("API_PORT", 8000)
     secret_key: str = _env("SECRET_KEY", "dev-insecure-change-me")
+    # Required to call POST /api/auth/register. Prevents unattended signup on
+    # a public deploy — the first admin is bootstrapped by a trusted operator.
+    auth_registration_code: str = _env("AUTH_REGISTRATION_CODE", "")
+    # httpOnly cookie should go over HTTPS in production; dev keeps it permissive.
+    cookie_secure: bool = _env("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
     cors_origins: List[str] = field(
         default_factory=lambda: _env_list("CORS_ORIGINS", ["*"])
     )

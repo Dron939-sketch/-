@@ -40,8 +40,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+
+from .auth_routes import require_role, require_user
 
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
@@ -456,7 +458,10 @@ class SimulateRequest(BaseModel):
 
 
 @router.post("/api/city/{name}/simulate")
-async def city_simulate(name: str, req: SimulateRequest) -> dict:
+async def city_simulate(
+    name: str, req: SimulateRequest,
+    _user: dict = Depends(require_user),
+) -> dict:
     """Butterfly-effect simulator."""
     cfg = _resolve_city(name)
     graph = await _build_city_graph(cfg)
@@ -857,7 +862,10 @@ class NarrativesRequest(BaseModel):
 
 
 @router.post("/api/city/{name}/narratives")
-async def city_narratives(name: str, req: NarrativesRequest) -> dict:
+async def city_narratives(
+    name: str, req: NarrativesRequest,
+    _user: dict = Depends(require_user),
+) -> dict:
     """Generate 3 statement drafts (formal / empathetic / mobilizing) via DeepSeek.
 
     Fully fail-safe — no DeepSeek key / API error / bad JSON all produce a
@@ -926,7 +934,10 @@ async def city_topics(name: str, days: int = 7) -> dict:
 
 
 @router.post("/api/admin/collect/{name}")
-async def admin_collect_now(name: str) -> dict:
+async def admin_collect_now(
+    name: str,
+    _user: dict = Depends(require_role("admin", "editor")),
+) -> dict:
     """Trigger a one-off collector run for a city and persist into DB.
 
     Reuses `tasks.scheduler.collect_city` so the behaviour is identical
@@ -1283,7 +1294,10 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
 
 
 @router.post("/api/city/{name}/roadmap", response_model=schemas.RoadmapResponse)
-async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResponse:
+async def roadmap(
+    name: str, req: schemas.RoadmapRequest,
+    _user: dict = Depends(require_user),
+) -> schemas.RoadmapResponse:
     cfg = _resolve_city(name)
     planner = RoadmapPlanner(cfg["name"])
     try:

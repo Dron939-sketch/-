@@ -24,6 +24,7 @@ from config.settings import settings
 from db import init_pool, close_pool
 from db.seed import run_migrations, seed_cities
 
+from .auth_routes import router as auth_router
 from .routes import router
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(auth_router)
     app.include_router(router)
 
     @app.on_event("startup")
