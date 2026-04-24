@@ -164,3 +164,22 @@
   .user-timeline li { grid-template-columns: 100px 1fr 60px; }
   .user-timeline .method { display: none; }
 }
+
+@media (max-width: 640px) {
+  .admin-page { padding: 14px; gap: 14px; }
+  .admin-controls { flex-direction: column; align-items: stretch; gap: 10px; }
+  .admin-range select { min-width: 100%; }
+  .admin-unauth { padding: 24px 18px; margin-top: 30px; }
+  .admin-unauth-title { font-size: 1.3rem; }
+  .daily-chart { height: 100px; }
+  .daily-chart .bar { width: 16px; }
+  .daily-chart .bar .dlabel { font-size: 0.58rem; }
+  .user-timeline li {
+    grid-template-columns: 1fr 60px;
+    gap: 6px;
+    font-size: 0.78rem;
+  }
+  .user-timeline .ts { grid-column: 1 / -1; }
+  .user-timeline .status { text-align: right; }
+  .admin-link-back { font-size: 0.8rem; padding: 4px 10px; }
+}
