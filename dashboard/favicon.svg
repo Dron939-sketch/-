@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E8D5A3"/>
+      <stop offset="100%" stop-color="#C5A059"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0A1628"/>
+  <circle cx="32" cy="30" r="18" fill="url(#g)" opacity="0.95"/>
+  <path d="M32 12c-9.94 0-18 8.06-18 18 0 9.94 8.06 18 18 18 9.94 0 18-8.06 18-18 0-9.94-8.06-18-18-18zm0 4c7.73 0 14 6.27 14 14s-6.27 14-14 14-14-6.27-14-14 6.27-14 14-14z"
+        fill="#0A1628" opacity="0.3"/>
+  <text x="32" y="38" text-anchor="middle"
+        font-family="Georgia, serif" font-weight="900" font-size="22" fill="#0A1628">ГР</text>
+</svg>

@@ -97,7 +97,7 @@ KOLOMNA_SOURCES = CitySources(
             "Коломна культура",
             "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0+%D0%BA%D1%83%D0%BB%D1%8C%D1%82%D1%83%D1%80%D0%B0",
         ),
-        # Яндекс.Новости через Google News прокси-запрос
+        # Прямой RSS городского издания — подтверждён живым.
         Source(
             kind="news_rss",
             name="in-kolomna.ru (RSS)",
@@ -105,27 +105,19 @@ KOLOMNA_SOURCES = CitySources(
             category="news", priority="P0",
             notes="Главное городское новостное издание.",
         ),
-        Source(
-            kind="news_rss",
-            name="kolomnagrad.ru (RSS)",
-            handle="https://kolomnagrad.ru/rss",
-            category="news", priority="P1",
-            notes="Локальный городской портал.",
-        ),
-        Source(
-            kind="news_rss",
-            name="360tv.ru — Коломна",
-            handle="https://360tv.ru/kolomna/rss/",
-            category="news", priority="P1",
-            notes="Областное СМИ, раздел «Коломна».",
-        ),
-        Source(
-            kind="news_rss",
-            name="Подмосковье сегодня — Коломна",
-            handle="https://mosregtoday.ru/rss/tag/kolomna/",
-            category="news", priority="P2",
-            notes="Официальное областное СМИ.",
-        ),
+        # --- RSS-ленты ниже регистрировались, но возвращают 404/timeout.
+        # --- Оставлены закомментированными как лог для ручного онбординга
+        # --- после того как найдём рабочий endpoint (например, через
+        # --- кастомный скрейпер или другой формат).
+        # Source(kind="news_rss", name="kolomnagrad.ru (RSS)",
+        #        handle="https://kolomnagrad.ru/rss",
+        #        category="news", priority="P1"),
+        # Source(kind="news_rss", name="360tv.ru — Коломна",
+        #        handle="https://360tv.ru/kolomna/rss/",
+        #        category="news", priority="P1"),
+        # Source(kind="news_rss", name="Подмосковье сегодня — Коломна",
+        #        handle="https://mosregtoday.ru/rss/tag/kolomna/",
+        #        category="news", priority="P2"),
     ],
     gosuslugi=[
         Source(
