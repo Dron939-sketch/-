@@ -5,6 +5,7 @@ from .butterfly import Simulation, NodeDelta, simulate
 from .crisis import Alert, CrisisReport, detect_crises
 from .decisions import Decision, DecisionScenario, filter_for as filter_decisions, list_decisions, get_decision
 from .deep_forecast import DeepForecastReport, VectorForecast, forecast as deep_forecast
+from .events_library import EventsReport, HappinessEvent, current_season, recommend as recommend_events, library_size as events_library_size
 from .foresight import ForesightReport, MegatrendRow, Scenario, VectorProjection, forecast as foresight_forecast
 from .investment import Factor, InvestmentProfile, compute as investment_compute
 from .knowledge import Case, Recommendation, library_size, recommend as recommend_cases
@@ -37,6 +38,11 @@ __all__ = [
     "deep_forecast",
     "DeepForecastReport",
     "VectorForecast",
+    "recommend_events",
+    "current_season",
+    "EventsReport",
+    "HappinessEvent",
+    "events_library_size",
     "foresight_forecast",
     "ForesightReport",
     "MegatrendRow",
