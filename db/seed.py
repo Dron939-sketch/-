@@ -103,12 +103,28 @@ async def city_id_by_slug(slug: str) -> int | None:
 _SEGMENT_MARKER = re.compile(r"^\s*--\s*@SEGMENT\s+(\S+)\s*$", re.MULTILINE)
 
 
+def _strip_sql_comments(body: str) -> str:
+    """Return body with single-line `-- …` comments removed.
+
+    Used to check whether a segment has any actual SQL before shipping it
+    to asyncpg — pure-comment chunks trigger EmptyQueryResponse whose
+    .decode() throws `'NoneType' object has no attribute 'decode'`.
+    """
+    lines = []
+    for line in body.splitlines():
+        stripped = line.split("--", 1)[0].strip()
+        if stripped:
+            lines.append(stripped)
+    return " ".join(lines).strip()
+
+
 def _split_segments(sql: str) -> List[Tuple[str, str]]:
     """Split SQL on `-- @SEGMENT <name>` marker lines.
 
     Returns a list of `(segment_name, sql_body)` pairs in order. A file
     without any marker is returned as a single `("default", sql)` tuple
-    so legacy scripts keep working.
+    so legacy scripts keep working. Segments that only contain comments
+    are dropped — asyncpg.execute on such a body raises NoneType.decode.
     """
     matches = list(_SEGMENT_MARKER.finditer(sql))
     if not matches:
@@ -116,9 +132,9 @@ def _split_segments(sql: str) -> List[Tuple[str, str]]:
 
     segments: List[Tuple[str, str]] = []
     # Everything before the first marker is the implicit "preamble" —
-    # run it first so top-of-file comments aren't lost.
+    # only add it if it contains actual SQL.
     preamble = sql[: matches[0].start()].strip()
-    if preamble:
+    if preamble and _strip_sql_comments(preamble):
         segments.append(("preamble", preamble))
 
     for i, match in enumerate(matches):
@@ -126,7 +142,7 @@ def _split_segments(sql: str) -> List[Tuple[str, str]]:
         start = match.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(sql)
         body = sql[start:end].strip()
-        if body:
+        if body and _strip_sql_comments(body):
             segments.append((name, body))
     return segments
 

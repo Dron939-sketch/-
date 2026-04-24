@@ -92,6 +92,12 @@ VERSION = "0.10.0"
 
 _AGENDA_ENRICHMENT_TIMEOUT_S = 10
 
+# Per-city TTL cache for the /agenda response. Building the agenda does a
+# live collect_news (67 RSS + enricher) — 10–15 s. Downstream calls
+# (/tasks, /eisenhower) piggyback on the cache instead of re-triggering.
+_AGENDA_CACHE_TTL_S = 300   # 5 minutes
+_AGENDA_CACHE: Dict[str, tuple] = {}   # city_name -> (response, expires_at_epoch)
+
 # Vector → the news categories that dominate its signal. Mirrors the
 # grouping in `metrics/snapshot.py` so the transparency endpoint and
 # the snapshot aggregator agree on which news items count where.
@@ -1336,6 +1342,14 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
 async def daily_agenda(name: str) -> schemas.AgendaResponse:
     cfg = _resolve_city(name)
 
+    # TTL cache: subsequent calls from /tasks, /eisenhower — и даже быстрый
+    # refresh дашборда — не перевызывают expensive collect_news (10-15 s).
+    import time as _time
+    now = _time.time()
+    cached = _AGENDA_CACHE.get(cfg["name"])
+    if cached is not None and cached[1] > now:
+        return cached[0]
+
     news_response = await collect_news(cfg["name"], limit=200)
     news_items = [
         CollectedItem(
@@ -1389,7 +1403,7 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
         agenda.headline = top_severe.enrichment.get("summary") or top_severe.title
         agenda.description = top_severe.content[:400]
 
-    return schemas.AgendaResponse(
+    response = schemas.AgendaResponse(
         city=agenda.city,
         date=agenda.date,
         headline=agenda.headline,
@@ -1403,6 +1417,8 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
         trust=agenda.trust,
         markdown=agenda.to_markdown(),
     )
+    _AGENDA_CACHE[cfg["name"]] = (response, now + _AGENDA_CACHE_TTL_S)
+    return response
 
 
 @router.post("/api/city/{name}/roadmap", response_model=schemas.RoadmapResponse)

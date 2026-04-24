@@ -51,6 +51,33 @@ CREATE TABLE ok (id INT);
     assert [name for name, _ in out] == ["actual"]
 
 
+def test_comment_only_preamble_is_dropped():
+    """Regression: asyncpg raises 'NoneType has no attribute decode' when
+    the execute() body contains only SQL comments. Preamble must skip it."""
+    sql = """
+-- File-header comment describing what this migration does.
+-- Multiple comment lines, no real SQL.
+
+-- @SEGMENT core
+CREATE TABLE ok (id INT);
+""".strip()
+    out = _split_segments(sql)
+    # Only "core" survives — comment-only preamble is dropped.
+    assert [name for name, _ in out] == ["core"]
+
+
+def test_comment_only_segment_body_is_dropped():
+    sql = """
+-- @SEGMENT only_comments
+-- this segment only explains something, nothing to execute
+
+-- @SEGMENT real
+CREATE TABLE ok (id INT);
+""".strip()
+    out = _split_segments(sql)
+    assert [name for name, _ in out] == ["real"]
+
+
 def test_multiple_markers_keep_order():
     sql = """
 -- @SEGMENT one
