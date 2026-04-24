@@ -23,6 +23,7 @@ Endpoints:
   GET  /api/city/{name}/decisions
   GET  /api/city/{name}/deep_forecast
   GET  /api/city/{name}/tasks
+  GET  /api/city/{name}/eisenhower
   GET  /api/city/{name}/pulse
   GET  /api/city/{name}/happiness_events
   POST /api/admin/collect/{name}
@@ -53,7 +54,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import analyze_market_gaps, compute_pulse, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, recommend_events, reputation_analyze, resource_plan, topics_analyze
+from analytics import analyze_market_gaps, bucket_eisenhower, compute_pulse, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, recommend_events, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -1077,6 +1078,25 @@ async def city_tasks(name: str) -> dict:
         "slug": cfg.get("slug"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/eisenhower")
+async def city_eisenhower(name: str) -> dict:
+    """Raspredelit' `derive_tasks` po 4 kvadrantam Eisenhower-matritsy.
+
+    Srochnoe-vajnoe / ne-srochnoe-vajnoe / srochnoe-ne-vajnoe /
+    ne-srochnoe-ne-vajnoe. Ispol'zuetsia dlia visualizatsii "traboutshoot"
+    na dashboard (otdel'nyi blok nad kartochkoi porucheniy).
+    """
+    cfg = _resolve_city(name)
+    tasks_payload = await city_tasks(cfg["name"])
+    report = bucket_eisenhower(tasks_payload.get("tasks") or [])
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
     }
 
 
