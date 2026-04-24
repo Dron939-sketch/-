@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Админ-панель · Городской Разум</title>
+  <meta name="description" content="Административная панель CityMind — статистика использования, управление." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Городской Разум">
+      <span class="brand-mark">🧠</span>
+      <span class="brand-name">Городской <em>Разум</em></span>
+      <span class="admin-tag">admin</span>
+    </a>
+
+    <div class="topbar-right">
+      <a class="admin-link-back" href="/">← К дашборду</a>
+      <span class="updated" id="updated-at">—</span>
+      <button type="button" class="auth-chip" id="auth-chip">
+        <span class="avatar">👤</span>
+        <span class="auth-label" id="auth-label">—</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="admin-page">
+
+    <div class="admin-unauth" id="admin-unauth" hidden>
+      <h1 class="admin-unauth-title">Требуется вход с ролью admin</h1>
+      <p class="muted">Эта страница доступна только администраторам. Войдите или попросите
+        администратора повысить вашу роль (<code>UPDATE users SET role='admin' WHERE email='…'</code>).</p>
+      <button type="button" class="rm-submit" id="admin-login-btn">Войти</button>
+    </div>
+
+    <div class="admin-content" id="admin-content" hidden>
+
+      <!-- range control + refresh -->
+      <section class="card wide admin-controls">
+        <div class="admin-range">
+          <label class="rm-label" for="range-select">Окно</label>
+          <select id="range-select">
+            <option value="1">Последние 24 часа</option>
+            <option value="7" selected>Последние 7 дней</option>
+            <option value="14">Последние 14 дней</option>
+            <option value="30">Последние 30 дней</option>
+            <option value="90">Последние 90 дней</option>
+          </select>
+        </div>
+        <button type="button" class="rm-submit" id="admin-refresh">Обновить</button>
+      </section>
+
+      <!-- summary chips -->
+      <section class="card wide admin-summary-card">
+        <div class="card-eyebrow">
+          <span>Сводка за окно</span>
+          <span class="muted small" id="admin-summary-meta"></span>
+        </div>
+        <div class="stats-summary" id="admin-summary"></div>
+      </section>
+
+      <!-- daily trend -->
+      <section class="card wide admin-daily-card">
+        <div class="card-eyebrow">
+          <span>Дневной график</span>
+          <span class="muted small">Hits / уникальные пользователи / сессии</span>
+        </div>
+        <div class="daily-chart" id="admin-daily"></div>
+      </section>
+
+      <!-- users + endpoints side by side -->
+      <section class="card wide admin-tables">
+        <div class="admin-tables-grid">
+          <div>
+            <h3 class="section-title">Топ пользователей</h3>
+            <ul class="stats-users-list" id="admin-users"></ul>
+          </div>
+          <div>
+            <h3 class="section-title">Топ разделов</h3>
+            <ul class="stats-endpoints-list" id="admin-endpoints"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- per-user drill-down -->
+      <section class="card wide admin-user-detail" id="admin-user-detail" hidden>
+        <div class="card-eyebrow">
+          <span>Лента пользователя <span id="admin-user-email">—</span></span>
+          <button type="button" class="admin-close-user" id="admin-close-user">✕</button>
+        </div>
+        <ul class="user-timeline" id="admin-user-timeline"></ul>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Городской Разум · админ-панель</span>
+    <span class="muted small">Приватность: IP хранится как /24, тело запросов не пишется.</span>
+  </footer>
+
+  <!-- Auth modal reused from main dashboard -->
+  <div class="modal" id="auth-modal" aria-hidden="true" role="dialog" aria-labelledby="auth-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel auth-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">Доступ в админ-панель</div>
+      <h2 class="modal-title" id="auth-title">Вход</h2>
+      <form class="auth-form" id="login-form">
+        <label class="rm-field">
+          <span class="rm-label">Email</span>
+          <input type="email" id="login-email" required autocomplete="email" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Пароль</span>
+          <input type="password" id="login-password" required minlength="6" autocomplete="current-password" />
+        </label>
+        <button type="submit" class="rm-submit">Войти</button>
+        <div class="auth-error" id="login-error" hidden></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin.js" defer></script>
+</body>
+</html>
