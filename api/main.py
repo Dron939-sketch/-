@@ -68,6 +68,14 @@ def create_app() -> FastAPI:
         if pool is not None:
             await run_migrations(str(_MIGRATION_PATH))
             await seed_cities()
+            # Bootstrap default admin if env vars (or hardcoded default)
+            # provided — идемпотентно, не перезаписывает пароль
+            # существующего пользователя.
+            from auth import seed_default_admin
+            await seed_default_admin(
+                settings.default_admin_email,
+                settings.default_admin_password,
+            )
         scheduler.start()
 
     @app.on_event("shutdown")

@@ -42,6 +42,49 @@ async def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+async def seed_default_admin(email: str, password: str) -> Optional[Dict[str, Any]]:
+    """Idempotent bootstrap: create admin user if email is free, else
+    promote existing user to role=admin. Returns the user dict or None
+    on empty inputs / DB failure.
+
+    Used on FastAPI startup when DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD
+    env vars are set. Safe to run on every boot — never overwrites an
+    existing password.
+    """
+    if not email or not password:
+        return None
+    pool = get_pool()
+    if pool is None:
+        return None
+    email = email.lower().strip()
+    try:
+        async with pool.acquire() as conn:
+            existing = await conn.fetchrow(
+                "SELECT id, email, role FROM users WHERE LOWER(email) = $1",
+                email,
+            )
+            if existing is None:
+                pw_hash = hash_password(password)
+                row = await conn.fetchrow(
+                    "INSERT INTO users (email, full_name, role, password_hash) "
+                    "VALUES ($1, $2, 'admin', $3) RETURNING id, email, role",
+                    email, "Default Admin", pw_hash,
+                )
+                logger.info("seed_default_admin: created %s as admin", email)
+                return dict(row) if row else None
+            # Existing user — just bump to admin if needed; don't reset password.
+            if existing["role"] != "admin":
+                await conn.execute(
+                    "UPDATE users SET role='admin' WHERE id = $1",
+                    existing["id"],
+                )
+                logger.info("seed_default_admin: promoted %s to admin", email)
+            return {"id": existing["id"], "email": existing["email"], "role": "admin"}
+    except Exception:  # noqa: BLE001
+        logger.warning("seed_default_admin failed", exc_info=False)
+        return None
+
+
 async def create_user(
     email: str,
     password: str,
