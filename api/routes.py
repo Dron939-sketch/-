@@ -467,10 +467,7 @@ class SimulateRequest(BaseModel):
 
 
 @router.post("/api/city/{name}/simulate")
-async def city_simulate(
-    name: str, req: SimulateRequest,
-    _user: dict = Depends(require_user),
-) -> dict:
+async def city_simulate(name: str, req: SimulateRequest) -> dict:
     """Butterfly-effect simulator."""
     cfg = _resolve_city(name)
     graph = await _build_city_graph(cfg)
@@ -871,10 +868,7 @@ class NarrativesRequest(BaseModel):
 
 
 @router.post("/api/city/{name}/narratives")
-async def city_narratives(
-    name: str, req: NarrativesRequest,
-    _user: dict = Depends(require_user),
-) -> dict:
+async def city_narratives(name: str, req: NarrativesRequest) -> dict:
     """Generate 3 statement drafts (formal / empathetic / mobilizing) via DeepSeek.
 
     Fully fail-safe — no DeepSeek key / API error / bad JSON all produce a
@@ -1422,10 +1416,7 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
 
 
 @router.post("/api/city/{name}/roadmap", response_model=schemas.RoadmapResponse)
-async def roadmap(
-    name: str, req: schemas.RoadmapRequest,
-    _user: dict = Depends(require_user),
-) -> schemas.RoadmapResponse:
+async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResponse:
     cfg = _resolve_city(name)
     planner = RoadmapPlanner(cfg["name"])
     try:
