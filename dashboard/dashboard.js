@@ -630,7 +630,6 @@ function _updateSimPreview() {
 
 async function runSimulation() {
   if (!currentCity || !currentGraph) return;
-  if (!currentUser) { openAuthModal("login"); return; }
   const sel = document.getElementById("sim-source");
   const slider = document.getElementById("sim-delta");
   const btn = document.getElementById("sim-run");
@@ -1993,7 +1992,6 @@ function renderRoadmap(roadmap) {
 async function submitRoadmap(event) {
   event.preventDefault();
   if (!currentCity) return;
-  if (!currentUser) { openAuthModal("login"); return; }
   const out = document.getElementById("roadmap-output");
   const btn = document.getElementById("rm-run");
   const body = {
@@ -2410,7 +2408,6 @@ function renderNarratives(data) {
 async function submitNarratives(event) {
   event.preventDefault();
   if (!currentCity) return;
-  if (!currentUser) { openAuthModal("login"); return; }
   const out = document.getElementById("narratives-output");
   const btn = document.getElementById("nr-run");
   const body = {
