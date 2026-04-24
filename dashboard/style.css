@@ -1333,6 +1333,52 @@ body {
   .budget-list .amount { grid-column: 1 / -1; text-align: left; }
 }
 
+/* ------------------ TASK MANAGER CARD ------------------ */
+.task-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.task-item {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+}
+.task-item[data-priority="urgent"] { border-left: 3px solid var(--danger); }
+.task-item[data-priority="high"]   { border-left: 3px solid var(--warn); }
+.task-item[data-priority="medium"] { border-left: 3px solid var(--gold); }
+.task-item[data-priority="low"]    { border-left: 3px solid rgba(139, 155, 180, 0.4); }
+
+.task-priority {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-align: center;
+  white-space: nowrap;
+}
+.task-item[data-priority="urgent"] .task-priority { background: rgba(224, 91, 91, 0.15); color: #F4B5B5; }
+.task-item[data-priority="high"]   .task-priority { background: rgba(232, 168, 95, 0.15); color: #F3CDA0; }
+.task-item[data-priority="medium"] .task-priority { background: rgba(212, 175, 55, 0.15); color: var(--gold-bright); }
+.task-item[data-priority="low"]    .task-priority { background: rgba(139, 155, 180, 0.1); color: var(--muted); }
+
+.task-body { min-width: 0; }
+.task-title { font-weight: 600; font-size: 0.95rem; line-height: 1.35; }
+.task-rationale {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-meta { font-size: 0.74rem; color: var(--muted); text-align: right; white-space: nowrap; }
+.task-meta .owner { display: block; color: var(--gold-light); font-weight: 600; }
+.task-empty { color: var(--muted); padding: 14px; text-align: center; font-style: italic; }
+
 /* ------------------ DEEP FORECAST CARD ------------------ */
 .df-grid {
   display: grid;

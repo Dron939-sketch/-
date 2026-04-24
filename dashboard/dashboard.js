@@ -1208,6 +1208,65 @@ function renderBudget(data) {
   }
 }
 
+// -------------------------------------------------- Task manager
+
+const TASK_PRIORITY_LABELS = {
+  urgent: "Срочно",
+  high:   "Высокий",
+  medium: "Средний",
+  low:    "Низкий",
+};
+const TASK_SOURCE_LABELS = {
+  agenda:  "повестка",
+  crisis:  "кризис",
+  roadmap: "roadmap",
+};
+
+function renderTasks(data) {
+  const list = document.getElementById("task-list");
+  const meta = document.getElementById("tasks-meta");
+  if (!list) return;
+
+  const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+  list.innerHTML = "";
+
+  if (!tasks.length) {
+    const li = document.createElement("li");
+    li.className = "task-empty";
+    li.textContent = data?.note || "Активных поручений нет.";
+    list.appendChild(li);
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  tasks.forEach((t) => {
+    const li = document.createElement("li");
+    li.className = "task-item";
+    li.setAttribute("data-priority", t.priority);
+    const source = TASK_SOURCE_LABELS[t.source] || t.source;
+    const deadline = t.deadline_days === 1 ? "24ч" : `${t.deadline_days} дн.`;
+    li.innerHTML = `
+      <span class="task-priority">${TASK_PRIORITY_LABELS[t.priority] || t.priority}</span>
+      <div class="task-body">
+        <div class="task-title">${(t.title || "").replace(/</g, "&lt;")}</div>
+        <div class="task-rationale">${(t.rationale || "").replace(/</g, "&lt;")} · ${source}</div>
+      </div>
+      <div class="task-meta">
+        <span class="owner">${t.suggested_owner || ""}</span>
+        <span>срок ${deadline}</span>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `${tasks.length} поручений · обновлено ${ts}` : "";
+  }
+}
+
 // -------------------------------------------------- Deep forecast
 
 const DF_VECTOR_LABELS = {
@@ -2299,6 +2358,12 @@ async function refresh() {
     renderDeepForecast(df);
   } catch (e) {
     console.warn("deep forecast unavailable", e);
+  }
+  try {
+    const tasks = await fetchJson(`/api/city/${slug}/tasks`);
+    renderTasks(tasks);
+  } catch (e) {
+    console.warn("tasks unavailable", e);
   }
   setUpdated();
 }
