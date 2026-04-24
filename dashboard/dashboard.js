@@ -1280,6 +1280,56 @@ function renderHappinessEvents(data) {
   }
 }
 
+// -------------------------------------------------- Eisenhower matrix
+
+const IKE_ORDER = ["do_first", "schedule", "delegate", "eliminate"];
+
+function renderEisenhower(data) {
+  const grid = document.getElementById("eisenhower-grid");
+  const meta = document.getElementById("eisenhower-meta");
+  if (!grid) return;
+
+  const quads = data?.quadrants || {};
+  grid.innerHTML = "";
+
+  IKE_ORDER.forEach((key) => {
+    const q = quads[key] || { key, label: key, description: "", count: 0, tasks: [] };
+    const box = document.createElement("div");
+    box.className = "ike-quadrant";
+    box.setAttribute("data-key", q.key);
+
+    const tasksHtml = (q.tasks || []).slice(0, 4).map((t) => {
+      const safe = (t.title || "").replace(/</g, "&lt;");
+      return `
+        <li>
+          ${safe}
+          <div class="owner">${t.suggested_owner || ""} · ${t.deadline_days === 1 ? "24ч" : (t.deadline_days + " дн.")}</div>
+        </li>
+      `;
+    }).join("");
+    const overflow = (q.tasks || []).length > 4 ? `<li class="owner">+ ещё ${(q.tasks.length - 4)}</li>` : "";
+
+    box.innerHTML = `
+      <div class="ike-head">
+        <span class="ike-label">${q.label}</span>
+        <span class="ike-count">${q.count}</span>
+      </div>
+      <div class="ike-desc">${q.description || ""}</div>
+      ${q.count === 0
+        ? '<div class="ike-empty">Пусто в этом квадранте.</div>'
+        : `<ul class="ike-tasks">${tasksHtml}${overflow}</ul>`}
+    `;
+    grid.appendChild(box);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `всего ${data?.total || 0} · обновлено ${ts}` : "";
+  }
+}
+
 // -------------------------------------------------- Task manager
 
 const TASK_PRIORITY_LABELS = {
@@ -2643,6 +2693,12 @@ async function refresh() {
     renderTasks(tasks);
   } catch (e) {
     console.warn("tasks unavailable", e);
+  }
+  try {
+    const ike = await fetchJson(`/api/city/${slug}/eisenhower`);
+    renderEisenhower(ike);
+  } catch (e) {
+    console.warn("eisenhower unavailable", e);
   }
   try {
     const events = await fetchJson(`/api/city/${slug}/happiness_events`);

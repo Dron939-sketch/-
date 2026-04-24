@@ -1591,6 +1591,58 @@ body {
 .event-foot { display: flex; gap: 10px; font-size: 0.76rem; color: var(--muted); justify-content: space-between; margin-top: auto; }
 .event-foot .cost { color: var(--gold-light); font-weight: 700; }
 
+/* ------------------ EISENHOWER MATRIX CARD ------------------ */
+.ike-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 12px;
+}
+.ike-quadrant {
+  padding: 14px 16px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 160px;
+}
+.ike-quadrant[data-key="do_first"]  { border-left: 3px solid var(--danger); }
+.ike-quadrant[data-key="schedule"]  { border-left: 3px solid var(--gold); }
+.ike-quadrant[data-key="delegate"]  { border-left: 3px solid var(--warn); }
+.ike-quadrant[data-key="eliminate"] { border-left: 3px solid rgba(139, 155, 180, 0.5); }
+
+.ike-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px;
+}
+.ike-label { font-weight: 700; font-size: 0.98rem; }
+.ike-count {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  color: var(--gold-light);
+}
+.ike-desc { color: var(--muted); font-size: 0.8rem; }
+
+.ike-tasks { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font-size: 0.85rem; }
+.ike-tasks li {
+  padding: 4px 0;
+  border-top: 1px dashed rgba(139, 155, 180, 0.12);
+  line-height: 1.35;
+}
+.ike-tasks li:first-child { border-top: none; }
+.ike-tasks .owner { color: var(--muted); font-size: 0.76rem; }
+
+.ike-empty { color: var(--muted); font-style: italic; font-size: 0.82rem; padding: 6px 0; }
+
+@media (max-width: 720px) {
+  .ike-grid { grid-template-columns: 1fr; }
+}
+
 /* ------------------ TASK MANAGER CARD ------------------ */
 .task-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .task-item {
