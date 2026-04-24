@@ -222,6 +222,29 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id);
 CREATE INDEX IF NOT EXISTS user_sessions_expires_idx ON user_sessions (expires_at);
 
+-- @SEGMENT usage_events_table
+-- Usage analytics — "кто пользовался, что смотрел, сколько времени".
+-- IP is truncated to /24 before store (ФЗ-152), no request body saved.
+-- user_id is nullable: anonymous viewers also count towards endpoint
+-- popularity stats. created_at carries nanosecond precision so burst
+-- requests stay distinguishable.
+CREATE TABLE IF NOT EXISTS usage_events (
+    id                  BIGSERIAL PRIMARY KEY,
+    user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    session_token_hash  TEXT,
+    path                TEXT NOT NULL,
+    method              TEXT NOT NULL,
+    status              SMALLINT NOT NULL,
+    response_time_ms    INTEGER,
+    ip_prefix           TEXT,
+    user_agent          TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS usage_events_user_idx    ON usage_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS usage_events_path_idx    ON usage_events (path, created_at DESC);
+CREATE INDEX IF NOT EXISTS usage_events_created_idx ON usage_events (created_at DESC);
+
 -- Retention policies removed: on TimescaleDB Apache edition
 -- add_retention_policy raises FeatureNotSupportedError (Enterprise-only)
 -- before the DO block's exception handler can see it. We don't need

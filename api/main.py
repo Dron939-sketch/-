@@ -24,8 +24,10 @@ from config.settings import settings
 from db import init_pool, close_pool
 from db.seed import run_migrations, seed_cities
 
+from .admin_stats_routes import router as admin_stats_router
 from .auth_routes import router as auth_router
 from .routes import router
+from .usage_middleware import UsageLoggingMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,13 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Usage-analytics middleware runs AFTER endpoints so it can capture
+    # response status + elapsed time. Registered here so it wraps every
+    # route the app serves (including auth). Skips /health prefixes inside.
+    app.add_middleware(UsageLoggingMiddleware)
+
     app.include_router(auth_router)
+    app.include_router(admin_stats_router)
     app.include_router(router)
 
     @app.on_event("startup")
