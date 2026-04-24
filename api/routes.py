@@ -23,6 +23,7 @@ Endpoints:
   GET  /api/city/{name}/decisions
   GET  /api/city/{name}/deep_forecast
   GET  /api/city/{name}/tasks
+  GET  /api/city/{name}/pulse
   GET  /api/city/{name}/happiness_events
   POST /api/admin/collect/{name}
   GET  /api/city/{name}/market_gaps
@@ -52,7 +53,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import analyze_market_gaps, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, recommend_events, reputation_analyze, resource_plan, topics_analyze
+from analytics import analyze_market_gaps, compute_pulse, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, recommend_events, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -957,6 +958,67 @@ async def admin_collect_now(
         "slug": cfg.get("slug"),
         "rows_written": int(written),
         "triggered_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
+@router.get("/api/city/{name}/pulse")
+async def city_pulse(name: str) -> dict:
+    """Композитный индекс 0..100 «пульса города».
+
+    Собирает четыре независимых подфактора через existing-endpoint'ы:
+      - latest_metrics → metrics_health
+      - city_crisis.status → crisis_calm
+      - 24h negative share via news_negative_count/news_total_count → media_calm
+      - appeals_count(24h) → appeals_relief
+    И передаёт их в pure `analytics.compute_pulse`. Каждый сигнал fail-safe —
+    missing → нейтрализуется в 50 на своём факторе.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    metrics: Optional[Dict[str, float]] = None
+    crisis_status: Optional[str] = None
+    negative_share: Optional[float] = None
+    appeals_24h_val: Optional[int] = None
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            vals: Dict[str, float] = {}
+            for col in ("sb", "tf", "ub", "chv"):
+                v = metric_row.get(col)
+                if v is not None:
+                    vals[col] = float(v)
+            if vals:
+                metrics = vals
+
+        total = await news_total_count(city_id, hours=24)
+        if total > 0:
+            neg = await news_negative_count(city_id, hours=24)
+            negative_share = neg / total
+
+        try:
+            appeals_24h_val = await appeals_count(city_id, hours=24)
+        except Exception:  # noqa: BLE001
+            appeals_24h_val = None
+
+    try:
+        crisis = await city_crisis(cfg["name"])
+        crisis_status = crisis.get("status")
+    except Exception:  # noqa: BLE001
+        logger.warning("pulse: crisis unavailable", exc_info=False)
+
+    report = compute_pulse(
+        metrics=metrics,
+        crisis_status=crisis_status,
+        negative_share=negative_share,
+        appeals_24h=appeals_24h_val,
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
     }
 
 

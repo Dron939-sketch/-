@@ -1980,6 +1980,43 @@ async function submitRoadmap(event) {
   }
 }
 
+// -------------------------------------------------- City pulse
+
+function renderCityPulse(data) {
+  const numberEl = document.getElementById("pulse-number");
+  const valueEl = document.getElementById("pulse-value");
+  const labelEl = document.getElementById("pulse-label");
+  const factorsEl = document.getElementById("pulse-factors");
+  const meta = document.getElementById("pulse-meta");
+  if (!numberEl || !factorsEl) return;
+
+  const level = data?.level || "elevated";
+  numberEl.setAttribute("data-level", level);
+  valueEl.textContent = data?.overall != null ? Math.round(data.overall) : "—";
+  labelEl.textContent = data?.label || "—";
+
+  factorsEl.innerHTML = "";
+  (data?.factors || []).forEach((f) => {
+    const pct = Math.max(0, Math.min(100, Math.round(f.value || 0)));
+    const tier = pct < 40 ? "low" : (pct < 65 ? "mid" : "high");
+    const row = document.createElement("div");
+    row.className = `pulse-factor ${tier}`;
+    row.innerHTML = `
+      <span class="lbl" title="${f.description || ""}">${f.label}</span>
+      <span class="bar"><span class="bar-fill" style="width:${pct}%"></span></span>
+      <span class="val">${pct}</span>
+    `;
+    factorsEl.appendChild(row);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    meta.textContent = ts ? `обновлено ${ts}` : "";
+  }
+}
+
 // -------------------------------------------------- Auth (login / logout)
 
 let currentUser = null;
@@ -2485,6 +2522,12 @@ let refreshTimer = null;
 async function refresh() {
   if (!currentCity) return;
   const slug = currentCity.slug;
+  try {
+    const pulse = await fetchJson(`/api/city/${slug}/pulse`);
+    renderCityPulse(pulse);
+  } catch (e) {
+    console.warn("pulse unavailable", e);
+  }
   try {
     const metrics = await fetchJson(`/api/city/${slug}/all_metrics`);
     renderWeather(metrics.weather);

@@ -11,6 +11,7 @@ from .investment import Factor, InvestmentProfile, compute as investment_compute
 from .knowledge import Case, Recommendation, library_size, recommend as recommend_cases
 from .loops import analyze_loops, metrics_to_vectors
 from .market_gaps import GapReport, Niche, analyze as analyze_market_gaps
+from .pulse import PulseFactor, PulseReport, compute as compute_pulse
 from .model import build_graph
 from .reputation import AuthorStat, ReputationReport, ViralPost, analyze as reputation_analyze
 from .resources import ResourcePlan, VectorAllocation, plan as resource_plan
@@ -58,6 +59,9 @@ __all__ = [
     "analyze_market_gaps",
     "GapReport",
     "Niche",
+    "compute_pulse",
+    "PulseReport",
+    "PulseFactor",
     "metrics_to_vectors",
     "reputation_analyze",
     "AuthorStat",
