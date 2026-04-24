@@ -16,6 +16,7 @@ from .store import (
     get_user_by_token,
     purge_expired_sessions,
     revoke_session,
+    seed_default_admin,
 )
 
 __all__ = [
