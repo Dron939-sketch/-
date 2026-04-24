@@ -18,6 +18,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from config.settings import settings
@@ -77,6 +78,17 @@ def create_app() -> FastAPI:
         await close_pool()
 
     dashboard_dir = Path(__file__).resolve().parent.parent / "dashboard"
+
+    # /favicon.ico → dashboard/favicon.svg (browsers запрашивают .ico по умолчанию).
+    # Mount route explicitly так что static files fallback не перехватит его
+    # с 404 до того, как достигнет ICO-файла (которого у нас нет).
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> Response:
+        svg = dashboard_dir / "favicon.svg"
+        if svg.exists():
+            return FileResponse(str(svg), media_type="image/svg+xml")
+        return Response(status_code=204)
+
     if dashboard_dir.exists():
         app.mount("/", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
     else:

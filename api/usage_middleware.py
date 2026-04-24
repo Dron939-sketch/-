@@ -38,6 +38,7 @@ _SKIP_PREFIXES = (
     "/api/health",        # root health + /api/health/system
     "/style.css", "/dashboard.js",
     "/favicon", "/static",
+    "/favicon.ico", "/favicon.svg",
 )
 SESSION_COOKIE_NAME = "citymind_session"
 
