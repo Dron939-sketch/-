@@ -27,6 +27,7 @@ Endpoints:
   GET  /api/city/{name}/pulse
   GET  /api/city/{name}/happiness_events
   POST /api/admin/collect/{name}
+  POST /api/admin/collect_all
   GET  /api/city/{name}/market_gaps
   GET  /api/city/{name}/cases
   GET  /api/benchmark
@@ -959,6 +960,35 @@ async def admin_collect_now(
         "slug": cfg.get("slug"),
         "rows_written": int(written),
         "triggered_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
+@router.post("/api/admin/collect_all")
+async def admin_collect_all(
+    _user: dict = Depends(require_role("admin", "editor")),
+) -> dict:
+    """Sequentially collect news for all 6 pilot cities.
+
+    Useful for warming the DB — кнопка «заполнить всё что есть сейчас».
+    Returns per-city write counts. Errors on one city don't stop others.
+    Behind require_role because it's expensive (hits DeepSeek N times).
+    """
+    from tasks.scheduler import collect_city  # local import to avoid cycle
+    results: List[Dict[str, Any]] = []
+    total_written = 0
+    for city_name in CITIES:
+        try:
+            written = await collect_city(city_name)
+            total_written += int(written)
+            results.append({"city": city_name, "rows_written": int(written), "status": "ok"})
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("admin_collect_all failed for %s", city_name)
+            results.append({"city": city_name, "rows_written": 0, "status": "error",
+                            "detail": str(exc)[:200]})
+    return {
+        "triggered_at": datetime.now(tz=timezone.utc).isoformat(),
+        "cities": results,
+        "total_rows_written": total_written,
     }
 
 
