@@ -630,6 +630,7 @@ function _updateSimPreview() {
 
 async function runSimulation() {
   if (!currentCity || !currentGraph) return;
+  if (!currentUser) { openAuthModal("login"); return; }
   const sel = document.getElementById("sim-source");
   const slider = document.getElementById("sim-delta");
   const btn = document.getElementById("sim-run");
@@ -648,9 +649,11 @@ async function runSimulation() {
   try {
     const res = await fetch(`/api/city/${currentCity.slug}/simulate`, {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ source_node_id, delta }),
     });
+    if (res.status === 401) { openAuthModal("login"); throw new Error("требуется вход"); }
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const data = await res.json();
     renderSimulationResults(data, source_node_id, delta);
@@ -1940,6 +1943,7 @@ function renderRoadmap(roadmap) {
 async function submitRoadmap(event) {
   event.preventDefault();
   if (!currentCity) return;
+  if (!currentUser) { openAuthModal("login"); return; }
   const out = document.getElementById("roadmap-output");
   const btn = document.getElementById("rm-run");
   const body = {
@@ -1959,9 +1963,11 @@ async function submitRoadmap(event) {
   try {
     const res = await fetch(`/api/city/${currentCity.slug}/roadmap`, {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
     });
+    if (res.status === 401) { openAuthModal("login"); throw new Error("требуется вход"); }
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const data = await res.json();
     renderRoadmap(data.roadmap || data);
@@ -1972,6 +1978,164 @@ async function submitRoadmap(event) {
     btn.disabled = false;
     btn.textContent = prev;
   }
+}
+
+// -------------------------------------------------- Auth (login / logout)
+
+let currentUser = null;
+
+async function fetchAuthState() {
+  try {
+    const res = await fetch("/api/auth/me", { credentials: "same-origin" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.authenticated ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderAuthChip() {
+  const chip = document.getElementById("auth-chip");
+  const label = document.getElementById("auth-label");
+  if (!chip || !label) return;
+  if (currentUser) {
+    chip.classList.add("logged-in");
+    const display = currentUser.full_name || currentUser.email || "user";
+    label.textContent = display.length > 18 ? display.slice(0, 16) + "…" : display;
+    chip.title = `${currentUser.email} · роль: ${currentUser.role || "viewer"} · клик — выйти`;
+  } else {
+    chip.classList.remove("logged-in");
+    label.textContent = "Войти";
+    chip.title = "Вход / профиль";
+  }
+}
+
+async function refreshAuth() {
+  currentUser = await fetchAuthState();
+  renderAuthChip();
+  return currentUser;
+}
+
+async function doLogin(email, password) {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || `${res.status} ${res.statusText}`);
+  }
+  currentUser = data;
+  renderAuthChip();
+  return data;
+}
+
+async function doRegister(payload) {
+  const res = await fetch("/api/auth/register", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || `${res.status} ${res.statusText}`);
+  }
+  await refreshAuth();
+  return data;
+}
+
+async function doLogout() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  } catch (e) { /* ignore */ }
+  currentUser = null;
+  renderAuthChip();
+}
+
+function openAuthModal(tab) {
+  openModal("auth-modal");
+  switchAuthTab(tab || "login");
+}
+
+function switchAuthTab(tab) {
+  document.querySelectorAll(".auth-tab").forEach((b) => {
+    b.classList.toggle("active", b.getAttribute("data-tab") === tab);
+  });
+  const loginForm = document.getElementById("login-form");
+  const regForm = document.getElementById("register-form");
+  if (loginForm) loginForm.hidden = tab !== "login";
+  if (regForm)   regForm.hidden = tab !== "register";
+  document.getElementById("auth-title").textContent =
+    tab === "register" ? "Регистрация" : "Вход";
+}
+
+function initAuthForms() {
+  document.querySelectorAll(".auth-tab").forEach((b) => {
+    b.addEventListener("click", () => switchAuthTab(b.getAttribute("data-tab")));
+  });
+
+  const loginForm = document.getElementById("login-form");
+  const loginError = document.getElementById("login-error");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      loginError.hidden = true;
+      try {
+        await doLogin(
+          document.getElementById("login-email").value,
+          document.getElementById("login-password").value,
+        );
+        closeModal("auth-modal");
+      } catch (err) {
+        loginError.textContent = err.message || "Ошибка входа";
+        loginError.hidden = false;
+      }
+    });
+  }
+
+  const regForm = document.getElementById("register-form");
+  const regError = document.getElementById("register-error");
+  if (regForm) {
+    regForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      regError.hidden = true;
+      try {
+        await doRegister({
+          email: document.getElementById("register-email").value,
+          password: document.getElementById("register-password").value,
+          full_name: document.getElementById("register-name").value || null,
+          registration_code: document.getElementById("register-code").value,
+          role: "viewer",
+        });
+        closeModal("auth-modal");
+      } catch (err) {
+        regError.textContent = err.message || "Ошибка регистрации";
+        regError.hidden = false;
+      }
+    });
+  }
+
+  const chip = document.getElementById("auth-chip");
+  if (chip) {
+    chip.addEventListener("click", () => {
+      if (currentUser) {
+        // Logged in → confirm logout.
+        if (confirm(`Выйти из аккаунта ${currentUser.email}?`)) doLogout();
+      } else {
+        openAuthModal("login");
+      }
+    });
+  }
+}
+
+// Helper for protected actions: checks auth before firing the provided action.
+async function requireAuth(action) {
+  if (currentUser) return action();
+  openAuthModal("login");
 }
 
 // -------------------------------------------------- System health indicator
@@ -2147,6 +2311,7 @@ function renderNarratives(data) {
 async function submitNarratives(event) {
   event.preventDefault();
   if (!currentCity) return;
+  if (!currentUser) { openAuthModal("login"); return; }
   const out = document.getElementById("narratives-output");
   const btn = document.getElementById("nr-run");
   const body = {
@@ -2163,9 +2328,11 @@ async function submitNarratives(event) {
   try {
     const res = await fetch(`/api/city/${currentCity.slug}/narratives`, {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
     });
+    if (res.status === 401) { openAuthModal("login"); throw new Error("требуется вход"); }
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const data = await res.json();
     renderNarratives(data);
@@ -2548,6 +2715,9 @@ async function init() {
   if (helpBtn) {
     helpBtn.addEventListener("click", () => openModal("help-modal"));
   }
+
+  initAuthForms();
+  refreshAuth();
 
   refreshSystemHealth();
   setInterval(refreshSystemHealth, HEALTH_REFRESH_MS);
