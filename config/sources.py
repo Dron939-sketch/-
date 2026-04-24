@@ -51,6 +51,10 @@ KOLOMNA_SOURCES = CitySources(
         Source("telegram", "Культура Коломна", "kolomna_culture", "culture", "P2"),
         Source("telegram", "Спорт Коломна", "kolomna_sport", "sport", "P2"),
         Source("telegram", "Бизнес Коломна", "kolomna_business", "business", "P2"),
+        Source("telegram", "Коломна-Инфо", "kolomna_info", "news", "P1"),
+        Source("telegram", "Коломна Авто", "kolomna_auto", "transport", "P1"),
+        Source("telegram", "Коломна ДТП", "kolomna_dtp", "incidents", "P0"),
+        Source("telegram", "Коломенский кремль", "kolomna_kreml", "culture", "P2"),
     ],
     vk=[
         Source("vk", "Типичная Коломна", "typical_kolomna", "complaints", "P0"),
@@ -58,9 +62,70 @@ KOLOMNA_SOURCES = CitySources(
         Source("vk", "Администрация Коломны", "kolomna_adm", "official", "P0"),
         Source("vk", "Коломна 360", "kolomna360", "city", "P1"),
         Source("vk", "Коломна Онлайн", "kolomna_online", "news", "P1"),
+        # --- автомобильная повестка ---
+        Source("vk", "Автомобилисты Коломны", "auto_kolomna", "transport", "P0"),
+        Source("vk", "Дороги Коломны", "kolomna_roads", "transport", "P1"),
+        Source("vk", "Коломенские пробки", "kolomna_probki", "transport", "P1"),
+        # --- общественный транспорт ---
+        Source("vk", "Коломенский троллейбус", "kolomna_trolley", "transport", "P2"),
+        # --- ЖКХ и благоустройство ---
+        Source("vk", "ЖКХ Коломна", "kolomna_zhkh_vk", "utilities", "P1"),
+        Source("vk", "Коломна благоустройство", "kolomna_blag", "quality", "P2"),
+        # --- тематические ---
+        Source("vk", "МФЦ Коломны", "kolomna_mfc", "official", "P2"),
+        Source("vk", "Коломна Бизнес", "kolomna_business_vk", "business", "P2"),
+        Source("vk", "Мамы Коломны", "kolomna_mamas", "social", "P1"),
+        Source("vk", "Коломна Спорт", "kolomna_sport_vk", "sport", "P2"),
     ],
     news_rss=[
+        # Генерический поиск по слову «Коломна»
         _google_news_rss("Коломна", "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0"),
+        # Тематические срезы для более точной категоризации
+        _google_news_rss(
+            "Коломна ДТП",
+            "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0+%D0%94%D0%A2%D0%9F",
+        ),
+        _google_news_rss(
+            "Коломна ЖКХ",
+            "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0+%D0%96%D0%9A%D0%A5",
+        ),
+        _google_news_rss(
+            "Коломна транспорт",
+            "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0+%D1%82%D1%80%D0%B0%D0%BD%D1%81%D0%BF%D0%BE%D1%80%D1%82",
+        ),
+        _google_news_rss(
+            "Коломна культура",
+            "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0+%D0%BA%D1%83%D0%BB%D1%8C%D1%82%D1%83%D1%80%D0%B0",
+        ),
+        # Яндекс.Новости через Google News прокси-запрос
+        Source(
+            kind="news_rss",
+            name="in-kolomna.ru (RSS)",
+            handle="https://in-kolomna.ru/rss.xml",
+            category="news", priority="P0",
+            notes="Главное городское новостное издание.",
+        ),
+        Source(
+            kind="news_rss",
+            name="kolomnagrad.ru (RSS)",
+            handle="https://kolomnagrad.ru/rss",
+            category="news", priority="P1",
+            notes="Локальный городской портал.",
+        ),
+        Source(
+            kind="news_rss",
+            name="360tv.ru — Коломна",
+            handle="https://360tv.ru/kolomna/rss/",
+            category="news", priority="P1",
+            notes="Областное СМИ, раздел «Коломна».",
+        ),
+        Source(
+            kind="news_rss",
+            name="Подмосковье сегодня — Коломна",
+            handle="https://mosregtoday.ru/rss/tag/kolomna/",
+            category="news", priority="P2",
+            notes="Официальное областное СМИ.",
+        ),
     ],
     gosuslugi=[
         Source(
@@ -70,6 +135,14 @@ KOLOMNA_SOURCES = CitySources(
             "appeals",
             "P2",
             notes="Нужен ключ API; пока используется stub-коллектор.",
+        ),
+        Source(
+            "gosuslugi",
+            "ПОС — Платформа обратной связи",
+            "kolomna_pos",
+            "appeals",
+            "P1",
+            notes="Портал pos.gosuslugi.ru; требует OAuth интеграции.",
         ),
     ],
 )

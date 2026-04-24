@@ -27,6 +27,7 @@
     </div>
 
     <div class="topbar-right">
+      <button type="button" class="help-button" id="help-button" aria-label="Справка о приложении" title="Справка">?</button>
       <span class="updated" id="updated-at">—</span>
       <div class="system-health" id="system-health">
         <button type="button" class="sh-button" id="sh-button" aria-haspopup="true" aria-expanded="false" title="Состояние системы">
@@ -476,6 +477,74 @@
       <div class="cause-root" id="root-cause-root" hidden>
         <div class="section-title">Корень проблемы</div>
         <div class="cause-root-body" id="root-cause-root-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help / reference modal -->
+  <div class="modal" id="help-modal" aria-hidden="true" role="dialog" aria-labelledby="help-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel help-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">О приложении</div>
+      <h2 class="modal-title" id="help-title">Городской Разум</h2>
+      <p class="modal-description">
+        Платформа прогнозного управления городом на основе 9-элементной модели Мейстера.
+        Читает потоки новостей и обращений, объясняет «почему», прогнозирует «что будет»,
+        предлагает «что сделать».
+      </p>
+      <div class="help-section">
+        <h3 class="section-title">Мониторинг</h3>
+        <ul class="help-list">
+          <li><strong>Состояние города</strong> — красная полоса сверху = критичные сигналы, жёлтая = наблюдение.</li>
+          <li><strong>Ключевые показатели СБ / ТФ / УБ / ЧВ</strong> — 4 вектора Мейстера на шкале 1–6. Клик по плитке → разбор «откуда эта цифра».</li>
+          <li><strong>Погода + индекс комфорта</strong>, <strong>Доверие + Счастье</strong> — социальный срез.</li>
+          <li><strong>Активные петли</strong> — замкнутые причинно-следственные цепочки, подлежащие «разрыву».</li>
+        </ul>
+      </div>
+      <div class="help-section">
+        <h3 class="section-title">Аналитика</h3>
+        <ul class="help-list">
+          <li><strong>Модель Мейстера</strong> — 9 элементов + связи (Cytoscape). Клик на узле → легенда + кнопка «Почему?».</li>
+          <li><strong>Что если… (симулятор бабочки)</strong> — поверните ручку, получите каскад по графу.</li>
+          <li><strong>Репутация в медиа</strong> — топ-критики, вирусные посты, тренд негатива за 7 дней.</li>
+          <li><strong>Топики</strong> — что обсуждают прямо сейчас, тренд vs прошлая неделя.</li>
+          <li><strong>Бенчмарк 6 городов</strong> — ранг вашего города на фоне пилотов.</li>
+        </ul>
+      </div>
+      <div class="help-section">
+        <h3 class="section-title">Прогноз и планирование</h3>
+        <ul class="help-list">
+          <li><strong>Прогноз 3 мес.</strong> — алгоритм Мейстера, краткая сводка.</li>
+          <li><strong>Прогноз 7/30/90 дней с интервалом</strong> — Holt-метод + доверительная полоса.</li>
+          <li><strong>Форсайт 5 лет</strong> — 3 сценария + 10 мегатрендов.</li>
+          <li><strong>Бюджет</strong> — рекомендованное распределение по векторам.</li>
+          <li><strong>Дорожная карта</strong> — квартальные вехи для закрытия разрыва по вектору.</li>
+        </ul>
+      </div>
+      <div class="help-section">
+        <h3 class="section-title">Действия</h3>
+        <ul class="help-list">
+          <li><strong>Поручения</strong> — приоритизированный чек-лист, собранный из повестки + кризисов.</li>
+          <li><strong>Симулятор решений</strong> — 10 типовых ходов, 3 сценария, стоимость, риски.</li>
+          <li><strong>Кейсы-аналоги</strong> — 15 лучших практик из городов РФ, подобранных под ваши слабые векторы.</li>
+          <li><strong>Рыночные ниши</strong> — куда звать бизнес на основе жалоб горожан.</li>
+          <li><strong>Готовые формулировки</strong> — AI даёт 3 варианта заявления: формальный / эмпатичный / мобилизующий.</li>
+        </ul>
+      </div>
+      <div class="help-section">
+        <h3 class="section-title">Как использовать</h3>
+        <ul class="help-list">
+          <li><strong>Переключение города</strong> — кнопка с эмодзи 🏰 в шапке.</li>
+          <li><strong>Автообновление</strong> — каждые 10 минут; состояние системы — каждые 60 сек.</li>
+          <li><strong>Состояние системы</strong> — кнопка справа в шапке: БД / Redis / DeepSeek / планировщик.</li>
+          <li><strong>Справка</strong> — эта модалка, кнопка «?» слева от часов.</li>
+        </ul>
+      </div>
+      <div class="help-section help-tech muted small">
+        Под капотом: FastAPI + asyncpg + DeepSeek AI. Данные собираются из Telegram, ВКонтакте,
+        RSS и обогащаются LLM. Источники документированы в <code>docs/NEWS_SOURCES.md</code>.
+        Весь код открыт, без sklearn / tensorflow — адаптеры лёгкие, прозрачные, тестируемые.
       </div>
     </div>
   </div>

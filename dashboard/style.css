@@ -86,6 +86,70 @@ body {
 }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 0.85rem; }
 
+/* ------------------ HELP BUTTON ------------------ */
+.help-button {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: rgba(197, 160, 89, 0.12);
+  border: 1px solid rgba(197, 160, 89, 0.3);
+  color: var(--gold-light);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.help-button:hover {
+  background: rgba(212, 175, 55, 0.25);
+  color: var(--gold-bright);
+  transform: scale(1.08);
+}
+
+.help-panel {
+  max-width: 620px;
+}
+.help-section {
+  margin-top: 14px;
+}
+.help-section .section-title {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+.help-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.help-list li {
+  padding: 6px 0 6px 20px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  position: relative;
+  color: var(--text);
+  border-top: 1px dashed rgba(139, 155, 180, 0.1);
+}
+.help-list li:first-child { border-top: none; }
+.help-list li::before {
+  content: "›";
+  position: absolute;
+  left: 4px;
+  color: var(--gold);
+  font-weight: 700;
+}
+.help-list strong { color: var(--gold-light); font-weight: 700; }
+.help-tech { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(197, 160, 89, 0.08); line-height: 1.5; }
+.help-tech code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(10, 22, 40, 0.6);
+  color: var(--gold-light);
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
 /* ------------------ SYSTEM HEALTH INDICATOR ------------------ */
 .system-health { position: relative; }
 .sh-button {

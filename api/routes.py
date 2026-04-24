@@ -23,6 +23,7 @@ Endpoints:
   GET  /api/city/{name}/decisions
   GET  /api/city/{name}/deep_forecast
   GET  /api/city/{name}/tasks
+  POST /api/admin/collect/{name}
   GET  /api/city/{name}/market_gaps
   GET  /api/city/{name}/cases
   GET  /api/benchmark
@@ -920,6 +921,30 @@ async def city_topics(name: str, days: int = 7) -> dict:
         "window_days": days,
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
+    }
+
+
+@router.post("/api/admin/collect/{name}")
+async def admin_collect_now(name: str) -> dict:
+    """Trigger a one-off collector run for a city and persist into DB.
+
+    Reuses `tasks.scheduler.collect_city` so the behaviour is identical
+    to the scheduled 10-minute tick — real sources (news RSS + appeals +
+    AI pulse) hit DeepSeek and then upsert into the news table. Response
+    echoes the number of rows written so an admin can verify immediately.
+    """
+    cfg = _resolve_city(name)
+    from tasks.scheduler import collect_city  # local import to avoid cycle
+    try:
+        written = await collect_city(cfg["name"])
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("admin collect failed for %s", cfg["name"])
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "rows_written": int(written),
+        "triggered_at": datetime.now(tz=timezone.utc).isoformat(),
     }
 
 
