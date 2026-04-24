@@ -63,6 +63,21 @@
       <ul class="crisis-alerts" id="crisis-alerts" hidden></ul>
     </section>
 
+    <!-- row 0.5: city pulse — one-number temperature (0..100) -->
+    <section class="card wide city-pulse-card">
+      <div class="card-eyebrow">
+        <span>Пульс города — единый индекс 0–100</span>
+        <span class="muted small" id="pulse-meta"></span>
+      </div>
+      <div class="pulse-layout">
+        <div class="pulse-number" id="pulse-number">
+          <div class="pulse-value" id="pulse-value">—</div>
+          <div class="pulse-label" id="pulse-label">—</div>
+        </div>
+        <div class="pulse-factors" id="pulse-factors"></div>
+      </div>
+    </section>
+
     <!-- row 1: greeting + weather -->
     <section class="card greeting">
       <div class="greeting-eyebrow" id="today-date">—</div>

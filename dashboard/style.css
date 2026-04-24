@@ -1064,6 +1064,78 @@ body {
   .sim-result-row .depth { grid-column: 1 / -1; }
 }
 
+/* ------------------ CITY PULSE CARD ------------------ */
+.pulse-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 28px;
+  align-items: center;
+}
+.pulse-number {
+  padding: 14px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 50%, rgba(26, 58, 92, 0.6), rgba(13, 33, 53, 0.85));
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  text-align: center;
+  position: relative;
+}
+.pulse-number[data-level="calm"]     { border-color: rgba(111, 207, 151, 0.5); background: radial-gradient(circle at 50% 50%, rgba(111, 207, 151, 0.1), rgba(13, 33, 53, 0.85)); }
+.pulse-number[data-level="normal"]   { border-color: rgba(212, 175, 55, 0.35); }
+.pulse-number[data-level="elevated"] { border-color: rgba(232, 168, 95, 0.45); background: radial-gradient(circle at 50% 50%, rgba(232, 168, 95, 0.08), rgba(13, 33, 53, 0.85)); }
+.pulse-number[data-level="high"]     { border-color: rgba(232, 168, 95, 0.55); background: radial-gradient(circle at 50% 50%, rgba(232, 168, 95, 0.12), rgba(13, 33, 53, 0.85)); }
+.pulse-number[data-level="critical"] { border-color: rgba(224, 91, 91, 0.55); background: radial-gradient(circle at 50% 50%, rgba(224, 91, 91, 0.15), rgba(13, 33, 53, 0.85)); animation: crisis-pulse 2s ease-in-out infinite; }
+.pulse-value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 900;
+  font-size: 4.2rem;
+  line-height: 1;
+  color: var(--gold-light);
+  text-shadow: 0 0 18px rgba(212, 175, 55, 0.3);
+  font-variant-numeric: tabular-nums;
+}
+.pulse-number[data-level="calm"]     .pulse-value { color: var(--good); text-shadow: 0 0 18px rgba(111, 207, 151, 0.4); }
+.pulse-number[data-level="high"]     .pulse-value,
+.pulse-number[data-level="elevated"] .pulse-value { color: var(--warn); text-shadow: 0 0 18px rgba(232, 168, 95, 0.35); }
+.pulse-number[data-level="critical"] .pulse-value { color: var(--danger); text-shadow: 0 0 20px rgba(224, 91, 91, 0.4); }
+.pulse-label {
+  margin-top: 6px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+}
+
+.pulse-factors { display: grid; gap: 8px; }
+.pulse-factor {
+  display: grid;
+  grid-template-columns: 170px 1fr 48px;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.88rem;
+}
+.pulse-factor .lbl { color: var(--muted); font-weight: 500; }
+.pulse-factor .bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(10, 22, 40, 0.7);
+  overflow: hidden;
+}
+.pulse-factor .bar-fill {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  border-radius: 999px;
+}
+.pulse-factor.low  .bar-fill { background: linear-gradient(90deg, var(--danger), #F08A8A); }
+.pulse-factor.mid  .bar-fill { background: linear-gradient(90deg, var(--warn), var(--gold)); }
+.pulse-factor.high .bar-fill { background: linear-gradient(90deg, var(--gold), var(--good)); }
+.pulse-factor .val { text-align: right; color: var(--gold-light); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .pulse-layout { grid-template-columns: 1fr; }
+  .pulse-number { max-width: 320px; margin: 0 auto; }
+}
+
 /* ------------------ CRISIS EARLY-WARNING STRIP ------------------ */
 .crisis-strip {
   padding: 16px 22px;
