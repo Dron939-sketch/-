@@ -1397,6 +1397,49 @@ body {
   .budget-list .amount { grid-column: 1 / -1; text-align: left; }
 }
 
+/* ------------------ HAPPINESS EVENTS CARD ------------------ */
+.events-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.event-card {
+  padding: 14px 16px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 10px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.event-card[data-season="winter"] { border-left: 3px solid var(--ice); }
+.event-card[data-season="spring"] { border-left: 3px solid var(--good); }
+.event-card[data-season="summer"] { border-left: 3px solid var(--gold); }
+.event-card[data-season="autumn"] { border-left: 3px solid var(--warn); }
+.event-card[data-season="year_round"] { border-left: 3px solid rgba(139, 155, 180, 0.5); }
+
+.event-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px;
+}
+.event-name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
+.event-season-chip {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  color: var(--gold-light);
+  white-space: nowrap;
+}
+.event-desc { color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
+.event-impact { display: flex; gap: 12px; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.event-impact strong { color: var(--gold-light); font-weight: 700; }
+.event-foot { display: flex; gap: 10px; font-size: 0.76rem; color: var(--muted); justify-content: space-between; margin-top: auto; }
+.event-foot .cost { color: var(--gold-light); font-weight: 700; }
+
 /* ------------------ TASK MANAGER CARD ------------------ */
 .task-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .task-item {

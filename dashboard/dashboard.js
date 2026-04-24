@@ -1208,6 +1208,75 @@ function renderBudget(data) {
   }
 }
 
+// -------------------------------------------------- Happiness events
+
+const EVENT_SEASON_LABELS = {
+  winter:     "Зима ❄️",
+  spring:     "Весна 🌱",
+  summer:     "Лето ☀️",
+  autumn:     "Осень 🍂",
+  year_round: "Круглый год",
+};
+const EVENT_AUDIENCE_LABELS = {
+  all: "все", family: "семьи", youth: "молодёжь",
+  adults: "взрослые", seniors: "пожилые", tourists: "туристы",
+};
+
+function renderHappinessEvents(data) {
+  const list = document.getElementById("events-list");
+  const meta = document.getElementById("events-meta");
+  if (!list) return;
+  const events = Array.isArray(data?.events) ? data.events : [];
+  list.innerHTML = "";
+
+  if (!events.length) {
+    const li = document.createElement("li");
+    li.className = "task-empty";
+    li.textContent = data?.note || "Событий не найдено.";
+    list.appendChild(li);
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  events.forEach((e) => {
+    const li = document.createElement("li");
+    li.className = "event-card";
+    li.setAttribute("data-season", e.season);
+
+    const happinessPct = Math.round((e.happiness_impact || 0) * 100);
+    const trustPct = Math.round((e.trust_impact || 0) * 100);
+    const costStr = _fmtRubCompact(e.cost_rub);
+    const audienceLabel = EVENT_AUDIENCE_LABELS[e.audience] || e.audience;
+
+    li.innerHTML = `
+      <div class="event-head">
+        <span class="event-name">${e.name}</span>
+        <span class="event-season-chip">${EVENT_SEASON_LABELS[e.season] || e.season}</span>
+      </div>
+      <div class="event-desc">${e.description || ""}</div>
+      <div class="event-impact">
+        <span>Счастье <strong>+${happinessPct}%</strong></span>
+        <span>Доверие <strong>+${trustPct}%</strong></span>
+      </div>
+      <div class="event-foot">
+        <span>Аудитория: ${audienceLabel} · ${e.duration_days} дн.</span>
+        <span class="cost">${costStr}</span>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+
+  if (meta) {
+    const ts = data?.generated_at
+      ? new Date(data.generated_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const season = data?.season ? EVENT_SEASON_LABELS[data.season] || data.season : "";
+    meta.textContent = ts
+      ? `${season} · ${events.length} из ${data?.total_library || "?"} событий · обновлено ${ts}`
+      : "";
+  }
+}
+
 // -------------------------------------------------- Task manager
 
 const TASK_PRIORITY_LABELS = {
@@ -2364,6 +2433,12 @@ async function refresh() {
     renderTasks(tasks);
   } catch (e) {
     console.warn("tasks unavailable", e);
+  }
+  try {
+    const events = await fetchJson(`/api/city/${slug}/happiness_events`);
+    renderHappinessEvents(events);
+  } catch (e) {
+    console.warn("happiness events unavailable", e);
   }
   setUpdated();
 }

@@ -23,6 +23,7 @@ Endpoints:
   GET  /api/city/{name}/decisions
   GET  /api/city/{name}/deep_forecast
   GET  /api/city/{name}/tasks
+  GET  /api/city/{name}/happiness_events
   POST /api/admin/collect/{name}
   GET  /api/city/{name}/market_gaps
   GET  /api/city/{name}/cases
@@ -49,7 +50,7 @@ from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
 from analytics import build_graph, detect_crises, simulate, trace_root_cause
-from analytics import analyze_market_gaps, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, reputation_analyze, resource_plan, topics_analyze
+from analytics import analyze_market_gaps, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, recommend_events, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -945,6 +946,29 @@ async def admin_collect_now(name: str) -> dict:
         "slug": cfg.get("slug"),
         "rows_written": int(written),
         "triggered_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
+@router.get("/api/city/{name}/happiness_events")
+async def city_happiness_events(
+    name: str,
+    season: Optional[str] = None,
+    audience: Optional[str] = None,
+    limit: int = 6,
+) -> dict:
+    """Recommended events from the regional happiness library.
+
+    Default season is today's meteorological season; audience defaults to
+    "all". Year-round events are always eligible. Limit clamped to [1, 12].
+    """
+    cfg = _resolve_city(name)
+    limit = max(1, min(12, int(limit)))
+    report = recommend_events(season=season, audience=audience, limit=limit)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
     }
 
 
