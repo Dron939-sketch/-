@@ -2030,101 +2030,14 @@ async function submitRoadmap(event) {
   }
 }
 
-// -------------------------------------------------- Admin usage stats
+// -------------------------------------------------- Admin link toggle
 
-async function loadAdminStats() {
-  const section = document.getElementById("admin-stats");
-  if (!section) return;
-  // Visible only to admin role.
-  if (!currentUser || currentUser.role !== "admin") {
-    section.hidden = true;
-    return;
-  }
-  section.hidden = false;
-  try {
-    const [sum, users, endpoints] = await Promise.all([
-      fetchJson("/api/admin/stats/summary?days=7"),
-      fetchJson("/api/admin/stats/users?days=30&limit=8"),
-      fetchJson("/api/admin/stats/endpoints?days=30&limit=8"),
-    ]);
-    renderStatsSummary(sum);
-    renderStatsUsers(users.users || []);
-    renderStatsEndpoints(endpoints.endpoints || []);
-    const meta = document.getElementById("admin-stats-meta");
-    if (meta) meta.textContent =
-      `${sum.window_days}-дневное окно · обновлено ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
-  } catch (e) {
-    console.warn("admin stats unavailable", e);
-  }
-}
-
-function renderStatsSummary(s) {
-  const el = document.getElementById("stats-summary");
-  if (!el) return;
-  el.innerHTML = "";
-  const chips = [
-    `Всего событий: <strong>${(s.total_events || 0).toLocaleString("ru-RU")}</strong>`,
-    `Авторизованных: <strong>${s.authenticated_events || 0}</strong>`,
-    `Анонимных: <strong>${s.anonymous_events || 0}</strong>`,
-    `Пользователей: <strong>${s.distinct_users || 0}</strong>`,
-    `Сессий: <strong>${s.distinct_sessions || 0}</strong>`,
-  ];
-  if (s.avg_response_ms != null) chips.push(`Сред. отклик: <strong>${s.avg_response_ms} мс</strong>`);
-  if (s.errors_5xx) chips.push(`<span style="color: var(--danger);">5xx: ${s.errors_5xx}</span>`);
-  if (s.errors_4xx) chips.push(`<span style="color: var(--warn);">4xx: ${s.errors_4xx}</span>`);
-  chips.forEach((html) => {
-    const c = document.createElement("span");
-    c.className = "chip";
-    c.innerHTML = html;
-    el.appendChild(c);
-  });
-}
-
-function renderStatsUsers(users) {
-  const el = document.getElementById("stats-users");
-  if (!el) return;
-  el.innerHTML = "";
-  if (!users.length) {
-    el.innerHTML = '<li class="stats-empty">Авторизованных событий ещё нет.</li>';
-    return;
-  }
-  users.forEach((u) => {
-    const li = document.createElement("li");
-    const display = (u.full_name || u.email || `user#${u.user_id}`).replace(/</g, "&lt;");
-    const lastSeen = u.last_seen ? new Date(u.last_seen).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "";
-    li.innerHTML = `
-      <div>
-        <div class="name">${display}</div>
-        <div class="sub">${u.role || "viewer"} · последний визит: ${lastSeen}</div>
-      </div>
-      <div class="events">${u.events}</div>
-    `;
-    el.appendChild(li);
-  });
-}
-
-function renderStatsEndpoints(endpoints) {
-  const el = document.getElementById("stats-endpoints");
-  if (!el) return;
-  el.innerHTML = "";
-  if (!endpoints.length) {
-    el.innerHTML = '<li class="stats-empty">Обращений к API ещё не было.</li>';
-    return;
-  }
-  endpoints.forEach((e) => {
-    const li = document.createElement("li");
-    const errSeg = [];
-    if (e.errors_5xx) errSeg.push(`<span style="color: var(--danger);">5xx: ${e.errors_5xx}</span>`);
-    if (e.errors_4xx) errSeg.push(`<span style="color: var(--warn);">4xx: ${e.errors_4xx}</span>`);
-    li.innerHTML = `
-      <div>
-        <div class="path">${e.path.replace(/</g, "&lt;")}</div>
-        <div class="sub">${e.distinct_users || 0} польз. · сред. ${e.avg_ms || 0} мс${errSeg.length ? " · " + errSeg.join(" · ") : ""}</div>
-      </div>
-      <div class="hits">${e.hits}</div>
-    `;
-    el.appendChild(li);
-  });
+// Admin panel теперь на /admin.html — главный dashboard лишь показывает
+// ссылку в топбаре, когда у текущего пользователя роль admin.
+function updateAdminLinkVisibility() {
+  const link = document.getElementById("admin-link");
+  if (!link) return;
+  link.hidden = !(currentUser && currentUser.role === "admin");
 }
 
 // -------------------------------------------------- City pulse
@@ -2198,9 +2111,8 @@ function renderAuthChip() {
 async function refreshAuth() {
   currentUser = await fetchAuthState();
   renderAuthChip();
-  // Lazy-load admin stats panel whenever auth state changes — hides for
-  // viewer/editor, fetches fresh numbers for admin.
-  try { await loadAdminStats(); } catch (e) { /* non-fatal */ }
+  // Показываем ссылку «⚙️ Админка» в топбаре только для admin.
+  updateAdminLinkVisibility();
   return currentUser;
 }
 
