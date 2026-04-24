@@ -57,9 +57,13 @@ def test_get_city_rejects_unknown():
 
 def test_kolomna_sources_counts():
     bundle = get_sources_for_city("Коломна")
-    assert len(bundle.telegram) == 10
-    assert len(bundle.vk) == 5
-    assert bundle.news_rss, "news_rss sources must be registered"
+    # Kolomna is the pilot — must have a broad coverage across all 4 kinds.
+    assert len(bundle.telegram) >= 10
+    assert len(bundle.vk) >= 5
+    assert len(bundle.news_rss) >= 1
+    # "Автомобилисты Коломны" is the named request; check it's in the registry.
+    vk_handles = {s.handle for s in bundle.vk}
+    assert "auto_kolomna" in vk_handles
 
 
 def test_neighbour_cities_have_at_least_rss():

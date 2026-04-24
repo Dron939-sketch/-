@@ -2469,6 +2469,11 @@ async function init() {
     });
   }
 
+  const helpBtn = document.getElementById("help-button");
+  if (helpBtn) {
+    helpBtn.addEventListener("click", () => openModal("help-modal"));
+  }
+
   refreshSystemHealth();
   setInterval(refreshSystemHealth, HEALTH_REFRESH_MS);
 
