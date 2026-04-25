@@ -249,3 +249,74 @@ CREATE INDEX IF NOT EXISTS usage_events_created_idx ON usage_events (created_at 
 -- add_retention_policy raises FeatureNotSupportedError (Enterprise-only)
 -- before the DO block's exception handler can see it. We don't need
 -- retention for the MVP — row count is modest for 6 cities × 1h snapshots.
+
+-- @SEGMENT deputies_table
+-- Deputies belong to a city. Никаких "loyalty" / партийных запретов в схеме —
+-- party хранится только как справочный атрибут. Sectors — JSONB-массив строк
+-- ("ЖКХ", "благоустройство"); auto-распределение тем читает оттуда.
+CREATE TABLE IF NOT EXISTS deputies (
+    id              SERIAL PRIMARY KEY,
+    city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+    external_id     TEXT,
+    name            TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'sector_lead',
+    district        TEXT,
+    party           TEXT,
+    sectors         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    followers       INTEGER NOT NULL DEFAULT 0,
+    influence_score REAL NOT NULL DEFAULT 0.5,
+    telegram        TEXT,
+    vk              TEXT,
+    enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (city_id, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS deputies_city_idx ON deputies (city_id) WHERE enabled = TRUE;
+
+-- @SEGMENT deputy_topics_table
+-- Темы для освещения. assignees — массив deputy.id (INTEGER) в JSONB,
+-- хранится денормализованно для скорости чтения дашборда.
+CREATE TABLE IF NOT EXISTS deputy_topics (
+    id              BIGSERIAL PRIMARY KEY,
+    city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    priority        TEXT NOT NULL DEFAULT 'medium',
+    target_tone     TEXT NOT NULL DEFAULT 'neutral',
+    key_messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
+    talking_points  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    target_audience JSONB NOT NULL DEFAULT '["all"]'::jsonb,
+    assignees       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    required_posts  INTEGER NOT NULL DEFAULT 5,
+    completed_posts INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'active',
+    source          TEXT NOT NULL DEFAULT 'manual',
+    deadline        TIMESTAMPTZ NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS deputy_topics_city_status_idx
+    ON deputy_topics (city_id, status, deadline);
+
+-- @SEGMENT deputy_posts_table
+-- Учёт фактических публикаций. Депутат сам публикует, координатор
+-- регистрирует факт публикации со ссылкой и метриками вовлечённости.
+CREATE TABLE IF NOT EXISTS deputy_posts (
+    id              BIGSERIAL PRIMARY KEY,
+    city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+    deputy_id       INTEGER NOT NULL REFERENCES deputies(id) ON DELETE CASCADE,
+    topic_id        BIGINT REFERENCES deputy_topics(id) ON DELETE SET NULL,
+    platform        TEXT NOT NULL,
+    url             TEXT,
+    content         TEXT,
+    published_at    TIMESTAMPTZ NOT NULL,
+    views           INTEGER NOT NULL DEFAULT 0,
+    likes           INTEGER NOT NULL DEFAULT 0,
+    comments        INTEGER NOT NULL DEFAULT 0,
+    reposts         INTEGER NOT NULL DEFAULT 0,
+    registered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS deputy_posts_topic_idx ON deputy_posts (topic_id, published_at DESC);
+CREATE INDEX IF NOT EXISTS deputy_posts_deputy_idx ON deputy_posts (deputy_id, published_at DESC);

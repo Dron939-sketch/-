@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0A1628" />
+  <title>Повестка депутатов · Городской Разум</title>
+  <meta name="description" content="Управление информационной повесткой депутатского корпуса — темы, депутаты, черновики, учёт публикаций." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Городской Разум">
+      <span class="brand-mark">🧠</span>
+      <span class="brand-name">Городской <em>Разум</em></span>
+      <span class="admin-tag">депутаты</span>
+    </a>
+
+    <div class="topbar-right">
+      <a class="admin-link-back" href="/">← К дашборду</a>
+      <span class="updated" id="updated-at">—</span>
+      <button type="button" class="auth-chip" id="auth-chip">
+        <span class="avatar">👤</span>
+        <span class="auth-label" id="auth-label">—</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="admin-page">
+
+    <div class="admin-unauth" id="dep-unauth" hidden>
+      <h1 class="admin-unauth-title">Требуется вход с ролью editor или admin</h1>
+      <p class="muted">Управление повесткой депутатов доступно редакторам и администраторам. Войдите или попросите повысить роль.</p>
+      <button type="button" class="rm-submit" id="dep-login-btn">Войти</button>
+    </div>
+
+    <div class="admin-content" id="dep-content" hidden>
+
+      <!-- ethics notice -->
+      <section class="card wide" style="border-left:4px solid var(--accent,#3b82f6);">
+        <div class="card-eyebrow">
+          <span>Назначение модуля</span>
+        </div>
+        <p class="muted small" style="line-height:1.5;">
+          Модуль помогает координатору формировать список тем для официальной коммуникации
+          депутатов и распределять их по компетенции (сектор/округ). Тексты выдаются
+          <strong>как черновики</strong> — депутат сам решает, что и как публиковать,
+          и публикует под своей ответственностью. Модуль не подавляет критику по
+          партийному признаку и не маскирует скоординированные посты под органический поток.
+        </p>
+      </section>
+
+      <!-- city + summary -->
+      <section class="card wide admin-summary-card">
+        <div class="card-eyebrow">
+          <span>Сводка</span>
+          <span class="muted small" id="dep-meta">—</span>
+        </div>
+        <div class="stats-summary" id="dep-summary"></div>
+      </section>
+
+      <!-- tabs: themes / deputies -->
+      <section class="card wide">
+        <div class="card-eyebrow" style="gap:1rem;">
+          <button type="button" class="rm-submit" id="tab-topics" data-active="1">Темы повестки</button>
+          <button type="button" class="rm-submit" id="tab-deputies" style="background:transparent;border:1px solid var(--border,#2a3a52);">Депутаты</button>
+          <span style="flex:1;"></span>
+          <button type="button" class="rm-submit" id="dep-refresh">Обновить</button>
+        </div>
+      </section>
+
+      <!-- TOPICS panel -->
+      <section class="card wide" id="topics-panel">
+        <div class="card-eyebrow">
+          <span>Активные темы</span>
+          <button type="button" class="rm-submit" id="topic-new-btn">+ Новая тема</button>
+        </div>
+        <ul class="stats-users-list" id="topics-list"></ul>
+
+        <details id="topic-form-details" style="margin-top:1rem;">
+          <summary style="cursor:pointer;">Форма создания темы</summary>
+          <form id="topic-form" class="auth-form" style="margin-top:1rem;">
+            <label class="rm-field"><span class="rm-label">Заголовок</span><input type="text" id="t-title" required maxlength="300" /></label>
+            <label class="rm-field"><span class="rm-label">Описание</span><textarea id="t-description" rows="2" maxlength="1500"></textarea></label>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+              <label class="rm-field"><span class="rm-label">Приоритет</span>
+                <select id="t-priority"><option>critical</option><option>high</option><option selected>medium</option><option>low</option></select>
+              </label>
+              <label class="rm-field"><span class="rm-label">Тональность</span>
+                <select id="t-tone"><option>positive</option><option selected>neutral</option><option>protective</option><option>explanatory</option><option>mobilizing</option></select>
+              </label>
+              <label class="rm-field"><span class="rm-label">Постов нужно</span><input type="number" id="t-required" value="5" min="1" max="50" /></label>
+              <label class="rm-field"><span class="rm-label">Срок (дней от сегодня)</span><input type="number" id="t-deadline-days" value="3" min="1" max="60" /></label>
+            </div>
+            <label class="rm-field"><span class="rm-label">Ключевые тезисы (по одному в строку)</span><textarea id="t-talking" rows="3"></textarea></label>
+            <button type="submit" class="rm-submit">Создать тему</button>
+            <div class="auth-error" id="t-error" hidden></div>
+          </form>
+        </details>
+      </section>
+
+      <!-- DEPUTIES panel -->
+      <section class="card wide" id="deputies-panel" hidden>
+        <div class="card-eyebrow">
+          <span>Список депутатов</span>
+          <button type="button" class="rm-submit" id="dep-new-btn">+ Добавить депутата</button>
+        </div>
+        <ul class="stats-users-list" id="deputies-list"></ul>
+
+        <details id="dep-form-details" style="margin-top:1rem;">
+          <summary style="cursor:pointer;">Форма добавления депутата</summary>
+          <form id="dep-form" class="auth-form" style="margin-top:1rem;">
+            <label class="rm-field"><span class="rm-label">ФИО</span><input type="text" id="d-name" required maxlength="200" /></label>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+              <label class="rm-field"><span class="rm-label">Роль</span>
+                <select id="d-role">
+                  <option value="speaker">Спикер</option>
+                  <option value="sector_lead" selected>Ведущий по сектору</option>
+                  <option value="district_rep">Представитель округа</option>
+                  <option value="support">Поддержка</option>
+                  <option value="neutral">Нейтральный</option>
+                </select>
+              </label>
+              <label class="rm-field"><span class="rm-label">Округ</span><input type="text" id="d-district" maxlength="200" /></label>
+              <label class="rm-field"><span class="rm-label">Партия</span><input type="text" id="d-party" maxlength="200" /></label>
+            </div>
+            <label class="rm-field"><span class="rm-label">Сектора (через запятую)</span><input type="text" id="d-sectors" placeholder="ЖКХ, благоустройство" /></label>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+              <label class="rm-field"><span class="rm-label">Telegram</span><input type="text" id="d-telegram" maxlength="200" /></label>
+              <label class="rm-field"><span class="rm-label">VK</span><input type="text" id="d-vk" maxlength="200" /></label>
+            </div>
+            <button type="submit" class="rm-submit">Сохранить депутата</button>
+            <div class="auth-error" id="d-error" hidden></div>
+          </form>
+        </details>
+      </section>
+
+      <!-- Topic detail drawer -->
+      <section class="card wide" id="topic-detail-card" hidden>
+        <div class="card-eyebrow">
+          <span>Тема: <span id="td-title">—</span></span>
+          <button type="button" class="admin-close-user" id="td-close">✕</button>
+        </div>
+        <div id="td-meta" class="muted small" style="margin-bottom:1rem;"></div>
+
+        <h3 class="section-title">Назначенные депутаты</h3>
+        <ul class="stats-users-list" id="td-assignees"></ul>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
+          <button type="button" class="rm-submit" id="td-auto-assign">Авто-назначить по сектору/округу</button>
+          <button type="button" class="rm-submit" id="td-complete" style="background:transparent;border:1px solid var(--border,#2a3a52);">Закрыть тему</button>
+        </div>
+
+        <h3 class="section-title" style="margin-top:1.5rem;">Черновик публикации</h3>
+        <div style="display:flex;gap:0.5rem;align-items:flex-end;">
+          <label class="rm-field" style="flex:1;">
+            <span class="rm-label">Депутат</span>
+            <select id="td-draft-deputy"></select>
+          </label>
+          <button type="button" class="rm-submit" id="td-draft-btn">Сформировать черновик</button>
+        </div>
+        <pre id="td-draft" class="user-timeline" style="white-space:pre-wrap;display:none;padding:1rem;"></pre>
+
+        <h3 class="section-title" style="margin-top:1.5rem;">Зарегистрированные публикации</h3>
+        <ul class="user-timeline" id="td-posts"></ul>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Городской Разум · модуль повестки депутатов</span>
+    <span class="muted small">Черновики ≠ готовые посты. Депутат публикует под своей ответственностью.</span>
+  </footer>
+
+  <!-- Auth modal -->
+  <div class="modal" id="auth-modal" aria-hidden="true" role="dialog" aria-labelledby="auth-title">
+    <div class="modal-backdrop" data-dismiss></div>
+    <div class="modal-panel auth-panel" role="document">
+      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
+      <div class="modal-eyebrow">Доступ к модулю депутатов</div>
+      <h2 class="modal-title" id="auth-title">Вход</h2>
+      <form class="auth-form" id="login-form">
+        <label class="rm-field">
+          <span class="rm-label">Email</span>
+          <input type="email" id="login-email" required autocomplete="email" />
+        </label>
+        <label class="rm-field">
+          <span class="rm-label">Пароль</span>
+          <input type="password" id="login-password" required minlength="6" autocomplete="current-password" />
+        </label>
+        <button type="submit" class="rm-submit">Войти</button>
+        <div class="auth-error" id="login-error" hidden></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/deputies.js" defer></script>
+</body>
+</html>
