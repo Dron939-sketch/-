@@ -51,6 +51,7 @@ from .auth_routes import require_role, require_user
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher, generate_narratives
+from ai import voice as ai_voice
 from ai.cache import ResponseCache
 from analytics import benchmark as benchmark_cities
 from analytics import breakdown as breakdown_metric
@@ -1050,6 +1051,68 @@ async def city_pulse(name: str) -> dict:
         "slug": cfg.get("slug"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/voice")
+async def city_voice(name: str) -> dict:
+    """One-sentence "voice of the city" for the home screen hero zone.
+
+    Aggregates pulse + crisis status + top complaint/praise, hands them to
+    `ai.voice.generate`. The generator first tries DeepSeek for a stylistic
+    phrase; if the AI is unavailable / errors, falls back to a rules-based
+    template that always returns a meaningful sentence. Never raises.
+    """
+    cfg = _resolve_city(name)
+
+    pulse_val: Optional[float] = None
+    crisis_status: Optional[str] = None
+    top_complaint: Optional[str] = None
+    top_praise: Optional[str] = None
+    weather: Optional[str] = None
+
+    try:
+        pulse = await city_pulse(cfg["name"])
+        pulse_val = pulse.get("overall")
+    except Exception:  # noqa: BLE001
+        logger.warning("voice: pulse unavailable", exc_info=False)
+
+    try:
+        crisis = await city_crisis(cfg["name"])
+        crisis_status = crisis.get("status")
+    except Exception:  # noqa: BLE001
+        logger.warning("voice: crisis unavailable", exc_info=False)
+
+    try:
+        snapshot = await all_metrics(cfg["name"])
+        trust = snapshot.get("trust") or {}
+        complaints = trust.get("top_complaints") or []
+        praises = trust.get("top_praises") or []
+        if complaints:
+            top_complaint = complaints[0]
+        if praises:
+            top_praise = praises[0]
+        wx = snapshot.get("weather") or {}
+        if wx.get("condition") and wx.get("temperature") is not None:
+            weather = f"{wx['condition']}, {wx['temperature']}°C"
+    except Exception:  # noqa: BLE001
+        logger.warning("voice: snapshot unavailable", exc_info=False)
+
+    result = await ai_voice.generate(
+        city=cfg["name"],
+        pulse=pulse_val,
+        crisis_status=crisis_status,
+        top_complaint=top_complaint,
+        top_praise=top_praise,
+        weather=weather,
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "pulse": pulse_val,
+        "crisis_status": crisis_status,
+        **result.to_dict(),
     }
 
 

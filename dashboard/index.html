@@ -6,15 +6,16 @@
   <meta name="theme-color" content="#0A1628" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Городской Разум — Прогнозное управление городом</title>
-  <meta name="description" content="Городской Разум — платформа прогнозного управления городом на основе алгоритма Мейстера." />
+  <title>Городской Разум — главный экран</title>
+  <meta name="description" content="Городской Разум — главный экран мэра: пульс города, оперативная сводка, разделы платформы." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/home.css" />
 </head>
-<body>
+<body class="home-page">
   <header class="topbar">
     <a class="brand" href="/" aria-label="Городской Разум">
       <span class="brand-mark">🧠</span>
@@ -31,23 +32,9 @@
     </div>
 
     <div class="topbar-right">
+      <a class="admin-link" href="/full-dashboard.html" title="Полный дашборд со всеми виджетами">📋 Полный</a>
       <a class="admin-link" id="deputies-link" href="/deputies.html" hidden title="Повестка депутатов">🏛️ Депутаты</a>
       <a class="admin-link" id="admin-link" href="/admin.html" hidden title="Админ-панель">⚙️ Админка</a>
-      <button type="button" class="help-button" id="help-button" aria-label="Справка о приложении" title="Справка">?</button>
-      <span class="updated" id="updated-at">—</span>
-      <div class="system-health" id="system-health">
-        <button type="button" class="sh-button" id="sh-button" aria-haspopup="true" aria-expanded="false" title="Состояние системы">
-          <span class="sh-dot" id="sh-dot" data-status="unknown"></span>
-          <span class="sh-label" id="sh-label">—</span>
-        </button>
-        <div class="sh-panel" id="sh-panel" hidden role="dialog">
-          <div class="sh-panel-head">
-            <div class="sh-overall" id="sh-overall">—</div>
-            <div class="muted small" id="sh-generated">—</div>
-          </div>
-          <ul class="sh-list" id="sh-list"></ul>
-        </div>
-      </div>
       <button type="button" class="auth-chip" id="auth-chip" title="Вход / профиль">
         <span class="avatar">👤</span>
         <span class="auth-label" id="auth-label">Войти</span>
@@ -55,492 +42,146 @@
     </div>
   </header>
 
-  <main class="page">
-    <!-- row 0: crisis early-warning strip (status + alert list) -->
-    <section class="card wide crisis-strip" id="crisis-strip" data-status="ok">
-      <div class="crisis-head">
-        <span class="crisis-status-dot" id="crisis-dot" aria-hidden="true"></span>
-        <div class="crisis-heading">
-          <div class="crisis-label" id="crisis-label">Состояние города</div>
-          <div class="crisis-headline" id="crisis-headline">Всё в норме — кризисных сигналов нет</div>
+  <main class="home-main">
+
+    <!-- ===== HERO: пульс города + голос дня ===== -->
+    <section class="hero" id="hero" data-level="elevated">
+      <div class="hero-greeting">
+        <div class="hero-eyebrow" id="hero-date">—</div>
+        <h1 class="hero-title" id="hero-greeting">Доброе утро</h1>
+      </div>
+
+      <div class="hero-core">
+        <div class="hero-pulse" id="hero-pulse">
+          <div class="hero-pulse-ring" aria-hidden="true"></div>
+          <div class="hero-pulse-ring hero-pulse-ring-2" aria-hidden="true"></div>
+          <div class="hero-pulse-inner">
+            <div class="hero-pulse-value" id="hero-pulse-value">—</div>
+            <div class="hero-pulse-unit">/100</div>
+          </div>
         </div>
-        <button type="button" class="crisis-toggle" id="crisis-toggle" aria-expanded="false" aria-controls="crisis-alerts" hidden>Подробнее</button>
-      </div>
-      <ul class="crisis-alerts" id="crisis-alerts" hidden></ul>
-    </section>
 
-    <!-- row 0.5: city pulse — one-number temperature (0..100) -->
-    <section class="card wide city-pulse-card">
-      <div class="card-eyebrow">
-        <span>Пульс города — единый индекс 0–100</span>
-        <span class="muted small" id="pulse-meta"></span>
-      </div>
-      <div class="pulse-layout">
-        <div class="pulse-number" id="pulse-number">
-          <div class="pulse-value" id="pulse-value">—</div>
-          <div class="pulse-label" id="pulse-label">—</div>
-        </div>
-        <div class="pulse-factors" id="pulse-factors"></div>
-      </div>
-    </section>
-
-    <!-- row 1: greeting + weather -->
-    <section class="card greeting">
-      <div class="greeting-eyebrow" id="today-date">—</div>
-      <h1 class="greeting-title" id="greeting-title">Доброе утро</h1>
-      <div class="greeting-sub" id="greeting-sub">Сводка по городу на сегодня</div>
-    </section>
-
-    <section class="card weather">
-      <div class="card-eyebrow">Погода в городе</div>
-      <div class="weather-row">
-        <div class="weather-main">
-          <span class="weather-emoji" id="weather-emoji">☁️</span>
-          <span class="weather-temp" id="weather-temp">—</span>
-        </div>
-        <div class="weather-meta">
-          <div><span class="muted">Ощущается</span> <span id="weather-feels">—</span></div>
-          <div><span class="muted">Влажность</span> <span id="weather-humidity">—</span></div>
-          <div><span class="muted">Ветер</span> <span id="weather-wind">—</span></div>
-        </div>
-      </div>
-      <div class="muted small" id="weather-cond">—</div>
-    </section>
-
-    <!-- row 2: 4 key vectors -->
-    <section class="card wide vectors-card">
-      <div class="card-eyebrow">Ключевые показатели города</div>
-      <div class="vectors-grid" id="vectors-grid"></div>
-    </section>
-
-    <!-- row 3: agenda + loops -->
-    <section class="card agenda">
-      <div class="card-eyebrow">
-        <span class="badge badge-critical" id="agenda-badge">⚡ Приоритет дня</span>
-      </div>
-      <div class="headline" id="agenda-headline">—</div>
-      <p class="agenda-description" id="agenda-description"></p>
-      <h3 class="section-title">Рекомендованные действия</h3>
-      <ul class="check-list" id="agenda-actions"></ul>
-    </section>
-
-    <section class="card loops">
-      <div class="card-eyebrow">Активные петли</div>
-      <ul class="loops-list" id="loops-list"></ul>
-      <div class="loop-action muted small">Нажмите на петлю, чтобы увидеть точки разрыва.</div>
-    </section>
-
-    <!-- row 4: 9-element Meister graph -->
-    <section class="card wide model-graph">
-      <div class="card-eyebrow">
-        <span>Модель Мейстера — 9 элементов</span>
-        <span class="muted small" id="graph-meta"></span>
-      </div>
-      <div class="graph-layout">
-        <div id="meister-graph" class="meister-graph" aria-label="Граф 9 элементов"></div>
-        <aside class="graph-legend" id="graph-legend">
-          <div class="legend-title">Выберите элемент</div>
-          <div class="legend-hint muted small">Нажмите на узел графа, чтобы увидеть детали.</div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- row 4.5: butterfly simulator -->
-    <section class="card wide simulator">
-      <div class="card-eyebrow">
-        <span>Что если… — симулятор эффекта бабочки</span>
-        <span class="muted small">Поверните ручку — увидите каскад по всему графу.</span>
-      </div>
-      <div class="sim-layout">
-        <div class="sim-controls">
-          <label class="sim-field">
-            <span class="sim-field-label">Элемент</span>
-            <select id="sim-source" class="sim-select" aria-label="Элемент модели"></select>
-          </label>
-          <label class="sim-field">
-            <span class="sim-field-label">Изменение <span id="sim-delta-value">+0.5</span></span>
-            <input id="sim-delta" class="sim-slider" type="range" min="-3" max="3" step="0.1" value="0.5" aria-label="Δ изменение" />
-            <div class="sim-scale"><span>−3</span><span>0</span><span>+3</span></div>
-          </label>
-          <button type="button" id="sim-run" class="sim-run">Рассчитать каскад</button>
-        </div>
-        <div class="sim-output" id="sim-output">
-          <div class="muted small">Выберите элемент и сдвиньте ручку, чтобы увидеть, как изменение пройдёт по 9-элементной модели. Каскад идёт по направлению «причина → следствие» — самые широкие эффекты у верхних элементов 1-4.</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- row 5: trust + happiness -->
-    <section class="card wide trust-happy">
-      <div class="card-eyebrow">Индекс доверия и счастья</div>
-      <div class="trust-row">
-        <div class="trust-bar">
-          <div class="trust-label">Доверие к власти</div>
-          <div class="bar"><div class="bar-fill" id="trust-fill"></div></div>
-          <div class="trust-value"><span id="trust-percent">—</span> <span class="delta" id="trust-delta"></span></div>
-        </div>
-        <div class="trust-bar">
-          <div class="trust-label">Счастье горожан</div>
-          <div class="bar"><div class="bar-fill" id="happiness-fill"></div></div>
-          <div class="trust-value"><span id="happiness-percent">—</span> <span class="delta" id="happiness-delta"></span></div>
+        <div class="hero-state">
+          <div class="hero-pulse-label" id="hero-pulse-label">Загрузка…</div>
+          <div class="hero-voice" id="hero-voice">—</div>
+          <div class="hero-trend" id="hero-trend"></div>
         </div>
       </div>
 
-      <div class="trust-cols">
-        <div>
-          <h3 class="section-title">Топ жалоб</h3>
-          <ol class="list" id="top-complaints"></ol>
+      <div class="hero-cta-row" id="hero-cta-row" hidden>
+        <a class="hero-cta hero-cta-primary" id="hero-cta-primary" href="#">— </a>
+        <a class="hero-cta" id="hero-cta-secondary" href="#" hidden>—</a>
+      </div>
+    </section>
+
+    <!-- ===== ОПЕРАТИВНЫЕ ЧИПЫ — 4 ключевых сигнала ===== -->
+    <section class="ops-chips" aria-label="Оперативная сводка">
+      <a href="/full-dashboard.html#crisis-strip" class="ops-chip ops-chip-crisis" id="chip-crisis" data-level="ok">
+        <div class="ops-chip-emoji">🚨</div>
+        <div class="ops-chip-body">
+          <div class="ops-chip-label">Кризис</div>
+          <div class="ops-chip-value" id="chip-crisis-value">—</div>
+          <div class="ops-chip-sub" id="chip-crisis-sub">—</div>
         </div>
-        <div>
-          <h3 class="section-title">Топ похвал</h3>
-          <ol class="list" id="top-praises"></ol>
+      </a>
+
+      <a href="/full-dashboard.html#reputation" class="ops-chip" id="chip-reputation">
+        <div class="ops-chip-emoji">📰</div>
+        <div class="ops-chip-body">
+          <div class="ops-chip-label">Репутация · 24ч</div>
+          <div class="ops-chip-value" id="chip-rep-value">—</div>
+          <div class="ops-chip-sub" id="chip-rep-sub">—</div>
         </div>
-      </div>
-    </section>
+      </a>
 
-    <!-- row 5.5: media reputation guard -->
-    <section class="card wide reputation">
-      <div class="card-eyebrow">
-        <span>Репутация в медиа — 24 часа</span>
-        <span class="muted small" id="reputation-meta"></span>
-      </div>
-      <div class="reputation-head">
-        <div class="rep-stat">
-          <div class="muted small">Риск</div>
-          <div class="rep-risk" id="reputation-risk"><span class="rep-risk-dot"></span><span id="reputation-risk-label">—</span></div>
+      <a href="/full-dashboard.html#trust-happy" class="ops-chip" id="chip-happiness">
+        <div class="ops-chip-emoji">😊</div>
+        <div class="ops-chip-body">
+          <div class="ops-chip-label">Доверие / счастье</div>
+          <div class="ops-chip-value" id="chip-happy-value">—</div>
+          <div class="ops-chip-sub" id="chip-happy-sub">—</div>
         </div>
-        <div class="rep-stat">
-          <div class="muted small">Всего упоминаний</div>
-          <div class="rep-number" id="reputation-total">—</div>
+      </a>
+
+      <a href="/full-dashboard.html#weather" class="ops-chip" id="chip-weather">
+        <div class="ops-chip-emoji" id="chip-wx-emoji">☁️</div>
+        <div class="ops-chip-body">
+          <div class="ops-chip-label">Погода</div>
+          <div class="ops-chip-value" id="chip-wx-value">—</div>
+          <div class="ops-chip-sub" id="chip-wx-sub">—</div>
         </div>
-        <div class="rep-stat">
-          <div class="muted small">Средняя тональность</div>
-          <div class="rep-sentiment" id="reputation-sentiment">—</div>
-        </div>
-        <div class="rep-stat">
-          <div class="muted small">Доля негатива</div>
-          <div class="rep-share"><span id="reputation-share">—</span><span class="rep-trend" id="reputation-trend"></span></div>
-        </div>
-      </div>
-      <div class="rep-sources" id="reputation-sources"></div>
-      <div class="reputation-cols">
-        <div>
-          <h3 class="section-title">Громче всех критикуют</h3>
-          <ol class="rep-author-list" id="reputation-authors"></ol>
-        </div>
-        <div>
-          <h3 class="section-title">Самые «выстрелившие» посты</h3>
-          <ul class="rep-viral-list" id="reputation-viral"></ul>
-        </div>
-      </div>
+      </a>
     </section>
 
-    <!-- row 5.75: investment attractiveness -->
-    <section class="card wide investment">
-      <div class="card-eyebrow">
-        <span>Инвестиционный климат</span>
-        <span class="muted small" id="investment-meta"></span>
+    <!-- ===== СЕГОДНЯ: 3 главных задачи ===== -->
+    <section class="today-card">
+      <div class="today-head">
+        <h2 class="today-title">Что важно сегодня</h2>
+        <a class="today-more" href="/full-dashboard.html#task-manager">Все задачи →</a>
       </div>
-      <div class="investment-layout">
-        <div class="investment-score">
-          <div class="score-grade" id="investment-grade">—</div>
-          <div class="score-value"><span id="investment-index">—</span><small> / 100</small></div>
-          <div class="score-sublabel" id="investment-peer"></div>
-        </div>
-        <div class="investment-factors" id="investment-factors"></div>
-        <div class="investment-sidebar">
-          <h3 class="section-title">Сильные стороны</h3>
-          <ul class="invest-list strengths" id="investment-strengths"></ul>
-          <h3 class="section-title">Слабые стороны</h3>
-          <ul class="invest-list weaknesses" id="investment-weaknesses"></ul>
-        </div>
-      </div>
+      <ol class="today-list" id="today-list">
+        <li class="today-loading">Загрузка задач…</li>
+      </ol>
     </section>
 
-    <!-- row 5.75: roadmap planner -->
-    <section class="card wide roadmap">
-      <div class="card-eyebrow">
-        <span>Дорожная карта — квартальные вехи</span>
-        <span class="muted small">Постройте план закрытия разрыва по одному из векторов.</span>
-      </div>
-      <form class="roadmap-form" id="roadmap-form">
-        <label class="rm-field">
-          <span class="rm-label">Вектор</span>
-          <select id="rm-vector" required>
-            <option value="СБ">🛡️ Безопасность (СБ)</option>
-            <option value="ТФ">💰 Экономика (ТФ)</option>
-            <option value="УБ">😊 Качество жизни (УБ)</option>
-            <option value="ЧВ">🤝 Соцкапитал (ЧВ)</option>
-          </select>
-        </label>
-        <label class="rm-field">
-          <span class="rm-label">Текущий <span id="rm-start-val">3.5</span></span>
-          <input type="range" id="rm-start" min="1" max="6" step="0.1" value="3.5" />
-        </label>
-        <label class="rm-field">
-          <span class="rm-label">Цель <span id="rm-target-val">5.0</span></span>
-          <input type="range" id="rm-target" min="1" max="6" step="0.1" value="5.0" />
-        </label>
-        <label class="rm-field">
-          <span class="rm-label">Срок</span>
-          <input type="date" id="rm-deadline" required />
-        </label>
-        <label class="rm-field">
-          <span class="rm-label">Сценарий</span>
-          <select id="rm-scenario">
-            <option value="baseline" selected>Базовый (линейный)</option>
-            <option value="optimistic">Оптимистичный (быстрый старт)</option>
-            <option value="pessimistic">Пессимистичный (разгон позже)</option>
-          </select>
-        </label>
-        <button type="submit" id="rm-run" class="rm-submit">Построить карту</button>
-      </form>
-      <div class="roadmap-output" id="roadmap-output">
-        <div class="muted small">Заполните форму и нажмите «Построить карту» — увидите квартальные вехи, интервенции и оценку стоимости.</div>
-      </div>
+    <!-- ===== ПЛИТКИ РАЗДЕЛОВ ===== -->
+    <section class="tiles-grid" aria-label="Разделы платформы">
+      <a class="tile" href="/full-dashboard.html#vectors-card">
+        <div class="tile-icon">📊</div>
+        <div class="tile-title">Метрики города</div>
+        <div class="tile-sub">СБ · ТФ · УБ · ЧВ + история</div>
+      </a>
+      <a class="tile" href="/full-dashboard.html#model-graph">
+        <div class="tile-icon">🧠</div>
+        <div class="tile-title">Модель Мейстера</div>
+        <div class="tile-sub">граф · симулятор · root cause</div>
+      </a>
+      <a class="tile" href="/full-dashboard.html#foresight">
+        <div class="tile-icon">🎯</div>
+        <div class="tile-title">Прогноз и сценарии</div>
+        <div class="tile-sub">7 / 30 / 90 дней · 5 лет</div>
+      </a>
+      <a class="tile" href="/full-dashboard.html#agenda">
+        <div class="tile-icon">📝</div>
+        <div class="tile-title">Повестка и решения</div>
+        <div class="tile-sub">задачи · нарративы · Эйзенхауэр</div>
+      </a>
+      <a class="tile" href="/deputies.html" id="tile-deputies" hidden>
+        <div class="tile-icon">🏛️</div>
+        <div class="tile-title">Депутаты</div>
+        <div class="tile-sub">темы · черновики · учёт публикаций</div>
+      </a>
+      <a class="tile" href="/full-dashboard.html#happiness-events">
+        <div class="tile-icon">🎉</div>
+        <div class="tile-title">События для жителей</div>
+        <div class="tile-sub">сезонная библиотека · 18 событий</div>
+      </a>
+      <a class="tile" href="/full-dashboard.html#investment">
+        <div class="tile-icon">💼</div>
+        <div class="tile-title">Бизнес и инвестиции</div>
+        <div class="tile-sub">привлекательность · рыночные ниши · кейсы</div>
+      </a>
+      <a class="tile" href="/full-dashboard.html#benchmark">
+        <div class="tile-icon">📈</div>
+        <div class="tile-title">Сравнение городов</div>
+        <div class="tile-sub">рейтинг по 6 пилотам</div>
+      </a>
     </section>
 
-    <!-- row 5.8: narrative engineering -->
-    <section class="card wide narratives">
-      <div class="card-eyebrow">
-        <span>Готовые формулировки — 3 варианта заявления</span>
-        <span class="muted small">AI подготовит черновики для пресс-релиза, соцсетей и мобилизации.</span>
-      </div>
-      <form class="narratives-form" id="narratives-form">
-        <label class="nr-field">
-          <span class="rm-label">Тема</span>
-          <input type="text" id="nr-topic" maxlength="200" required placeholder="Например: перебои с горячей водой на Фрунзе" />
-        </label>
-        <label class="nr-field">
-          <span class="rm-label">Контекст (что случилось)</span>
-          <textarea id="nr-context" rows="2" maxlength="1500" placeholder="Коротко: 3 дома, с утра, работы до конца дня."></textarea>
-        </label>
-        <button type="submit" id="nr-run" class="rm-submit">Сгенерировать варианты</button>
-      </form>
-      <div class="narratives-output" id="narratives-output">
-        <div class="muted small">Заполните тему (можно скопировать из «Приоритета дня») и нажмите «Сгенерировать» — получите три готовых черновика в разных регистрах.</div>
-      </div>
-    </section>
-
-    <!-- row 6: 3-month forecast -->
-    <section class="card wide forecast">
-      <div class="card-eyebrow">Прогноз на 3 месяца (алгоритм Мейстера)</div>
-      <p class="forecast-summary" id="forecast-summary">—</p>
-      <div class="forecast-rec">
-        <span class="spark">⚡</span>
-        <span id="forecast-rec">—</span>
-      </div>
-    </section>
-
-    <!-- row 6.25: budget planner — vector allocation -->
-    <section class="card wide budget">
-      <div class="card-eyebrow">
-        <span>Бюджетное планирование — распределение по векторам</span>
-        <span class="muted small" id="budget-meta"></span>
-      </div>
-      <div class="budget-head">
-        <div class="budget-total">
-          <div class="muted small">Рекомендованный годовой бюджет</div>
-          <div class="budget-amount" id="budget-total">—</div>
-          <div class="muted small" id="budget-per-capita"></div>
-        </div>
-        <div class="budget-bar" aria-hidden="true">
-          <div class="budget-bar-track" id="budget-bar-track"></div>
-          <div class="budget-bar-legend" id="budget-bar-legend"></div>
-        </div>
-      </div>
-      <ul class="budget-list" id="budget-list"></ul>
-      <div class="muted small" id="budget-note"></div>
-    </section>
-
-    <!-- row 6.21: happiness events library — что организовать под сезон -->
-    <section class="card wide happiness-events">
-      <div class="card-eyebrow">
-        <span>События счастья — что организовать</span>
-        <span class="muted small" id="events-meta"></span>
-      </div>
-      <ul class="events-list" id="events-list"></ul>
-    </section>
-
-    <!-- row 6.21b: Eisenhower matrix over tasks -->
-    <section class="card wide eisenhower">
-      <div class="card-eyebrow">
-        <span>Матрица Эйзенхауэра — что лично, что делегировать</span>
-        <span class="muted small" id="eisenhower-meta"></span>
-      </div>
-      <div class="ike-grid" id="eisenhower-grid"></div>
-    </section>
-
-    <!-- row 6.22: task manager — prioritised to-dos from agenda + crisis -->
-    <section class="card wide task-manager">
-      <div class="card-eyebrow">
-        <span>Поручения — что надо сделать сегодня</span>
-        <span class="muted small" id="tasks-meta"></span>
-      </div>
-      <ul class="task-list" id="task-list"></ul>
-    </section>
-
-    <!-- row 6.23: deep forecast — per-vector confidence bands -->
-    <section class="card wide deep-forecast">
-      <div class="card-eyebrow">
-        <span>Прогноз с интервалом уверенности — 7 / 30 / 90 дней</span>
-        <span class="muted small" id="deep-forecast-meta"></span>
-      </div>
-      <div class="muted small" style="margin-bottom: 12px;">Точечное значение + диапазон ±σ. Метод подбирается по объёму истории: Holt → тренд → константа. Ширина диапазона растёт с горизонтом.</div>
-      <div class="df-grid" id="deep-forecast-grid"></div>
-    </section>
-
-    <!-- row 6.24: decision simulator — action templates with scenarios -->
-    <section class="card wide decisions">
-      <div class="card-eyebrow">
-        <span>Симулятор решений — типовые ходы и их сценарии</span>
-        <span class="muted small" id="decisions-meta"></span>
-      </div>
-      <div class="dec-filters" id="dec-filters"></div>
-      <div class="dec-grid" id="dec-grid"></div>
-    </section>
-
-    <!-- row 6.25: market gaps — business niches inferred from pain -->
-    <section class="card wide market-gaps">
-      <div class="card-eyebrow">
-        <span>Рыночные ниши — куда звать бизнес</span>
-        <span class="muted small" id="market-gaps-meta"></span>
-      </div>
-      <div class="mg-hint muted small">Рекомендации формируются из жалоб горожан за 30 дней — это прокси-сигнал, не перепись предприятий.</div>
-      <div class="mg-grid" id="market-gaps-grid"></div>
-    </section>
-
-    <!-- row 6.2: topic intelligence — what people are talking about -->
-    <section class="card wide topics">
-      <div class="card-eyebrow">
-        <span>О чём говорят в городе — топики за 7 дней</span>
-        <span class="muted small" id="topics-meta"></span>
-      </div>
-      <div class="topics-grid" id="topics-grid"></div>
-    </section>
-
-    <!-- row 6.3: knowledge bank — case recommendations -->
-    <section class="card wide knowledge-bank">
-      <div class="card-eyebrow">
-        <span>Кейсы-аналоги — что пробуют другие города</span>
-        <span class="muted small" id="cases-meta"></span>
-      </div>
-      <div class="kb-signals muted small" id="kb-signals"></div>
-      <div class="kb-cases" id="kb-cases"></div>
-    </section>
-
-    <!-- row 6.5: foresight — 5-year scenarios + megatrends -->
-    <section class="card wide foresight">
-      <div class="card-eyebrow">
-        <span>Форсайт — 5 лет вперёд</span>
-        <span class="muted small" id="foresight-meta"></span>
-      </div>
-      <div class="foresight-layout">
-        <div class="scenarios" id="foresight-scenarios"></div>
-        <div class="megatrends">
-          <h3 class="section-title">Мегатренды юго-востока МО</h3>
-          <ul class="megatrend-list" id="foresight-megatrends"></ul>
-        </div>
-      </div>
-    </section>
-
-    <!-- row 7: cross-city benchmark -->
-    <section class="card wide benchmark">
-      <div class="card-eyebrow">
-        <span>Юго-восток Подмосковья — бенчмарк 6 городов</span>
-        <span class="muted small" id="benchmark-meta"></span>
-      </div>
-      <div class="benchmark-summary" id="benchmark-summary"></div>
-      <div class="benchmark-table-wrap">
-        <table class="benchmark-table" id="benchmark-table" aria-label="Сравнение городов">
-          <thead>
-            <tr>
-              <th scope="col" class="col-city">Город</th>
-              <th scope="col" data-vector="safety">🛡️ СБ</th>
-              <th scope="col" data-vector="economy">💰 ТФ</th>
-              <th scope="col" data-vector="quality">😊 УБ</th>
-              <th scope="col" data-vector="social">🤝 ЧВ</th>
-              <th scope="col" class="col-composite">Композит</th>
-            </tr>
-          </thead>
-          <tbody id="benchmark-body"></tbody>
-        </table>
-      </div>
-    </section>
   </main>
 
-  <footer class="footer">
-    <span>Городской Разум · прогнозное управление городом</span>
-    <span class="muted small" id="footer-tag">алгоритм Мейстера</span>
+  <footer class="footer home-footer">
+    <span>Городской Разум · главный экран</span>
+    <a href="/full-dashboard.html" class="muted small">→ полный дашборд (все виджеты)</a>
   </footer>
 
-  <!-- Loop detail modal (hidden by default) -->
-  <div class="modal" id="loop-modal" aria-hidden="true" role="dialog" aria-labelledby="loop-modal-title">
-    <div class="modal-backdrop" data-dismiss></div>
-    <div class="modal-panel" role="document">
-      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
-      <div class="modal-eyebrow">Активная петля</div>
-      <h2 class="modal-title" id="loop-modal-title">—</h2>
-      <p class="modal-description" id="loop-modal-description"></p>
-      <dl class="modal-details" id="loop-modal-details"></dl>
-      <div class="modal-resources" id="loop-modal-resources" hidden>
-        <div class="section-title">Рекомендуемые ресурсы</div>
-        <ul class="chip-list" id="loop-modal-resources-list"></ul>
-      </div>
-    </div>
-  </div>
-
-  <!-- Metric transparency modal: weighted breakdown of SB / TF / UB / CHV -->
-  <div class="modal" id="transparency-modal" aria-hidden="true" role="dialog" aria-labelledby="transparency-title">
-    <div class="modal-backdrop" data-dismiss></div>
-    <div class="modal-panel" role="document">
-      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
-      <div class="modal-eyebrow">Откуда взялась эта цифра</div>
-      <h2 class="modal-title" id="transparency-title">—</h2>
-      <div class="transparency-final">
-        <span class="muted small">Итоговая оценка</span>
-        <span class="transparency-final-value" id="transparency-final">—</span>
-      </div>
-      <div class="transparency-formula" id="transparency-formula">—</div>
-      <ul class="breakdown-list" id="transparency-components"></ul>
-      <div class="transparency-missing muted small" id="transparency-missing" hidden></div>
-    </div>
-  </div>
-
-  <!-- Root-cause modal: backward chain of causes ("5 whys") -->
-  <div class="modal" id="root-cause-modal" aria-hidden="true" role="dialog" aria-labelledby="root-cause-title">
-    <div class="modal-backdrop" data-dismiss></div>
-    <div class="modal-panel" role="document">
-      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
-      <div class="modal-eyebrow">Корневая причина</div>
-      <h2 class="modal-title" id="root-cause-title">—</h2>
-      <p class="modal-description" id="root-cause-subtitle"></p>
-      <ol class="cause-chain" id="root-cause-chain"></ol>
-      <div class="cause-root" id="root-cause-root" hidden>
-        <div class="section-title">Корень проблемы</div>
-        <div class="cause-root-body" id="root-cause-root-body"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Auth modal: login + registration -->
+  <!-- Auth modal — reused from main dashboard -->
   <div class="modal" id="auth-modal" aria-hidden="true" role="dialog" aria-labelledby="auth-title">
     <div class="modal-backdrop" data-dismiss></div>
     <div class="modal-panel auth-panel" role="document">
       <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
-      <div class="modal-eyebrow">Доступ к инструментам</div>
+      <div class="modal-eyebrow">Вход в платформу</div>
       <h2 class="modal-title" id="auth-title">Вход</h2>
-      <p class="modal-description auth-sub" id="auth-sub">
-        Чтение дашборда — свободное. Авторизация нужна для действий:
-        постановка дорожной карты, запуск симулятора, генерация формулировок,
-        запуск сбора данных.
-      </p>
-
-      <div class="auth-tabs">
-        <button type="button" class="auth-tab active" data-tab="login">Вход</button>
-        <button type="button" class="auth-tab" data-tab="register">Регистрация</button>
-      </div>
-
       <form class="auth-form" id="login-form">
         <label class="rm-field">
           <span class="rm-label">Email</span>
@@ -553,116 +194,9 @@
         <button type="submit" class="rm-submit">Войти</button>
         <div class="auth-error" id="login-error" hidden></div>
       </form>
-
-      <form class="auth-form" id="register-form" hidden>
-        <label class="rm-field">
-          <span class="rm-label">Полное имя</span>
-          <input type="text" id="register-name" maxlength="120" autocomplete="name" />
-        </label>
-        <label class="rm-field">
-          <span class="rm-label">Email</span>
-          <input type="email" id="register-email" required autocomplete="email" />
-        </label>
-        <label class="rm-field">
-          <span class="rm-label">Пароль (≥8 символов)</span>
-          <input type="password" id="register-password" required minlength="8" autocomplete="new-password" />
-        </label>
-        <label class="rm-field">
-          <span class="rm-label">Код регистрации</span>
-          <input type="text" id="register-code" required autocomplete="off" />
-        </label>
-        <button type="submit" class="rm-submit">Создать аккаунт</button>
-        <div class="auth-error" id="register-error" hidden></div>
-        <div class="muted small">Код регистрации выдаёт администратор (переменная окружения <code>AUTH_REGISTRATION_CODE</code>).</div>
-      </form>
     </div>
   </div>
 
-  <!-- Help / reference modal -->
-  <div class="modal" id="help-modal" aria-hidden="true" role="dialog" aria-labelledby="help-title">
-    <div class="modal-backdrop" data-dismiss></div>
-    <div class="modal-panel help-panel" role="document">
-      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
-      <div class="modal-eyebrow">О приложении</div>
-      <h2 class="modal-title" id="help-title">Городской Разум</h2>
-      <p class="modal-description">
-        Платформа прогнозного управления городом на основе 9-элементной модели Мейстера.
-        Читает потоки новостей и обращений, объясняет «почему», прогнозирует «что будет»,
-        предлагает «что сделать».
-      </p>
-      <div class="help-section">
-        <h3 class="section-title">Мониторинг</h3>
-        <ul class="help-list">
-          <li><strong>Состояние города</strong> — красная полоса сверху = критичные сигналы, жёлтая = наблюдение.</li>
-          <li><strong>Ключевые показатели СБ / ТФ / УБ / ЧВ</strong> — 4 вектора Мейстера на шкале 1–6. Клик по плитке → разбор «откуда эта цифра».</li>
-          <li><strong>Погода + индекс комфорта</strong>, <strong>Доверие + Счастье</strong> — социальный срез.</li>
-          <li><strong>Активные петли</strong> — замкнутые причинно-следственные цепочки, подлежащие «разрыву».</li>
-        </ul>
-      </div>
-      <div class="help-section">
-        <h3 class="section-title">Аналитика</h3>
-        <ul class="help-list">
-          <li><strong>Модель Мейстера</strong> — 9 элементов + связи (Cytoscape). Клик на узле → легенда + кнопка «Почему?».</li>
-          <li><strong>Что если… (симулятор бабочки)</strong> — поверните ручку, получите каскад по графу.</li>
-          <li><strong>Репутация в медиа</strong> — топ-критики, вирусные посты, тренд негатива за 7 дней.</li>
-          <li><strong>Топики</strong> — что обсуждают прямо сейчас, тренд vs прошлая неделя.</li>
-          <li><strong>Бенчмарк 6 городов</strong> — ранг вашего города на фоне пилотов.</li>
-        </ul>
-      </div>
-      <div class="help-section">
-        <h3 class="section-title">Прогноз и планирование</h3>
-        <ul class="help-list">
-          <li><strong>Прогноз 3 мес.</strong> — алгоритм Мейстера, краткая сводка.</li>
-          <li><strong>Прогноз 7/30/90 дней с интервалом</strong> — Holt-метод + доверительная полоса.</li>
-          <li><strong>Форсайт 5 лет</strong> — 3 сценария + 10 мегатрендов.</li>
-          <li><strong>Бюджет</strong> — рекомендованное распределение по векторам.</li>
-          <li><strong>Дорожная карта</strong> — квартальные вехи для закрытия разрыва по вектору.</li>
-        </ul>
-      </div>
-      <div class="help-section">
-        <h3 class="section-title">Действия</h3>
-        <ul class="help-list">
-          <li><strong>Поручения</strong> — приоритизированный чек-лист, собранный из повестки + кризисов.</li>
-          <li><strong>Симулятор решений</strong> — 10 типовых ходов, 3 сценария, стоимость, риски.</li>
-          <li><strong>Кейсы-аналоги</strong> — 15 лучших практик из городов РФ, подобранных под ваши слабые векторы.</li>
-          <li><strong>Рыночные ниши</strong> — куда звать бизнес на основе жалоб горожан.</li>
-          <li><strong>Готовые формулировки</strong> — AI даёт 3 варианта заявления: формальный / эмпатичный / мобилизующий.</li>
-        </ul>
-      </div>
-      <div class="help-section">
-        <h3 class="section-title">Как использовать</h3>
-        <ul class="help-list">
-          <li><strong>Переключение города</strong> — кнопка с эмодзи 🏰 в шапке.</li>
-          <li><strong>Автообновление</strong> — каждые 10 минут; состояние системы — каждые 60 сек.</li>
-          <li><strong>Состояние системы</strong> — кнопка справа в шапке: БД / Redis / DeepSeek / планировщик.</li>
-          <li><strong>Справка</strong> — эта модалка, кнопка «?» слева от часов.</li>
-        </ul>
-      </div>
-      <div class="help-section help-tech muted small">
-        Под капотом: FastAPI + asyncpg + DeepSeek AI. Данные собираются из Telegram, ВКонтакте,
-        RSS и обогащаются LLM. Источники документированы в <code>docs/NEWS_SOURCES.md</code>.
-        Весь код открыт, без sklearn / tensorflow — адаптеры лёгкие, прозрачные, тестируемые.
-      </div>
-    </div>
-  </div>
-
-  <!-- Simulator results modal: before/after per element + loops weakened -->
-  <div class="modal" id="simulator-modal" aria-hidden="true" role="dialog" aria-labelledby="simulator-title">
-    <div class="modal-backdrop" data-dismiss></div>
-    <div class="modal-panel simulator-panel" role="document">
-      <button type="button" class="modal-close" aria-label="Закрыть" data-dismiss>✕</button>
-      <div class="modal-eyebrow">Результат симуляции</div>
-      <h2 class="modal-title" id="simulator-title">—</h2>
-      <p class="modal-description" id="simulator-subtitle"></p>
-      <div class="sim-summary" id="simulator-summary"></div>
-      <ul class="sim-results" id="simulator-results"></ul>
-    </div>
-  </div>
-
-  <!-- Cytoscape.js for the Meister graph (loaded once from CDN) -->
-  <script
-    src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"
-    defer></script>
-  <script src="/dashboard.js" defer></script>
+  <script src="/home.js" defer></script>
 </body>
 </html>
