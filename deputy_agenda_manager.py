@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-МОДУЛЬ 40: УПРАВЛЕНИЕ ПОВЕСТКОЙ ДЕПУТАТОВ (Deputy Agenda Manager)
-Система формирования согласованной информационной повестки для депутатского корпуса
+МОДУЛЬ 40: УПРАВЛЕНИЕ ПОВЕСТКОЙ ДЕПУТАТОВ (Deputy Agenda Manager) — облегчённая версия
 
-Позволяет:
-- Распределять темы между депутатами
-- Формировать единый информационный фронт
-- Контролировать тональность выступлений
-- Координировать публикации в соцсетях
-- Отслеживать эффективность информационной работы
+Помощник координатора депутатского корпуса. Формирует список тем для освещения,
+распределяет их между депутатами по компетенции (сектор/округ), готовит
+черновики текстов и тезисы, ведёт учёт фактических публикаций.
+
+Что осознанно НЕ делается (отличия от исходной версии):
+- Нет метрики "лояльности администрации" — депутаты не ранжируются по лояльности.
+- Нет party-based forbidden_topics — модуль не подавляет критику по партийному
+  признаку.
+- Нет генерации "волн" публикаций (wave 1/2/3) с расписанием для маскировки
+  скоординированной активности под органический поток.
+- `suggest_draft` возвращает явный ЧЕРНОВИК с пометкой DRAFT и тезисами для
+  депутата, а не готовый пост "от его имени".
 """
 
-import asyncio
 import hashlib
 import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, field
-from enum import Enum
 from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +32,21 @@ logger = logging.getLogger(__name__)
 
 class DeputyRole(Enum):
     """Роли депутатов в информационной работе"""
-    SPEAKER = "speaker"           # Основной спикер (комментирует всё)
-    SECTOR_LEAD = "sector_lead"   # Ведущий по сектору (экономика, ЖКХ, соцблок)
-    DISTRICT_REP = "district_rep" # Представитель района
-    SUPPORT = "support"           # Поддержка (ретвиты, лайки, комментарии)
-    NEUTRAL = "neutral"           # Нейтральный (не освещает острую повестку)
+    SPEAKER = "speaker"           # Основной спикер (комментирует широкий круг тем)
+    SECTOR_LEAD = "sector_lead"   # Ведущий по сектору (ЖКХ, экономика, соцблок)
+    DISTRICT_REP = "district_rep" # Представитель округа
+    SUPPORT = "support"           # Поддержка (репосты, амплификация)
+    NEUTRAL = "neutral"           # Нейтральный (узкая тематика)
 
 
 class MessageTone(Enum):
-    """Тональность сообщения"""
+    """Тональность сообщения. OFFENSIVE намеренно убран — модуль не предназначен
+    для координированных атак на оппонентов."""
     POSITIVE = "positive"         # Позитивная (достижения, успехи)
     NEUTRAL = "neutral"           # Нейтральная (информирование)
-    PROTECTIVE = "protective"     # Защитная (отвечаем на критику)
-    OFFENSIVE = "offensive"       # Наступательная (критикуем оппонентов)
-    MOBILIZING = "mobilizing"     # Мобилизующая (призыв к действию)
+    PROTECTIVE = "protective"     # Защитная (отвечаем на критику фактами)
     EXPLANATORY = "explanatory"   # Разъяснительная (объясняем решения)
+    MOBILIZING = "mobilizing"     # Мобилизующая (приглашение к участию)
 
 
 class Platform(Enum):
@@ -57,48 +61,21 @@ class Platform(Enum):
 
 @dataclass
 class Deputy:
-    """Модель депутата"""
+    """Модель депутата.
+
+    Поле `loyalty` намеренно отсутствует. Сектор/округ — единственная основа
+    для автоматического распределения тем.
+    """
     id: str
     name: str
     role: DeputyRole
-    district: str                    # избирательный округ
-    party: str                       # партийная принадлежность
-    followers: int                   # подписчики в соцсетях
-    sectors: List[str]               # курируемые сектора (ЖКХ, экономика, соцблок)
-    influence_score: float           # 0-1, влияние в соцсетях
-    loyalty: float                   # 0-1, лояльность к администрации
-    telegram_channel: Optional[str]
-    vk_page: Optional[str]
-    
-
-@dataclass
-class MessageTemplate:
-    """Шаблон сообщения"""
-    id: str
-    title: str
-    body: str
-    tone: MessageTone
-    target_audience: str
-    suggested_platform: Platform
-    hashtags: List[str]
-    estimated_reach: int
-
-
-@dataclass
-class DeputyPost:
-    """Публикация депутата"""
-    id: str
-    deputy_id: str
-    topic_id: str
-    content: str
-    platform: Platform
-    published_at: datetime
-    tone: MessageTone
-    views: int = 0
-    likes: int = 0
-    comments: int = 0
-    reposts: int = 0
-    effectiveness_score: float = 0.0
+    district: str
+    party: str
+    sectors: List[str] = field(default_factory=list)
+    followers: int = 0
+    influence_score: float = 0.5
+    telegram_channel: Optional[str] = None
+    vk_page: Optional[str] = None
 
 
 @dataclass
@@ -107,45 +84,138 @@ class TopicTask:
     id: str
     title: str
     description: str
-    priority: str                    # critical / high / medium / low
+    priority: str                       # critical / high / medium / low
     target_tone: MessageTone
-    key_messages: List[str]          # ключевые месседжи, которые нужно донести
-    talking_points: List[str]        # тезисы для выступлений
-    target_audience: List[str]       # целевая аудитория
-    deadline: datetime
-    assigned_deputies: List[str]     # ID депутатов
-    required_posts: int              # сколько постов нужно
-    scheduled_posts: int = 0
+    key_messages: List[str] = field(default_factory=list)
+    talking_points: List[str] = field(default_factory=list)
+    target_audience: List[str] = field(default_factory=lambda: ["all"])
+    deadline: datetime = field(default_factory=lambda: datetime.now(timezone.utc) + timedelta(days=3))
+    assigned_deputies: List[str] = field(default_factory=list)
+    required_posts: int = 5
     completed_posts: int = 0
-    status: str = "active"           # active/paused/completed
+    status: str = "active"              # active / paused / completed
+    source: str = "manual"              # manual / crisis / agenda / task_manager
+
+
+@dataclass
+class DeputyDraft:
+    """Черновик публикации, который выдаётся депутату для согласования.
+
+    `is_draft=True` — система возвращает именно черновик, не готовый пост от
+    имени депутата. Депутат сам решает, что публиковать.
+    """
+    topic_id: str
+    deputy_id: str
+    deputy_name: str
+    suggested_text: str
+    talking_points: List[str]
+    tone: str
+    suggested_platform: str
+    hashtags: List[str]
+    is_draft: bool = True
+    note: str = "Черновик для согласования. Депутат публикует под своей ответственностью."
+
+
+@dataclass
+class DeputyPost:
+    """Фактическая публикация депутата (учёт)"""
+    id: str
+    deputy_id: str
+    topic_id: str
+    content: str
+    platform: Platform
+    published_at: datetime
+    views: int = 0
+    likes: int = 0
+    comments: int = 0
+    reposts: int = 0
 
 
 @dataclass
 class DeputyBriefing:
-    """Брифинг для депутата"""
+    """Брифинг для депутата.
+
+    `forbidden_topics` оставлено как поле, но наполняется только из
+    переданного администратором списка. Никаких автоматических ограничений
+    по партии или роли модуль не накладывает.
+    """
     id: str
     deputy_id: str
     deputy_name: str
     date: datetime
-    topics: List[Dict]               # темы для освещения
-    approved_talking_points: List[str]  # согласованные тезисы
-    forbidden_topics: List[str]      # что нельзя обсуждать
+    topics: List[Dict[str, Any]]
+    talking_points: List[str]
     recommended_hashtags: List[str]
     deadline: datetime
-    read_status: bool = False
-    acknowledgement_status: bool = False
+    forbidden_topics: List[str] = field(default_factory=list)
+    read: bool = False
 
 
-# ==================== КЛАСС УПРАВЛЕНИЯ ====================
+# ==================== ШАБЛОНЫ ====================
+
+@dataclass
+class MessageTemplate:
+    id: str
+    title: str
+    body: str
+    tone: MessageTone
+    suggested_platform: Platform
+    hashtags: List[str]
+
+
+def _default_templates() -> Dict[str, MessageTemplate]:
+    return {
+        "achievement_report": MessageTemplate(
+            id="achievement_report",
+            title="Отчёт о работе",
+            body="За {period} в {city} сделано: {achievements}.",
+            tone=MessageTone.POSITIVE,
+            suggested_platform=Platform.TELEGRAM,
+            hashtags=["отчёт", "итоги"],
+        ),
+        "infrastructure_update": MessageTemplate(
+            id="infrastructure_update",
+            title="Инфраструктура",
+            body="В {district} завершены работы: {works}. Срок — {deadline}.",
+            tone=MessageTone.POSITIVE,
+            suggested_platform=Platform.VK,
+            hashtags=["благоустройство"],
+        ),
+        "explanation": MessageTemplate(
+            id="explanation",
+            title="Разъяснение решения",
+            body="Почему принято решение по теме «{topic}»: {reason}. Ожидаемый эффект — {effect}.",
+            tone=MessageTone.EXPLANATORY,
+            suggested_platform=Platform.TELEGRAM,
+            hashtags=["разъяснение"],
+        ),
+        "factual_response": MessageTemplate(
+            id="factual_response",
+            title="Фактический ответ",
+            body="По теме «{topic}»: факты — {facts}. Источник — {source}.",
+            tone=MessageTone.PROTECTIVE,
+            suggested_platform=Platform.TELEGRAM,
+            hashtags=["факты"],
+        ),
+        "invitation": MessageTemplate(
+            id="invitation",
+            title="Приглашение к участию",
+            body="Приглашаем жителей {district} принять участие: {event}. Где и когда: {when_where}.",
+            tone=MessageTone.MOBILIZING,
+            suggested_platform=Platform.VK,
+            hashtags=["участвуйте"],
+        ),
+    }
+
+
+# ==================== ОСНОВНОЙ КЛАСС ====================
 
 class DeputyAgendaManager:
-    """
-    Управление информационной повесткой депутатов
-    
-    Стратегия:
-    - Единый информационный фронт
-    - Распределение ролей (кто и что говорит)
-    - Контроль тональности и месседжей
+    """In-memory менеджер повестки депутатов.
+
+    Для продовой работы оборачивается слоем persistence (см. `db/deputy_queries.py`).
+    Сам класс остаётся pure-Python, чтобы его можно было использовать без БД
+    в тестах и скриптах.
     """
 
     def __init__(self, city_name: str):
@@ -154,550 +224,289 @@ class DeputyAgendaManager:
         self.topics: Dict[str, TopicTask] = {}
         self.posts: List[DeputyPost] = []
         self.briefings: List[DeputyBriefing] = []
-        self.message_templates = self._init_templates()
-        
-        logger.info(f"DeputyAgendaManager инициализирован для города {city_name}")
+        self.templates = _default_templates()
 
-    def _init_templates(self) -> Dict[str, MessageTemplate]:
-        """Инициализация шаблонов сообщений"""
-        return {
-            "budget_increase": MessageTemplate(
-                id="budget_increase",
-                title="Рост бюджета",
-                body="Бюджет {city} вырос на {percent}% благодаря эффективной работе команды губернатора и главы города. Дополнительные средства пойдут на {projects}.",
-                tone=MessageTone.POSITIVE,
-                target_audience="all",
-                suggested_platform=Platform.TELEGRAM,
-                hashtags=["бюджет", "развитие", "нашидостижения"],
-                estimated_reach=5000
-            ),
-            "road_repair": MessageTemplate(
-                id="road_repair",
-                title="Ремонт дорог",
-                body="В {district} завершён ремонт {streets} общей протяжённостью {km} км. Работы выполнены по поручению главы города в срок.",
-                tone=MessageTone.POSITIVE,
-                target_audience="all",
-                suggested_platform=Platform.VK,
-                hashtags=["дороги", "благоустройство", "работаем"],
-                estimated_reach=3000
-            ),
-            "crisis_response": MessageTemplate(
-                id="crisis_response",
-                title="О ситуации в городе",
-                body="Ситуация находится на контроле главы города. Создан оперативный штаб. О результатах проинформируем дополнительно.",
-                tone=MessageTone.PROTECTIVE,
-                target_audience="all",
-                suggested_platform=Platform.TELEGRAM,
-                hashtags=["важно", "официально"],
-                estimated_reach=8000
-            ),
-            "call_to_action": MessageTemplate(
-                id="call_to_action",
-                title="Примите участие!",
-                body="Друзья, запускаем голосование по проекту {project}. Ваше мнение важно! Переходите по ссылке и выбирайте {options}.",
-                tone=MessageTone.MOBILIZING,
-                target_audience="youth",
-                suggested_platform=Platform.VK,
-                hashtags=["голосование", "решаемвместе"],
-                estimated_reach=10000
-            ),
-            "achievement_report": MessageTemplate(
-                id="achievement_report",
-                title="Отчёт о работе",
-                body="За {period} сделано: {achievements}. Спасибо команде главы города и жителям за поддержку!",
-                tone=MessageTone.POSITIVE,
-                target_audience="all",
-                suggested_platform=Platform.MEETING,
-                hashtags=["отчёт", "итоги", "развитие"],
-                estimated_reach=2000
-            ),
-        }
+    # -------- депутаты --------
 
-    # ==================== 1. УПРАВЛЕНИЕ ДЕПУТАТАМИ ====================
-
-    async def add_deputy(self, deputy: Deputy):
-        """Добавление депутата в систему"""
+    def add_deputy(self, deputy: Deputy) -> None:
         self.deputies[deputy.id] = deputy
-        logger.info(f"Добавлен депутат: {deputy.name} ({deputy.role.value})")
 
-    async def get_deputies_by_role(self, role: DeputyRole) -> List[Deputy]:
-        """Получение депутатов по роли"""
-        return [d for d in self.deputies.values() if d.role == role]
+    def get_deputies_by_sector(self, sector: str) -> List[Deputy]:
+        s = sector.lower()
+        return [d for d in self.deputies.values() if any(x.lower() == s for x in d.sectors)]
 
-    async def get_deputies_by_district(self, district: str) -> List[Deputy]:
-        """Депутаты по району"""
-        return [d for d in self.deputies.values() if d.district == district]
+    def get_deputies_by_district(self, district: str) -> List[Deputy]:
+        d = district.lower()
+        return [dep for dep in self.deputies.values() if dep.district.lower() == d]
 
-    async def get_deputies_by_sector(self, sector: str) -> List[Deputy]:
-        """Депутаты по сектору"""
-        return [d for d in self.deputies.values() if sector in d.sectors]
+    # -------- темы --------
 
-    # ==================== 2. ФОРМИРОВАНИЕ ПОВЕСТКИ ====================
-
-    async def create_topic(self, topic_data: Dict) -> TopicTask:
-        """Создание темы для освещения"""
-        topic_id = f"topic_{hashlib.md5(topic_data['title'].encode()).hexdigest()[:8]}"
-        
+    def create_topic(self, data: Dict[str, Any]) -> TopicTask:
+        title = data["title"]
+        topic_id = data.get("id") or f"topic_{hashlib.md5(title.encode('utf-8')).hexdigest()[:10]}"
+        tone = data.get("target_tone", MessageTone.NEUTRAL)
+        if isinstance(tone, str):
+            tone = MessageTone(tone)
         topic = TopicTask(
             id=topic_id,
-            title=topic_data['title'],
-            description=topic_data['description'],
-            priority=topic_data['priority'],
-            target_tone=topic_data.get('target_tone', MessageTone.NEUTRAL),
-            key_messages=topic_data.get('key_messages', []),
-            talking_points=topic_data.get('talking_points', []),
-            target_audience=topic_data.get('target_audience', ['all']),
-            deadline=topic_data.get('deadline', datetime.now() + timedelta(days=3)),
-            assigned_deputies=[],
-            required_posts=topic_data.get('required_posts', 5)
+            title=title,
+            description=data.get("description", ""),
+            priority=data.get("priority", "medium"),
+            target_tone=tone,
+            key_messages=list(data.get("key_messages", [])),
+            talking_points=list(data.get("talking_points", [])),
+            target_audience=list(data.get("target_audience", ["all"])),
+            deadline=data.get("deadline") or (datetime.now(timezone.utc) + timedelta(days=3)),
+            required_posts=int(data.get("required_posts", 5)),
+            source=data.get("source", "manual"),
         )
-        
         self.topics[topic_id] = topic
-        logger.info(f"Создана тема: {topic.title} (приоритет {topic.priority})")
         return topic
 
-    async def assign_deputies_to_topic(self, topic_id: str, deputy_ids: List[str], auto_assign: bool = True):
-        """Назначение депутатов на тему"""
+    def assign_deputies(
+        self,
+        topic_id: str,
+        deputy_ids: Optional[List[str]] = None,
+        *,
+        auto: bool = True,
+        max_assignees: int = 5,
+    ) -> List[str]:
+        """Назначить депутатов на тему.
+
+        Если `deputy_ids` передан — используем его (ручное назначение).
+        Иначе при `auto=True` подбираем по сектору/округу/роли SPEAKER.
+        """
         topic = self.topics.get(topic_id)
-        if not topic:
-            raise ValueError(f"Тема {topic_id} не найдена")
-        
-        if auto_assign:
-            deputy_ids = await self._auto_assign_deputies(topic)
-        
-        topic.assigned_deputies = deputy_ids
-        logger.info(f"Теме '{topic.title}' назначено {len(deputy_ids)} депутатов")
+        if topic is None:
+            raise KeyError(f"topic {topic_id} not found")
 
-    async def _auto_assign_deputies(self, topic: TopicTask) -> List[str]:
-        """Автоматическое назначение депутатов на тему"""
-        assigned = []
-        
-        # Определяем ключевые слова темы
-        keywords = topic.title.lower() + " " + " ".join(topic.key_messages).lower()
-        
-        for deputy in self.deputies.values():
-            # СПИКЕР получает всё
-            if deputy.role == DeputyRole.SPEAKER:
-                assigned.append(deputy.id)
+        if deputy_ids is not None:
+            chosen = [d for d in deputy_ids if d in self.deputies]
+        elif auto:
+            chosen = self._auto_assign(topic, max_assignees=max_assignees)
+        else:
+            chosen = []
+
+        topic.assigned_deputies = chosen
+        return chosen
+
+    def _auto_assign(self, topic: TopicTask, *, max_assignees: int) -> List[str]:
+        keywords = (topic.title + " " + " ".join(topic.key_messages)).lower()
+        chosen: List[str] = []
+
+        # SPEAKER берёт темы с высоким приоритетом
+        if topic.priority in ("critical", "high"):
+            for d in self.deputies.values():
+                if d.role == DeputyRole.SPEAKER:
+                    chosen.append(d.id)
+
+        # Депутаты с подходящим сектором
+        for d in self.deputies.values():
+            if d.id in chosen:
                 continue
-            
-            # Проверяем соответствие сектору
-            for sector in deputy.sectors:
-                if sector.lower() in keywords:
-                    assigned.append(deputy.id)
-                    break
-            
-            # Депутат района — если тема про его район
-            if deputy.district.lower() in keywords:
-                if deputy.id not in assigned:
-                    assigned.append(deputy.id)
-        
-        # Ограничиваем количество (не более 5 на тему)
-        return assigned[:5]
+            if any(s.lower() in keywords for s in d.sectors):
+                chosen.append(d.id)
 
-    async def generate_deputy_briefings(self) -> List[DeputyBriefing]:
-        """Формирование брифингов для депутатов"""
-        briefings = []
-        active_topics = [t for t in self.topics.values() if t.status == "active" and t.deadline > datetime.now()]
-        
-        for deputy in self.deputies.values():
-            # Какие темы этому депутату
-            deputy_topics = [t for t in active_topics if deputy.id in t.assigned_deputies]
-            
-            if not deputy_topics:
+        # Представители округа, если округ назван в теме
+        for d in self.deputies.values():
+            if d.id in chosen:
                 continue
-            
-            # Формируем брифинг
-            briefing = DeputyBriefing(
-                id=f"briefing_{deputy.id}_{datetime.now().strftime('%Y%m%d')}",
-                deputy_id=deputy.id,
-                deputy_name=deputy.name,
-                date=datetime.now(),
-                topics=[{
-                    "title": t.title,
-                    "priority": t.priority,
-                    "key_messages": t.key_messages,
-                    "talking_points": t.talking_points,
-                    "target_tone": t.target_tone.value
-                } for t in deputy_topics],
-                approved_talking_points=self._get_talking_points(active_topics),
-                forbidden_topics=self._get_forbidden_topics(deputy),
-                recommended_hashtags=["Коломна", "Развитие", "НашиЛюди"],
-                deadline=datetime.now() + timedelta(days=1)
-            )
-            briefings.append(briefing)
-            self.briefings.append(briefing)
-        
-        logger.info(f"Сформировано {len(briefings)} брифингов")
-        return briefings
+            if d.district and d.district.lower() in keywords:
+                chosen.append(d.id)
 
-    def _get_talking_points(self, topics: List[TopicTask]) -> List[str]:
-        """Формирование единых тезисов"""
-        all_points = []
-        for topic in topics:
-            all_points.extend(topic.talking_points)
-        return list(set(all_points))[:10]
+        return chosen[:max_assignees]
 
-    def _get_forbidden_topics(self, deputy: Deputy) -> List[str]:
-        """Запрещённые темы для депутата"""
-        forbidden = []
-        
-        if deputy.role == DeputyRole.SUPPORT:
-            forbidden.extend(["критика", "альтернативные предложения"])
-        
-        if deputy.party != "Единая Россия":
-            forbidden.extend(["критика партии власти"])
-        
-        return forbidden
+    # -------- черновики --------
 
-    # ==================== 3. ГЕНЕРАЦИЯ КОНТЕНТА ====================
+    def suggest_draft(
+        self,
+        topic_id: str,
+        deputy_id: str,
+        *,
+        platform: Optional[Platform] = None,
+    ) -> DeputyDraft:
+        """Сформировать ЧЕРНОВИК публикации для депутата.
 
-    async def generate_post_content(self, topic_id: str, deputy_id: str, platform: Platform = None) -> Dict:
-        """Генерация контента для публикации"""
+        Возвращает черновик с пометкой `is_draft=True`. Фактический текст
+        публикации остаётся за депутатом — модуль предлагает только структуру
+        и тезисы.
+        """
         topic = self.topics.get(topic_id)
         deputy = self.deputies.get(deputy_id)
-        
-        if not topic or not deputy:
-            return {"error": "Topic or deputy not found"}
-        
-        # Выбираем шаблон
-        template = self._select_template(topic, deputy)
-        
-        # Персонализируем контент
-        content = template.body.format(
+        if topic is None or deputy is None:
+            raise KeyError("topic or deputy not found")
+
+        template = self._select_template(topic)
+        suggested_platform = platform or template.suggested_platform
+
+        # Подставляем плейсхолдеры — но оставляем их видимыми, чтобы депутат
+        # дозаполнил конкретные цифры/факты сам.
+        suggested_text = template.body.format(
             city=self.city_name,
-            district=deputy.district,
-            percent="15",
-            projects="ремонт дорог и благоустройство дворов",
-            streets="ул. Ленина, ул. Октябрьской революции",
-            km="5",
-            period="последние полгода",
-            achievements="открыт новый парк, отремонтирована школа, запущен фестиваль",
-            project="«Народный бюджет»",
-            options="парк, спортплощадка, детский городок"
+            district=deputy.district or "—",
+            period="[период]",
+            achievements="[список достижений]",
+            works="[виды работ]",
+            deadline="[срок]",
+            topic=topic.title,
+            reason="[обоснование]",
+            effect="[ожидаемый эффект]",
+            facts="[конкретные факты]",
+            source="[источник]",
+            event="[событие]",
+            when_where="[место и время]",
         )
-        
-        # Добавляем подпись депутата
-        signature = f"\n\n@{deputy.telegram_channel}" if deputy.telegram_channel else ""
-        
-        return {
-            "topic_id": topic_id,
-            "deputy_id": deputy_id,
-            "deputy_name": deputy.name,
-            "content": content + signature,
-            "tone": template.tone.value,
-            "platform": platform or template.suggested_platform.value,
-            "hashtags": " ".join([f"#{h}" for h in template.hashtags]),
-            "key_messages": topic.key_messages,
-            "talking_points": topic.talking_points[:3],
-            "estimated_reach": template.estimated_reach
-        }
 
-    def _select_template(self, topic: TopicTask, deputy: Deputy) -> MessageTemplate:
-        """Выбор шаблона под тему и депутата"""
-        if topic.target_tone == MessageTone.POSITIVE:
-            if "бюджет" in topic.title.lower():
-                return self.message_templates["budget_increase"]
-            elif "дорог" in topic.title.lower():
-                return self.message_templates["road_repair"]
-            elif "отчёт" in topic.title.lower():
-                return self.message_templates["achievement_report"]
-        
-        if topic.target_tone == MessageTone.MOBILIZING:
-            return self.message_templates["call_to_action"]
-        
-        if topic.target_tone == MessageTone.PROTECTIVE:
-            return self.message_templates["crisis_response"]
-        
-        # Дефолтный шаблон
-        return self.message_templates["budget_increase"]
+        return DeputyDraft(
+            topic_id=topic_id,
+            deputy_id=deputy_id,
+            deputy_name=deputy.name,
+            suggested_text=suggested_text,
+            talking_points=list(topic.talking_points),
+            tone=topic.target_tone.value,
+            suggested_platform=suggested_platform.value,
+            hashtags=list(template.hashtags),
+        )
 
-    # ==================== 4. ПЛАНИРОВАНИЕ ПУБЛИКАЦИЙ ====================
+    def _select_template(self, topic: TopicTask) -> MessageTemplate:
+        tone = topic.target_tone
+        if tone == MessageTone.POSITIVE:
+            return self.templates["infrastructure_update"]
+        if tone == MessageTone.PROTECTIVE:
+            return self.templates["factual_response"]
+        if tone == MessageTone.EXPLANATORY:
+            return self.templates["explanation"]
+        if tone == MessageTone.MOBILIZING:
+            return self.templates["invitation"]
+        return self.templates["achievement_report"]
 
-    async def create_publication_plan(self, topic_id: str) -> List[Dict]:
-        """Создание плана публикаций по теме"""
-        topic = self.topics.get(topic_id)
-        if not topic:
-            return []
-        
-        plan = []
-        deadline_days = (topic.deadline - datetime.now()).days
-        
-        for i, deputy_id in enumerate(topic.assigned_deputies):
-            deputy = self.deputies.get(deputy_id)
-            if not deputy:
-                continue
-            
-            # Распределяем публикации по времени
-            offset_hours = i * (24 / max(len(topic.assigned_deputies), 1))
-            scheduled_time = datetime.now() + timedelta(hours=offset_hours)
-            
-            # Выбираем платформу
-            if deputy.role == DeputyRole.SPEAKER:
-                platforms = [Platform.TELEGRAM, Platform.VK, Platform.MEDIA]
-            elif deputy.role == DeputyRole.SUPPORT:
-                platforms = [Platform.VK, Platform.OK]
-            else:
-                platforms = [Platform.TELEGRAM, Platform.VK]
-            
-            post_content = await self.generate_post_content(topic_id, deputy_id, platforms[0])
-            
-            plan.append({
-                "deputy_name": deputy.name,
-                "role": deputy.role.value,
-                "scheduled_time": scheduled_time.isoformat(),
-                "platform": platforms[0].value,
-                "content": post_content["content"],
-                "hashtags": post_content["hashtags"],
-                "tone": post_content["tone"]
-            })
-        
-        return plan
+    # -------- брифинги --------
 
-    async def generate_coordinated_posts(self, topic_id: str) -> Dict:
-        """Генерация скоординированных постов (волна)"""
-        plan = await self.create_publication_plan(topic_id)
-        
-        # Группировка по времени
-        waves = {
-            "first_wave": [],    # первые 30% депутатов
-            "second_wave": [],   # следующие 40%
-            "third_wave": []     # оставшиеся 30%
-        }
-        
-        total = len(plan)
-        first_count = int(total * 0.3)
-        second_count = int(total * 0.4)
-        
-        for i, post in enumerate(plan):
-            if i < first_count:
-                waves["first_wave"].append(post)
-            elif i < first_count + second_count:
-                waves["second_wave"].append(post)
-            else:
-                waves["third_wave"].append(post)
-        
-        return {
-            "topic_id": topic_id,
-            "topic_title": self.topics[topic_id].title,
-            "total_posts": total,
-            "waves": waves,
-            "interval_hours": 3,
-            "recommendation": "Первую волну запустить в 10:00, вторую в 13:00, третью в 16:00"
-        }
+    def build_briefing(
+        self,
+        deputy_id: str,
+        *,
+        forbidden_topics: Optional[List[str]] = None,
+        recommended_hashtags: Optional[List[str]] = None,
+        horizon_days: int = 1,
+    ) -> Optional[DeputyBriefing]:
+        deputy = self.deputies.get(deputy_id)
+        if deputy is None:
+            return None
 
-    # ==================== 5. КОНТРОЛЬ И АНАЛИТИКА ====================
+        my_topics = [
+            t for t in self.topics.values()
+            if t.status == "active"
+            and deputy_id in t.assigned_deputies
+            and t.deadline > datetime.now(timezone.utc)
+        ]
+        if not my_topics:
+            return None
 
-    async def register_post(self, post_data: Dict) -> DeputyPost:
-        """Регистрация опубликованного поста"""
+        return DeputyBriefing(
+            id=f"briefing_{deputy_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}",
+            deputy_id=deputy_id,
+            deputy_name=deputy.name,
+            date=datetime.now(timezone.utc),
+            topics=[{
+                "id": t.id,
+                "title": t.title,
+                "priority": t.priority,
+                "key_messages": t.key_messages,
+                "talking_points": t.talking_points,
+                "tone": t.target_tone.value,
+                "deadline": t.deadline.isoformat(),
+            } for t in my_topics],
+            talking_points=self._merge_talking_points(my_topics),
+            recommended_hashtags=list(recommended_hashtags or []),
+            forbidden_topics=list(forbidden_topics or []),
+            deadline=datetime.now(timezone.utc) + timedelta(days=horizon_days),
+        )
+
+    def _merge_talking_points(self, topics: List[TopicTask]) -> List[str]:
+        seen: Dict[str, None] = {}
+        for t in topics:
+            for p in t.talking_points:
+                if p not in seen:
+                    seen[p] = None
+        return list(seen.keys())[:10]
+
+    # -------- учёт публикаций --------
+
+    def register_post(self, data: Dict[str, Any]) -> DeputyPost:
+        platform = data["platform"]
+        if isinstance(platform, str):
+            platform = Platform(platform)
+        published_at = data.get("published_at") or datetime.now(timezone.utc)
+        deputy_id = data["deputy_id"]
+        post_seed = f"{deputy_id}{published_at.isoformat()}".encode("utf-8")
         post = DeputyPost(
-            id=f"post_{hashlib.md5(f'{post_data['deputy_id']}{datetime.now().isoformat()}'.encode()).hexdigest()[:8]}",
-            deputy_id=post_data['deputy_id'],
-            topic_id=post_data['topic_id'],
-            content=post_data['content'],
-            platform=Platform(post_data['platform']),
-            published_at=datetime.now(),
-            tone=MessageTone(post_data['tone']),
-            views=post_data.get('views', 0),
-            likes=post_data.get('likes', 0),
-            comments=post_data.get('comments', 0),
-            reposts=post_data.get('reposts', 0)
+            id=data.get("id") or f"post_{hashlib.md5(post_seed).hexdigest()[:10]}",
+            deputy_id=deputy_id,
+            topic_id=data["topic_id"],
+            content=data.get("content", ""),
+            platform=platform,
+            published_at=published_at,
+            views=int(data.get("views", 0)),
+            likes=int(data.get("likes", 0)),
+            comments=int(data.get("comments", 0)),
+            reposts=int(data.get("reposts", 0)),
         )
-        
         self.posts.append(post)
-        
-        # Обновляем счётчики темы
-        topic = self.topics.get(post_data['topic_id'])
-        if topic:
-            topic.scheduled_posts += 1
+        topic = self.topics.get(post.topic_id)
+        if topic is not None:
             topic.completed_posts += 1
-        
-        logger.info(f"Зарегистрирован пост от {post_data['deputy_id']}")
         return post
 
-    async def get_campaign_report(self, topic_id: str) -> Dict:
-        """Отчёт по информационной кампании"""
+    # -------- отчёты --------
+
+    def topic_report(self, topic_id: str) -> Dict[str, Any]:
         topic = self.topics.get(topic_id)
-        if not topic:
-            return {"error": "Topic not found"}
-        
+        if topic is None:
+            return {"error": "topic not found"}
         topic_posts = [p for p in self.posts if p.topic_id == topic_id]
-        
-        total_views = sum(p.views for p in topic_posts)
-        total_likes = sum(p.likes for p in topic_posts)
-        total_comments = sum(p.comments for p in topic_posts)
-        total_reposts = sum(p.reposts for p in topic_posts)
-        
+        per_deputy: Dict[str, int] = defaultdict(int)
+        for p in topic_posts:
+            per_deputy[p.deputy_id] += 1
         return {
-            "topic_title": topic.title,
+            "topic_id": topic.id,
+            "title": topic.title,
             "status": topic.status,
-            "assigned_deputies": len(topic.assigned_deputies),
-            "posts_published": len(topic_posts),
-            "posts_required": topic.required_posts,
-            "completion_rate": len(topic_posts) / topic.required_posts if topic.required_posts else 0,
-            "total_reach": total_views,
-            "engagement": {
-                "likes": total_likes,
-                "comments": total_comments,
-                "reposts": total_reposts
-            },
-            "effectiveness_score": (total_likes + total_comments * 2 + total_reposts * 3) / max(total_views, 1),
-            "deputy_performance": [
-                {
-                    "deputy": self.deputies.get(p.deputy_id).name if self.deputies.get(p.deputy_id) else p.deputy_id,
-                    "posts": len([x for x in topic_posts if x.deputy_id == p.deputy_id]),
-                    "views": p.views
-                }
-                for p in topic_posts
-            ][:5]
+            "priority": topic.priority,
+            "assigned": len(topic.assigned_deputies),
+            "required_posts": topic.required_posts,
+            "completed_posts": len(topic_posts),
+            "completion_rate": round(len(topic_posts) / topic.required_posts, 2) if topic.required_posts else 0,
+            "total_views": sum(p.views for p in topic_posts),
+            "total_likes": sum(p.likes for p in topic_posts),
+            "by_deputy": [
+                {"deputy_id": did, "deputy_name": self.deputies[did].name if did in self.deputies else did, "posts": cnt}
+                for did, cnt in per_deputy.items()
+            ],
         }
 
-    # ==================== 6. ДАШБОРД ====================
-
-    async def get_deputy_dashboard(self, deputy_id: str) -> Dict:
-        """Дашборд для конкретного депутата"""
-        deputy = self.deputies.get(deputy_id)
-        if not deputy:
-            return {"error": "Deputy not found"}
-        
-        my_topics = [t for t in self.topics.values() if deputy_id in t.assigned_deputies and t.status == "active"]
-        my_posts = [p for p in self.posts if p.deputy_id == deputy_id]
-        
-        return {
-            "deputy_name": deputy.name,
-            "role": deputy.role.value,
-            "district": deputy.district,
-            "active_tasks": len(my_topics),
-            "posts_published": len(my_posts),
-            "upcoming_deadlines": [
-                {"title": t.title, "deadline": t.deadline.isoformat()}
-                for t in my_topics if t.deadline > datetime.now()
-            ][:5],
-            "pending_briefings": len([b for b in self.briefings if b.deputy_id == deputy_id and not b.read_status]),
-            "performance": {
-                "total_views": sum(p.views for p in my_posts),
-                "total_likes": sum(p.likes for p in my_posts),
-                "avg_effectiveness": sum(p.effectiveness_score for p in my_posts) / len(my_posts) if my_posts else 0
-            },
-            "next_actions": [
-                f"Осветить тему: {t.title}" for t in my_topics[:3]
-            ]
-        }
-
-    async def get_coordinator_dashboard(self) -> Dict:
-        """Дашборд для координатора информационной работы"""
-        active_topics = [t for t in self.topics.values() if t.status == "active"]
-        completed_topics = [t for t in self.topics.values() if t.status == "completed"]
-        
-        all_posts = self.posts
-        total_reach = sum(p.views for p in all_posts)
-        
+    def coordinator_dashboard(self) -> Dict[str, Any]:
+        active = [t for t in self.topics.values() if t.status == "active"]
         return {
             "city": self.city_name,
-            "timestamp": datetime.now().isoformat(),
-            "statistics": {
-                "total_deputies": len(self.deputies),
-                "active_campaigns": len(active_topics),
-                "completed_campaigns": len(completed_topics),
-                "total_posts": len(all_posts),
-                "total_reach": total_reach
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "totals": {
+                "deputies": len(self.deputies),
+                "active_topics": len(active),
+                "completed_topics": len([t for t in self.topics.values() if t.status == "completed"]),
+                "total_posts": len(self.posts),
             },
-            "active_campaigns": [
+            "active_topics": [
                 {
+                    "id": t.id,
                     "title": t.title,
                     "priority": t.priority,
+                    "assigned": len(t.assigned_deputies),
+                    "completed": t.completed_posts,
+                    "required": t.required_posts,
                     "deadline": t.deadline.isoformat(),
-                    "progress": f"{t.completed_posts}/{t.required_posts}",
-                    "assigned": len(t.assigned_deputies)
+                    "source": t.source,
                 }
-                for t in active_topics[:5]
+                for t in sorted(active, key=lambda x: x.deadline)
             ],
-            "deputy_ranking": sorted(
-                self.deputies.values(),
-                key=lambda d: len([p for p in all_posts if p.deputy_id == d.id]),
-                reverse=True
-            )[:5],
-            "pending_briefings": len([b for b in self.briefings if not b.read_status]),
-            "recommendations": [
-                "⚠️ Критическая тема «Бюджет» требует охвата — назначьте спикеров",
-                "📢 Запустить волну постов по теме «Благоустройство» завтра в 10:00",
-                "📊 Депутат Иванов показывает низкую эффективность — провести брифинг"
-            ]
         }
-
-
-# ==================== ПРИМЕР ====================
-
-async def demo():
-    print("=" * 70)
-    print("🏛️ УПРАВЛЕНИЕ ПОВЕСТКОЙ ДЕПУТАТОВ")
-    print("=" * 70)
-    
-    manager = DeputyAgendaManager("Коломна")
-    
-    # 1. Добавляем депутатов
-    print("\n📋 ДОБАВЛЕНИЕ ДЕПУТАТОВ:")
-    
-    deputies_data = [
-        Deputy("dep_001", "Иванов Иван", DeputyRole.SPEAKER, "Центральный", "Единая Россия", 15000, ["все"], 0.95, 0.98, "ivanov_telegram", "ivanov_vk"),
-        Deputy("dep_002", "Петров Пётр", DeputyRole.SECTOR_LEAD, "Колычёво", "Единая Россия", 8000, ["ЖКХ", "благоустройство"], 0.82, 0.92, "petrov_telegram", "petrov_vk"),
-        Deputy("dep_003", "Сидорова Мария", DeputyRole.SECTOR_LEAD, "Щурово", "Единая Россия", 5000, ["соцблок", "образование"], 0.78, 0.90, "sidorova_tg", "sidorova_vk"),
-        Deputy("dep_004", "Козлов Дмитрий", DeputyRole.DISTRICT_REP, "Голутвин", "Единая Россия", 3000, ["транспорт"], 0.65, 0.85, None, "kozlov_vk"),
-        Deputy("dep_005", "Новикова Анна", DeputyRole.SUPPORT, "Запрудня", "Единая Россия", 2000, [], 0.55, 0.80, None, None),
-    ]
-    
-    for d in deputies_data:
-        await manager.add_deputy(d)
-        print(f"  + {d.name} — {d.role.value}, округ {d.district}")
-    
-    # 2. Создаём тему
-    print("\n🎯 СОЗДАНИЕ ИНФОРМАЦИОННОЙ КАМПАНИИ:")
-    
-    topic = await manager.create_topic({
-        "title": "Благоустройство дворовых территорий",
-        "description": "Освещение программы благоустройства дворов в 2026 году",
-        "priority": "high",
-        "target_tone": MessageTone.POSITIVE,
-        "key_messages": [
-            "За 2 года благоустроено 45 дворов",
-            "Установлены детские и спортивные площадки",
-            "Жители выбирают проекты через голосование"
-        ],
-        "talking_points": [
-            "Команда главы города выполняет обещания",
-            "Благоустройство идёт по нацпроекту",
-            "Жители активно участвуют в выборе проектов"
-        ],
-        "target_audience": ["all"],
-        "required_posts": 8
-    })
-    print(f"  Создана тема: {topic.title}")
-    
-    # 3. Назначаем депутатов
-    await manager.assign_deputies_to_topic(topic.id, [])
-    print(f"  Назначено депутатов: {len(topic.assigned_deputies)}")
-    
-    # 4. Генерация постов
-    print("\n📝 ГЕНЕРАЦИЯ ПОСТОВ:")
-    
-    for deputy_id in topic.assigned_deputies[:3]:
-        post = await manager.generate_post_content(topic.id, deputy_id)
-        print(f"  • {post['deputy_name']}: {post['content'][:60]}...")
-    
-    # 5. План публикаций
-    print("\n📅 ПЛАН ПУБЛИКАЦИЙ:")
-    plan = await manager.create_publication_plan(topic.id)
-    for p in plan[:3]:
-        print(f"  • {p['deputy_name']} — {p['scheduled_time'][:16]} — {p['platform']}")
-    
-    # 6. Дашборд координатора
-    print("\n📊 ДАШБОРД КООРДИНАТОРА:")
-    dashboard = await manager.get_coordinator_dashboard()
-    print(f"  Всего депутатов: {dashboard['statistics']['total_deputies']}")
-    print(f"  Активных кампаний: {dashboard['statistics']['active_campaigns']}")
-    print(f"  Всего постов: {dashboard['statistics']['total_posts']}")
-    
-    print("\n✅ Готово!")
-
-if __name__ == "__main__":
-    asyncio.run(demo())

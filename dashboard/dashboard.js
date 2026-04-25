@@ -2034,8 +2034,13 @@ async function submitRoadmap(event) {
 // ссылку в топбаре, когда у текущего пользователя роль admin.
 function updateAdminLinkVisibility() {
   const link = document.getElementById("admin-link");
-  if (!link) return;
-  link.hidden = !(currentUser && currentUser.role === "admin");
+  if (link) link.hidden = !(currentUser && currentUser.role === "admin");
+  // Депутаты — управление повесткой; доступно editor и admin.
+  const deputies = document.getElementById("deputies-link");
+  if (deputies) {
+    const role = currentUser && currentUser.role;
+    deputies.hidden = !(role === "admin" || role === "editor");
+  }
 }
 
 // -------------------------------------------------- City pulse
