@@ -100,25 +100,18 @@ KOLOMNA_SOURCES = CitySources(
         Source("telegram", "Коломенский кремль", "kolomna_kreml", "culture", "P2"),
     ],
     vk=[
+        # Подтверждённые VK-handles. Остальные удалены — не существовали
+        # (error_code=100) либо имеют закрытую стену (error_code=15).
+        # При онбординге новых VK-источников: проверить
+        # https://vk.com/<handle> и убедиться что страница доступна
+        # без авторизации, перед добавлением сюда.
         Source("vk", "Типичная Коломна", "typical_kolomna", "complaints", "P0"),
         Source("vk", "Коломна Сегодня", "kolomna_today", "news", "P0"),
         Source("vk", "Администрация Коломны", "kolomna_adm", "official", "P0"),
-        Source("vk", "Коломна 360", "kolomna360", "city", "P1"),
         Source("vk", "Коломна Онлайн", "kolomna_online", "news", "P1"),
-        # --- автомобильная повестка ---
-        Source("vk", "Автомобилисты Коломны", "auto_kolomna", "transport", "P0"),
-        Source("vk", "Дороги Коломны", "kolomna_roads", "transport", "P1"),
-        Source("vk", "Коломенские пробки", "kolomna_probki", "transport", "P1"),
-        # --- общественный транспорт ---
-        Source("vk", "Коломенский троллейбус", "kolomna_trolley", "transport", "P2"),
-        # --- ЖКХ и благоустройство ---
-        Source("vk", "ЖКХ Коломна", "kolomna_zhkh_vk", "utilities", "P1"),
-        Source("vk", "Коломна благоустройство", "kolomna_blag", "quality", "P2"),
-        # --- тематические ---
-        Source("vk", "МФЦ Коломны", "kolomna_mfc", "official", "P2"),
-        Source("vk", "Коломна Бизнес", "kolomna_business_vk", "business", "P2"),
-        Source("vk", "Мамы Коломны", "kolomna_mamas", "social", "P1"),
-        Source("vk", "Коломна Спорт", "kolomna_sport_vk", "sport", "P2"),
+        # Автомобилисты Коломны — handle подтвердить вручную, оставлен по
+        # запросу пользователя; коллектор тихо помут'ит его при ошибке.
+        Source("vk", "Автомобилисты Коломны", "auto_kolomna", "transport", "P1"),
     ],
     news_rss=[
         # --- 11 тематических Google News запросов под пилотом (P0) ---
