@@ -39,6 +39,7 @@ from collectors import (
     AIPulseCollector,
     AppealsCollector,
     NewsCollector,
+    VKCollector,
 )
 from collectors.base import CollectedItem
 from config.cities import CITIES
@@ -79,11 +80,12 @@ async def collect_city(city_name: str, enricher: Optional[NewsEnricher] = None) 
     collectors = [
         # --- re-enable when valid TELEGRAM_API_ID/HASH arrive:
         # TelegramCollector(city_name),
-        # --- re-enable when VK access token is valid:
-        # VKCollector(city_name),
         NewsCollector(city_name),
         AppealsCollector(city_name),
     ]
+    # VK enabled только когда токен задан в окружении.
+    if settings.vk_api_token:
+        collectors.append(VKCollector(city_name))
     items: List[CollectedItem] = []
     for coll in collectors:
         try:
