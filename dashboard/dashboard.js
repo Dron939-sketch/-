@@ -296,7 +296,8 @@ function renderMeisterGraph(graph) {
   cyInstance = window.cytoscape({
     container: host,
     elements,
-    wheelSensitivity: 0.15,
+    // wheelSensitivity intentionally NOT set — Cytoscape recommends
+    // sticking with default for cross-mouse / cross-OS consistency.
     layout: {
       name: "cose",
       animate: true,
