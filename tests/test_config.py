@@ -61,9 +61,9 @@ def test_kolomna_sources_counts():
     assert len(bundle.telegram) >= 10
     assert len(bundle.vk) >= 5
     assert len(bundle.news_rss) >= 1
-    # "Автомобилисты Коломны" is the named request; check it's in the registry.
+    # «АВТОМОБИЛИСТЫ КОЛОМНЫ» — реальный handle проверен через VK API.
     vk_handles = {s.handle for s in bundle.vk}
-    assert "auto_kolomna" in vk_handles
+    assert "KolomnaRuL" in vk_handles
 
 
 def test_neighbour_cities_have_at_least_rss():
