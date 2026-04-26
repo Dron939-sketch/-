@@ -100,18 +100,27 @@ KOLOMNA_SOURCES = CitySources(
         Source("telegram", "Коломенский кремль", "kolomna_kreml", "culture", "P2"),
     ],
     vk=[
-        # Подтверждённые VK-handles. Остальные удалены — не существовали
-        # (error_code=100) либо имеют закрытую стену (error_code=15).
-        # При онбординге новых VK-источников: проверить
-        # https://vk.com/<handle> и убедиться что страница доступна
-        # без авторизации, перед добавлением сюда.
+        # Handles, подтверждённые через VK groups.search в /admin.html.
+        # При добавлении нового — открыть https://vk.com/<handle> и
+        # убедиться что страница доступна без авторизации.
+        # ---
+        # Существующие (не верифицированы напрямую, но не падают):
         Source("vk", "Типичная Коломна", "typical_kolomna", "complaints", "P0"),
         Source("vk", "Коломна Сегодня", "kolomna_today", "news", "P0"),
         Source("vk", "Администрация Коломны", "kolomna_adm", "official", "P0"),
         Source("vk", "Коломна Онлайн", "kolomna_online", "news", "P1"),
-        # Автомобилисты Коломны — handle подтвердить вручную, оставлен по
-        # запросу пользователя; коллектор тихо помут'ит его при ошибке.
-        Source("vk", "Автомобилисты Коломны", "auto_kolomna", "transport", "P1"),
+        # ---
+        # Найдены через /admin/vk_discover (подтверждены пользователем):
+        Source("vk", "АВТОМОБИЛИСТЫ КОЛОМНЫ", "KolomnaRuL", "transport", "P0"),
+        Source("vk", "Город Коломна", "kolomna_gorod", "city", "P0"),
+        Source("vk", "Коломна 750", "kolomna_group_750", "city", "P1"),
+        Source("vk", "Коломна ™", "kolomna750", "city", "P1"),
+        Source("vk", "Коломна Best", "kolomnabest", "news", "P1"),
+        Source("vk", "Подслушано Коломна", "kolomna_tut", "complaints", "P0"),
+        Source("vk", "Подслушано Коломна (alt)", "kolomna_podsluh", "complaints", "P1"),
+        Source("vk", "Коломна Новости", "kolomna_spravka", "news", "P1"),
+        Source("vk", "Афиша Коломна", "kolomnaafisha", "culture", "P2"),
+        Source("vk", "Взаимопомощь в Коломне", "kolomnahelp", "social", "P1"),
     ],
     news_rss=[
         # --- 11 тематических Google News запросов под пилотом (P0) ---
