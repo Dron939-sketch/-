@@ -98,6 +98,25 @@
         <ul class="user-timeline" id="admin-user-timeline"></ul>
       </section>
 
+      <!-- VK groups discovery -->
+      <section class="card wide vk-discover-card">
+        <div class="card-eyebrow">
+          <span>Поиск VK-групп — для config/sources.py</span>
+          <span class="muted small">Возвращает screen_name, можно копировать готовую строку</span>
+        </div>
+        <form class="vk-discover-form" id="vk-discover-form">
+          <input type="text" id="vk-discover-q" placeholder="Например: Коломна, Луховицы, ЖКХ Коломна" required maxlength="100" />
+          <button type="submit" class="rm-submit">Искать</button>
+        </form>
+        <div class="muted small vk-discover-hint">
+          Поиск через VK API <code>groups.search</code>. Сортировка по числу
+          участников (крупные сообщества — первыми).
+          После выбора — добавь нужные строки в <code>config/sources.py</code>
+          в блок <code>vk=[...]</code> для соответствующего города.
+        </div>
+        <div class="vk-discover-results" id="vk-discover-results"></div>
+      </section>
+
     </div>
   </main>
 

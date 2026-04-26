@@ -165,6 +165,80 @@
   .user-timeline .method { display: none; }
 }
 
+/* ------------------ VK DISCOVERY ------------------ */
+.vk-discover-form {
+  display: flex; gap: 10px; align-items: stretch;
+  margin: 8px 0 6px;
+}
+.vk-discover-form input {
+  flex: 1;
+  padding: 9px 12px;
+  background: rgba(10, 22, 40, 0.8);
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  color-scheme: dark;
+}
+.vk-discover-form input:focus { border-color: var(--gold); outline: none; }
+.vk-discover-hint { margin-bottom: 12px; }
+.vk-discover-hint code {
+  padding: 1px 6px; background: rgba(10, 22, 40, 0.6); border-radius: 4px;
+  color: var(--gold-light); font-size: 0.78rem;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+.vk-discover-results {
+  display: grid; gap: 6px;
+  max-height: 520px; overflow-y: auto;
+}
+.vk-group-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 80px;
+  gap: 12px; align-items: baseline;
+  padding: 10px 14px;
+  background: rgba(26, 58, 92, 0.45);
+  border-radius: 8px;
+  border: 1px solid rgba(197, 160, 89, 0.08);
+  font-size: 0.86rem;
+}
+.vk-group-row.closed { opacity: 0.5; }
+.vk-group-row .vk-name {
+  font-weight: 600;
+  display: block;
+}
+.vk-group-row .vk-name a { color: var(--gold-light); text-decoration: none; border-bottom: 1px dashed rgba(197,160,89,0.3); }
+.vk-group-row .vk-name a:hover { color: var(--gold-bright); }
+.vk-group-row .vk-handle {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.74rem;
+  color: var(--muted);
+  display: block;
+  margin-top: 2px;
+}
+.vk-group-row .vk-desc { color: var(--muted); font-size: 0.78rem; margin-top: 4px; }
+.vk-group-row .vk-members {
+  text-align: right; font-variant-numeric: tabular-nums; font-weight: 700;
+  color: var(--gold-light);
+}
+.vk-copy-btn {
+  padding: 5px 10px;
+  font-size: 0.74rem;
+  background: rgba(197, 160, 89, 0.12);
+  color: var(--gold-light);
+  border: 1px solid rgba(197, 160, 89, 0.3);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vk-copy-btn:hover { background: rgba(212, 175, 55, 0.25); color: var(--gold-bright); }
+.vk-copy-btn.copied { background: rgba(111, 207, 151, 0.2); color: var(--good); border-color: rgba(111, 207, 151, 0.4); }
+
+@media (max-width: 640px) {
+  .vk-group-row { grid-template-columns: 1fr 70px; }
+  .vk-copy-btn { grid-column: 1 / -1; justify-self: end; }
+}
+
 @media (max-width: 640px) {
   .admin-page { padding: 14px; gap: 14px; }
   .admin-controls { flex-direction: column; align-items: stretch; gap: 10px; }

@@ -993,6 +993,33 @@ async def admin_collect_all(
     }
 
 
+@router.get("/api/admin/vk_discover")
+async def admin_vk_discover(
+    q: str,
+    limit: int = 30,
+    _user: dict = Depends(require_role("admin", "editor")),
+) -> dict:
+    """Find VK groups matching `q` so admin может pick handles for sources.
+
+    Использует public VK groups.search; sort=6 (по убыванию members count)
+    — крупные сообщества показываются первыми. Возвращает list с
+    `screen_name` (тот самый handle для config), `name`, `members_count`,
+    обрезанным описанием, типом группы и готовой строкой `config_line`
+    которую можно скопировать в `config/sources.py`.
+    """
+    from collectors.vk_discover import search_groups
+    if not q or not q.strip():
+        raise HTTPException(status_code=422, detail="q must be non-empty")
+    limit = max(1, min(100, int(limit)))
+    groups = await search_groups(q.strip(), limit=limit)
+    return {
+        "query": q.strip(),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "count": len(groups),
+        "groups": groups,
+    }
+
+
 @router.get("/api/city/{name}/pulse")
 async def city_pulse(name: str) -> dict:
     """Композитный индекс 0..100 «пульса города».
