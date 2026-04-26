@@ -59,6 +59,7 @@ from analytics import analyze_market_gaps, bucket_eisenhower, compute_pulse, dee
 from collectors import (
     AppealsCollector,
     NewsCollector,
+    VKCollector,
 )
 from collectors.base import CollectedItem
 from config.cities import CITIES, get_city, get_city_by_slug
@@ -1311,11 +1312,11 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
     collectors = [
         # --- re-enable when valid TELEGRAM_API_ID/HASH arrive:
         # TelegramCollector(cfg["name"]),
-        # --- re-enable when VK access token is valid:
-        # VKCollector(cfg["name"]),
         NewsCollector(cfg["name"]),
         AppealsCollector(cfg["name"]),
     ]
+    if settings.vk_api_token:
+        collectors.append(VKCollector(cfg["name"]))
     items: List[CollectedItem] = []
     for coll in collectors:
         try:
