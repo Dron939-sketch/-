@@ -324,6 +324,66 @@ async function init() {
   if (closeUserBtn) closeUserBtn.addEventListener("click", () => {
     document.getElementById("admin-user-detail").hidden = true;
   });
+
+  // VK groups discovery form.
+  const vkForm = document.getElementById("vk-discover-form");
+  if (vkForm) vkForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = document.getElementById("vk-discover-q").value.trim();
+    if (!q) return;
+    await runVkDiscover(q);
+  });
+}
+
+async function runVkDiscover(query) {
+  const out = document.getElementById("vk-discover-results");
+  out.innerHTML = '<div class="muted small" style="padding:12px;">Ищу…</div>';
+  try {
+    const data = await fetchJson(`/api/admin/vk_discover?q=${encodeURIComponent(query)}&limit=50`);
+    renderVkGroups(data);
+  } catch (err) {
+    out.innerHTML = `<div class="auth-error">Ошибка: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderVkGroups(data) {
+  const out = document.getElementById("vk-discover-results");
+  out.innerHTML = "";
+  const groups = data.groups || [];
+  if (!groups.length) {
+    out.innerHTML = '<div class="muted small" style="padding:12px;">Группы не найдены. Попробуйте другой запрос.</div>';
+    return;
+  }
+  groups.forEach((g) => {
+    const row = document.createElement("div");
+    row.className = "vk-group-row" + (g.is_closed ? " closed" : "");
+    const members = (g.members_count || 0).toLocaleString("ru-RU");
+    const desc = g.description ? escapeHtml(g.description) : "";
+    row.innerHTML = `
+      <div>
+        <span class="vk-name"><a href="${escapeHtml(g.url)}" target="_blank" rel="noopener">${escapeHtml(g.name)}</a></span>
+        <span class="vk-handle">@${escapeHtml(g.screen_name)} · ${g.type}${g.is_closed ? ' · 🔒' : ''}</span>
+        ${desc ? `<div class="vk-desc">${desc}</div>` : ''}
+      </div>
+      <div class="vk-members">${members}</div>
+      <button type="button" class="vk-copy-btn" data-line="${escapeHtml(g.config_line || '')}">Копировать</button>
+    `;
+    out.appendChild(row);
+  });
+  out.querySelectorAll(".vk-copy-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const line = btn.getAttribute("data-line") || "";
+      try {
+        await navigator.clipboard.writeText(line);
+        const prev = btn.textContent;
+        btn.classList.add("copied");
+        btn.textContent = "✓ Скопировано";
+        setTimeout(() => { btn.classList.remove("copied"); btn.textContent = prev; }, 1600);
+      } catch (e) {
+        btn.textContent = "Ошибка";
+      }
+    });
+  });
 }
 
 init();
