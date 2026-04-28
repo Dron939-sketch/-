@@ -94,3 +94,24 @@ def test_chat_unknown_run_action_stripped():
     cli = _FakeClient({"text": "ок", "action": "run_unicorn"})
     out = asyncio.run(chat("?", {"name": "Коломна"}, [], client=cli))
     assert out["action"] is None
+
+
+def test_system_prompt_calls_self_jarvis():
+    sp = _build_system_prompt({
+        "emotion": "neutral", "tone": "friendly", "instruction": "",
+    })
+    assert "Джарвис" in sp
+
+
+def test_system_prompt_warns_against_jumping_ahead():
+    """Промпт должен явно говорить «не лезь вперёд паровоза»."""
+    sp = _build_system_prompt({
+        "emotion": "neutral", "tone": "friendly", "instruction": "",
+    })
+    assert "паровоз" in sp.lower() or "сначала пойми" in sp.lower()
+
+
+def test_greeting_text_constant_present():
+    from ai.copilot import GREETING_TEXT
+    assert "Джарвис" in GREETING_TEXT
+    assert len(GREETING_TEXT) <= 200  # под голос

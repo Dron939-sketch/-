@@ -391,6 +391,34 @@ async def _run_deputy_topics(city_name: str, cid: Optional[int]) -> tuple[str, L
     )
 
 
+@router.get("/greeting")
+async def copilot_greeting() -> dict:
+    """Короткое приветствие Джарвиса. Используется фронтом через
+    10 секунд после первой загрузки страницы (один раз за сессию).
+
+    Текст единый — озвучивается Fish Audio'м, если он настроен. Иначе
+    фронт деградирует к speechSynthesis.
+    """
+    from ai.copilot import GREETING_TEXT
+
+    response: Dict[str, Any] = {
+        "text": GREETING_TEXT,
+        "tts_engine": "browser",
+        "audio": None,
+        "audio_mime": None,
+    }
+    if fish_configured():
+        try:
+            mp3 = await fish_synthesize(GREETING_TEXT)
+            if mp3:
+                response["audio"] = base64.b64encode(mp3).decode("ascii")
+                response["audio_mime"] = "audio/mpeg"
+                response["tts_engine"] = "fish"
+        except Exception:  # noqa: BLE001
+            logger.exception("greeting fish_synthesize failed")
+    return response
+
+
 @router.post("/chat")
 async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
     cfg = _resolve_city_safe(payload.city)
