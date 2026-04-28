@@ -482,8 +482,38 @@ async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
         except Exception:  # noqa: BLE001
             logger.exception("memory load failed")
 
-    history = [{"role": t.role, "text": t.text} for t in payload.history]
-    result = await copilot_chat(payload.message, ctx, history)
+    # Многошаговое планирование: если вопрос «обзорный» — chain-of-actions.
+    # Возвращаем сразу синтезированный ответ, минуя обычный chat-LLM-вызов.
+    plan_used = False
+    plan_info: Dict[str, Any] = {}
+    try:
+        from ai.jarvis_planner import is_multistep_question, run_plan
+        if is_multistep_question(payload.message):
+            cid: Optional[int] = None
+            try:
+                from db.seed import city_id_by_name
+                cid = await city_id_by_name(cfg["name"])
+            except Exception:  # noqa: BLE001
+                pass
+
+            async def _run(action: str) -> Dict[str, Any]:
+                text, src = await _execute_action(action, cfg["name"], cid)
+                return {"text": text, "sources": src}
+
+            plan_info = await run_plan(payload.message, _run)
+            if plan_info.get("steps") and plan_info.get("summary"):
+                plan_used = True
+                result = {
+                    "text":    plan_info["summary"],
+                    "action":  None,
+                    "sources": [s for r in plan_info["results"] for s in (r.get("sources") or [])],
+                }
+    except Exception:  # noqa: BLE001
+        logger.exception("multistep planning failed")
+
+    if not plan_used:
+        history = [{"role": t.role, "text": t.text} for t in payload.history]
+        result = await copilot_chat(payload.message, ctx, history)
 
     # Запись turn'а в память — fire-and-forget, не блокирует ответ.
     if payload.identity:
@@ -502,6 +532,7 @@ async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
         "tts_engine": "browser",          # default fallback на speechSynthesis
         "audio":      None,
         "audio_mime": None,
+        "plan":       plan_info.get("steps") if plan_used else None,
     }
 
     if payload.speak and fish_configured():
