@@ -246,22 +246,33 @@ async def copilot_execute(payload: ExecuteIn) -> dict:
 async def _execute_action(action: str, city_name: str, city_id: Optional[int]) -> tuple[str, List[str]]:
     """Pure async «функциональный switch» — каждый action возвращает
     короткий human-readable текст для голоса + список sources.
-    Все ошибки заглушаются в honest fallback-сообщение."""
+    Все ошибки заглушаются в honest fallback-сообщение.
+    Все returnable-тексты прогоняются через expand_temperatures, чтобы
+    «+12°C» в любой фразе стал «плюс 12 градусов Цельсия» — и в TTS,
+    и в bubble UI."""
+    from ai.voice_service import expand_temperatures
+
     try:
         if action == "run_pulse":
-            return await _run_pulse(city_name, city_id)
-        if action == "run_forecast":
-            return await _run_forecast(city_name, city_id)
-        if action == "run_crisis":
-            return await _run_crisis(city_name)
-        if action == "run_loops":
-            return await _run_loops(city_name, city_id)
-        if action == "run_benchmark":
-            return await _run_benchmark(city_name)
-        if action == "run_topics":
-            return await _run_topics(city_name)
-        if action == "run_deputy_topics":
-            return await _run_deputy_topics(city_name, city_id)
+            text, src = await _run_pulse(city_name, city_id)
+        elif action == "run_forecast":
+            text, src = await _run_forecast(city_name, city_id)
+        elif action == "run_crisis":
+            text, src = await _run_crisis(city_name)
+        elif action == "run_loops":
+            text, src = await _run_loops(city_name, city_id)
+        elif action == "run_benchmark":
+            text, src = await _run_benchmark(city_name)
+        elif action == "run_topics":
+            text, src = await _run_topics(city_name)
+        elif action == "run_deputy_topics":
+            text, src = await _run_deputy_topics(city_name, city_id)
+        else:
+            text, src = (
+                f"Расчёт «{action}» у меня не заложен.",
+                [],
+            )
+        return (expand_temperatures(text), src)
     except Exception:  # noqa: BLE001
         logger.exception("execute action %s failed", action)
 
