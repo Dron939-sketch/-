@@ -1460,6 +1460,71 @@ async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResp
     return schemas.RoadmapResponse(city=cfg["name"], roadmap=plan.to_dict())
 
 
+@router.post("/api/city/{name}/scenario", response_model=schemas.ScenarioResponse)
+async def run_scenario(name: str, req: schemas.ScenarioRequest) -> schemas.ScenarioResponse:
+    """What-If сценарий: моделирование влияния бюджетных решений на векторы города."""
+    from analytics.scenario_simulator import ScenarioSimulator, Intervention
+
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    baseline_vectors = {"safety": 0.5, "economy": 0.5, "quality": 0.5, "social": 0.5}
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            def _to_unit(v):
+                return None if v is None else round(float(v) / 6.0, 3)
+            baseline_vectors = {
+                "safety":  _to_unit(metric_row.get("sb"))  or 0.5,
+                "economy": _to_unit(metric_row.get("tf"))  or 0.5,
+                "quality": _to_unit(metric_row.get("ub"))  or 0.5,
+                "social":  _to_unit(metric_row.get("chv")) or 0.5,
+            }
+
+    interventions = [
+        Intervention(code=i.code, budget_rub=i.budget_rub, start_month=i.start_month)
+        for i in req.interventions
+    ]
+
+    simulator = ScenarioSimulator(cfg["name"])
+    result = simulator.simulate(
+        baseline_vectors=baseline_vectors,
+        interventions=interventions,
+        horizon_months=req.horizon_months,
+        scenario_name=req.scenario_name,
+    )
+    return schemas.ScenarioResponse(city=cfg["name"], scenario=result.to_dict())
+
+
+@router.post("/api/city/{name}/actions", response_model=schemas.ActionPlanResponse)
+async def generate_actions(name: str, req: schemas.ActionPlanRequest) -> schemas.ActionPlanResponse:
+    """Генератор поручений: проблемы → структурированные задачи с исполнителями и сроками."""
+    from analytics.action_generator import ActionGenerator
+
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    metrics: Optional[Dict[str, Optional[float]]] = None
+    trends: Optional[Dict[str, Any]] = None
+    if req.include_metric_alerts and city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        trend_row = await metrics_trend_7d(city_id)
+        if metric_row is not None:
+            def _to_unit(v):
+                return None if v is None else round(float(v) / 6.0, 3)
+            metrics = {
+                "safety":  _to_unit(metric_row.get("sb")),
+                "economy": _to_unit(metric_row.get("tf")),
+                "quality": _to_unit(metric_row.get("ub")),
+                "social":  _to_unit(metric_row.get("chv")),
+            }
+            trends = trend_row or {}
+
+    generator = ActionGenerator(cfg["name"])
+    plan = generator.create_daily_plan(problems=req.problems, metrics=metrics, trends=trends)
+    return schemas.ActionPlanResponse(city=cfg["name"], plan=plan.to_dict())
+
+
 # ----- helpers -----
 
 

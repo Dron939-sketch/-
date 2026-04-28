@@ -117,9 +117,36 @@ class RoadmapRequest(BaseModel):
     scenario: str = Field("baseline", pattern="^(optimistic|baseline|pessimistic)$")
 
 
+class ScenarioIntervention(BaseModel):
+    code: str = Field(..., description="Код вмешательства (patrol, cctv, roads, etc.)")
+    budget_rub: int = Field(..., ge=0, description="Бюджет в рублях")
+    start_month: int = Field(0, ge=0, description="Месяц начала (0 = сейчас)")
+
+
+class ScenarioRequest(BaseModel):
+    interventions: List[ScenarioIntervention] = Field(..., description="Список вмешательств")
+    horizon_months: int = Field(12, ge=1, le=36, description="Горизонт прогноза в месяцах")
+    scenario_name: str = Field("Пользовательский сценарий")
+
+
+class ActionPlanRequest(BaseModel):
+    problems: List[str] = Field(..., description="Список проблем/жалоб")
+    include_metric_alerts: bool = Field(True, description="Включить превентивные действия по метрикам")
+
+
 class RoadmapResponse(BaseModel):
     city: str
     roadmap: Dict[str, Any]
+
+
+class ScenarioResponse(BaseModel):
+    city: str
+    scenario: Dict[str, Any]
+
+
+class ActionPlanResponse(BaseModel):
+    city: str
+    plan: Dict[str, Any]
 
 
 class HealthResponse(BaseModel):
