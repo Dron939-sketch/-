@@ -491,6 +491,7 @@
   width: 100%;
   max-width: 760px;
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);   /* iOS Safari учитывает URL-bar */
   overflow-y: auto;
   background: linear-gradient(180deg, #0E2440 0%, #0A1628 100%);
   border: 1px solid rgba(197, 160, 89, 0.32);
@@ -632,4 +633,24 @@
   .dep-card-content { padding: 18px 18px 22px; }
   .dep-card-head h2 { font-size: 1.2rem; }
   .dep-card-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ------------------ iOS / MOBILE FIXES (admin) ------------------ */
+/* Admin reuses style.css base, но input'ы добавлены здесь — поднимаем
+   до 16px на мобильных, чтобы iOS не auto-zoom'ил при focus. Также
+   длинные URL/email в timeline должны переноситься. */
+@media (max-width: 720px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  textarea,
+  select { font-size: 16px !important; }
+
+  .user-timeline .path,
+  .stats-endpoints-list .path,
+  .anon-paths .anon-chip {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
 }
