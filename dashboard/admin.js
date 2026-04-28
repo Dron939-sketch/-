@@ -203,18 +203,20 @@ async function openUserDetail(user) {
 
 async function loadAll() {
   try {
-    const [sum, users, endpoints, daily, anon] = await Promise.all([
+    const [sum, users, endpoints, daily, anon, ds] = await Promise.all([
       fetchJson(`/api/admin/stats/summary?days=${currentRange}`),
       fetchJson(`/api/admin/stats/users?days=${currentRange}&limit=20`),
       fetchJson(`/api/admin/stats/endpoints?days=${currentRange}&limit=20`),
       fetchJson(`/api/admin/stats/daily?days=${currentRange}`),
       fetchJson(`/api/admin/stats/anonymous?days=${currentRange}&limit=30`),
+      fetchJson(`/api/admin/stats/deepseek?days=${currentRange}&daily_days=30`),
     ]);
     renderSummary(sum);
     renderUsers(users.users || []);
     renderEndpoints(endpoints.endpoints || []);
     renderDaily(daily.days || []);
     renderAnonymous(anon.sessions || []);
+    renderDeepSeek(ds);
     const upd = document.getElementById("updated-at");
     if (upd) upd.textContent = "Обновлено: " + new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   } catch (e) {
@@ -224,6 +226,99 @@ async function loadAll() {
     } else if (e.message && e.message.startsWith("403")) {
       showAuthGate("У вас нет роли admin. Попросите администратора.");
     }
+  }
+}
+
+function renderDeepSeek(data) {
+  if (!data) return;
+  const s = data.summary || {};
+  const summaryEl = document.getElementById("ds-summary");
+  if (summaryEl) {
+    summaryEl.innerHTML = "";
+    const fmtUsd = (v) => "$" + (v == null ? "0.000000" : Number(v).toFixed(6));
+    const chips = [
+      `Вызовов: <strong>${(s.calls || 0).toLocaleString("ru-RU")}</strong>`,
+      `Стоимость: <strong>${fmtUsd(s.cost_usd)}</strong>`,
+      `Токенов всего: <strong>${(s.total_tokens || 0).toLocaleString("ru-RU")}</strong>`,
+      `Промпт: <strong>${(s.prompt_tokens || 0).toLocaleString("ru-RU")}</strong>`,
+      `Ответов: <strong>${(s.completion_tokens || 0).toLocaleString("ru-RU")}</strong>`,
+    ];
+    if (s.cache_hit_rate_pct != null) {
+      chips.push(`Cache hit: <strong>${s.cache_hit_rate_pct}%</strong>`);
+    }
+    if (s.redis_cached_calls) {
+      chips.push(`Redis-кэш сэкономил: <strong>${s.redis_cached_calls}</strong> вызовов`);
+    }
+    chips.forEach((html) => {
+      const c = document.createElement("span");
+      c.className = "chip";
+      c.innerHTML = html;
+      summaryEl.appendChild(c);
+    });
+  }
+  const meta = document.getElementById("ds-meta");
+  if (meta) {
+    meta.textContent = `окно ${s.window_days || currentRange} дн. · средн. ${
+      s.avg_cost_per_call_usd != null
+        ? "$" + Number(s.avg_cost_per_call_usd).toFixed(6) + " за вызов"
+        : "—"
+    }`;
+  }
+
+  // Chart per day (cost in USD)
+  const chart = document.getElementById("ds-daily");
+  if (chart) {
+    chart.innerHTML = "";
+    const rows = data.daily || [];
+    if (!rows.length) {
+      chart.innerHTML = '<div class="stats-empty">Пока нет данных за это окно.</div>';
+    } else {
+      const max = Math.max(0.000001, ...rows.map((r) => r.cost_usd || 0));
+      rows.forEach((r) => {
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.style.height = `${Math.max(2, ((r.cost_usd || 0) / max) * 100)}px`;
+        bar.title = `${fmtDateShort(r.day)} — $${Number(r.cost_usd || 0).toFixed(6)} · ${r.calls} вызовов · ${r.total_tokens} токенов`;
+        const lbl = document.createElement("span");
+        lbl.className = "dlabel";
+        lbl.textContent = fmtDateShort(r.day);
+        bar.appendChild(lbl);
+        chart.appendChild(bar);
+      });
+    }
+  }
+
+  // By model
+  const byModelUl = document.getElementById("ds-by-model");
+  if (byModelUl) {
+    byModelUl.innerHTML = "";
+    const rows = data.by_model || [];
+    if (!rows.length) {
+      byModelUl.innerHTML = '<li class="stats-empty">Нет вызовов в этом окне.</li>';
+    } else {
+      rows.forEach((m) => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <div>
+            <div class="path">${escapeHtml(m.model)}</div>
+            <div class="sub">${m.prompt_tokens.toLocaleString("ru-RU")} вх · ${m.completion_tokens.toLocaleString("ru-RU")} исх · cache hit ${m.cache_hit_tokens.toLocaleString("ru-RU")}</div>
+          </div>
+          <div class="hits" title="USD">$${Number(m.cost_usd).toFixed(6)}</div>
+        `;
+        byModelUl.appendChild(li);
+      });
+    }
+  }
+
+  // Pricing footnote
+  const note = document.getElementById("ds-pricing-note");
+  if (note && data.pricing) {
+    const ds = data.pricing["deepseek-chat"];
+    note.textContent = (
+      `Тарифы deepseek-chat ($/1M токенов): cache hit $${ds.input_hit_per_m}, ` +
+      `cache miss $${ds.input_miss_per_m}, output $${ds.output_per_m}. ` +
+      `Можно переопределить env DEEPSEEK_PRICE_INPUT_HIT/MISS/OUTPUT.`
+    );
   }
 }
 

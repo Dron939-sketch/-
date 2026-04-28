@@ -83,6 +83,18 @@ class DeepSeekClient:
             cached = await self.cache.get(cache_key)
             if cached is not None:
                 logger.debug("DeepSeek cache HIT %s", cache_key[-8:])
+                # Учёт Redis cache hit'а — токенов не потратили, но факт
+                # обращения логируем для статистики «было сэкономлено N
+                # вызовов».
+                try:
+                    from ops.deepseek_usage import log_call as _log_call
+                    await _log_call(
+                        model=self.model, cached_from_redis=True,
+                        prompt_tokens=0, completion_tokens=0, total_tokens=0,
+                        cost_usd=0.0,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
                 return cached
 
         payload = {
@@ -140,6 +152,36 @@ class DeepSeekClient:
 
         if result is None:
             raise DeepSeekError(f"DeepSeek unreachable: {last_exc}")
+
+        # Учёт расхода — fail-safe, не блокирует основной поток.
+        try:
+            from ops.deepseek_usage import log_call as _log_call
+            from .deepseek_pricing import compute_cost_usd as _compute_cost
+            usage = (data or {}).get("usage") or {}
+            prompt_tok = int(usage.get("prompt_tokens", 0))
+            completion_tok = int(usage.get("completion_tokens", 0))
+            total_tok = int(usage.get("total_tokens", prompt_tok + completion_tok))
+            cache_hit = int(usage.get("prompt_cache_hit_tokens", 0))
+            cache_miss = int(usage.get("prompt_cache_miss_tokens", max(0, prompt_tok - cache_hit)))
+            cost = _compute_cost(
+                model=self.model,
+                prompt_tokens=prompt_tok,
+                completion_tokens=completion_tok,
+                prompt_cache_hit_tokens=cache_hit,
+                prompt_cache_miss_tokens=cache_miss,
+            )
+            await _log_call(
+                model=self.model,
+                prompt_tokens=prompt_tok,
+                completion_tokens=completion_tok,
+                total_tokens=total_tok,
+                prompt_cache_hit_tokens=cache_hit,
+                prompt_cache_miss_tokens=cache_miss,
+                cost_usd=cost,
+                cached_from_redis=False,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
         if cache_key is not None:
             await self.cache.set(cache_key, result)

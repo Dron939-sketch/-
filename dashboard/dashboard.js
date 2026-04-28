@@ -2836,15 +2836,7 @@ async function init() {
     btn.setAttribute("aria-expanded", "false");
   });
 
-  document.querySelectorAll(".modal [data-dismiss]").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      const modal = e.currentTarget.closest(".modal");
-      if (modal) closeModal(modal.id);
-    });
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeAllModals();
-  });
+  // modal[data-dismiss] + ESC перенесены в wireStaticTopbarButtons().
 
   // Roadmap form wiring: live slider labels + submit + vector-change prefill.
   const rmVec     = document.getElementById("rm-vector");
@@ -2881,28 +2873,8 @@ async function init() {
   if (simSource) simSource.addEventListener("change", _updateSimPreview);
   if (simRun)    simRun.addEventListener("click", runSimulation);
 
-  // System health indicator: click toggles the panel; Esc/outside-click closes.
-  const shBtn = document.getElementById("sh-button");
-  const shPanel = document.getElementById("sh-panel");
-  if (shBtn && shPanel) {
-    shBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const open = !shPanel.hidden;
-      shPanel.hidden = open;
-      shBtn.setAttribute("aria-expanded", String(!open));
-    });
-    document.addEventListener("click", (e) => {
-      if (shPanel.hidden) return;
-      if (shPanel.contains(e.target) || shBtn.contains(e.target)) return;
-      shPanel.hidden = true;
-      shBtn.setAttribute("aria-expanded", "false");
-    });
-  }
-
-  const helpBtn = document.getElementById("help-button");
-  if (helpBtn) {
-    helpBtn.addEventListener("click", () => openModal("help-modal"));
-  }
+  // help-button + sh-button + modal-dismiss перенесены в wireStaticTopbarButtons()
+  // и биндятся синхронно до init() — кнопки работают даже на сбое сети.
 
   initAuthForms();
   refreshAuth();
@@ -3112,6 +3084,47 @@ function renderActionPlan(plan) {
   `;
 }
 
+// Топбар-кнопки, которым НЕ нужен currentCity — биндим синхронно при
+// загрузке страницы, чтобы они работали даже если init() упадёт на
+// fetch'е /api/cities или /all_metrics.
+function wireStaticTopbarButtons() {
+  const helpBtn = document.getElementById("help-button");
+  if (helpBtn && !helpBtn.dataset.wired) {
+    helpBtn.dataset.wired = "1";
+    helpBtn.addEventListener("click", () => openModal("help-modal"));
+  }
+  // System-health: тоже не зависит от города, биндим заранее.
+  const shBtn = document.getElementById("sh-button");
+  const shPanel = document.getElementById("sh-panel");
+  if (shBtn && shPanel && !shBtn.dataset.wired) {
+    shBtn.dataset.wired = "1";
+    shBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = !shPanel.hidden;
+      shPanel.hidden = open;
+      shBtn.setAttribute("aria-expanded", String(!open));
+    });
+    document.addEventListener("click", (e) => {
+      if (shPanel.hidden) return;
+      if (shPanel.contains(e.target) || shBtn.contains(e.target)) return;
+      shPanel.hidden = true;
+      shBtn.setAttribute("aria-expanded", "false");
+    });
+  }
+  // Закрытие любой modal[data-dismiss] — ESC + клик-по-крестику + бэкдропу.
+  document.querySelectorAll(".modal [data-dismiss]").forEach((el) => {
+    if (el.dataset.wired) return;
+    el.dataset.wired = "1";
+    el.addEventListener("click", (e) => {
+      const modal = e.currentTarget.closest(".modal");
+      if (modal) closeModal(modal.id);
+    });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAllModals();
+  });
+}
+
 function wireScenarioActionButtons() {
   const scenarioBtn = document.getElementById("btn-scenario");
   const actionsBtn = document.getElementById("btn-actions");
@@ -3143,6 +3156,7 @@ function wireScenarioActionButtons() {
   });
 }
 
+wireStaticTopbarButtons();
 wireScenarioActionButtons();
 
 init();

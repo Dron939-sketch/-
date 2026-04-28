@@ -258,6 +258,32 @@
   .admin-link-back { font-size: 0.8rem; padding: 4px 10px; }
 }
 
+/* ------------------ DEEPSEEK USAGE CARD ------------------ */
+.ds-card { display: block; }
+.ds-summary {
+  display: flex; gap: 0.5rem; flex-wrap: wrap;
+  margin: 0.5rem 0 1rem;
+}
+.ds-chart-wrap { margin-bottom: 1rem; }
+.ds-chart-title {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+}
+.ds-chart .bar { background: linear-gradient(180deg, var(--gold-bright), rgba(197, 160, 89, 0.2)); }
+.ds-by-model {
+  margin-top: 0.6rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(197, 160, 89, 0.12);
+}
+.ds-pricing-note {
+  margin-top: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px dashed rgba(197, 160, 89, 0.2);
+  border-radius: 8px;
+  font-style: italic;
+}
+
 /* ------------------ ANONYMOUS VISITORS ------------------ */
 .admin-anon-card { display: block; }
 .stats-anon-list {

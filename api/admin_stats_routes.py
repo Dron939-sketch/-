@@ -127,3 +127,32 @@ async def stats_anonymous_timeline(
             session_token_hash=session, ip_prefix=ip, limit=limit,
         ),
     }
+
+
+@router.get("/deepseek")
+async def stats_deepseek(
+    days: int = 7,
+    daily_days: int = 30,
+    _user: dict = Depends(require_role("admin")),
+) -> dict:
+    """Расход DeepSeek API: сводка + дневной график + разрез по моделям.
+
+    Считается по `deepseek_usage`-таблице, которая заполняется
+    DeepSeekClient на каждый успешный вызов. Стоимость в USD считается
+    при инсерте через `ai.deepseek_pricing.compute_cost_usd()` —
+    тарифы можно поменять через env DEEPSEEK_PRICE_*.
+    """
+    from ops.deepseek_usage import by_model, daily, summary
+    from ai.deepseek_pricing import get_pricing
+
+    s = await summary(days=days)
+    return {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "summary":      s,
+        "daily":        await daily(days=daily_days),
+        "by_model":     await by_model(days=days),
+        "pricing":      {
+            "deepseek-chat":     get_pricing("deepseek-chat"),
+            "deepseek-reasoner": get_pricing("deepseek-reasoner"),
+        },
+    }
