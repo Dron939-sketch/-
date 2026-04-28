@@ -79,12 +79,21 @@ class VKCollector(BaseCollector):
         token: str,
         since_ts: int,
     ) -> List[CollectedItem]:
-        params = {
-            "domain": src.handle,
+        params: Dict[str, Any] = {
             "count": self.count,
             "access_token": token,
             "v": _VK_API_VERSION,
         }
+        # Two handle styles co-exist in config/sources.py:
+        #   - screen_name (e.g. "kolomna_gorod") → wall.get?domain=
+        #   - signed numeric id (e.g. "-224019653") → wall.get?owner_id=
+        # The numeric form is what `qwen.ai bot` left after the regression
+        # merge; rather than rewriting the config we just route correctly.
+        handle = src.handle.strip()
+        if handle.lstrip("-").isdigit():
+            params["owner_id"] = handle
+        else:
+            params["domain"] = handle
         async with session.get(_VK_API_URL, params=params, timeout=20) as response:
             response.raise_for_status()
             payload: Dict[str, Any] = await response.json()
