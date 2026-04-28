@@ -37,7 +37,7 @@ _BLACKLIST: Dict[str, str] = {}
 
 
 class VKCollector(BaseCollector):
-    def __init__(self, city_name: str, count: int = 100):
+    def __init__(self, city_name: str, count: int = 25):
         super().__init__(city_name)
         self.count = count
 

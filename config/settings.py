@@ -91,17 +91,19 @@ class Settings:
     deepseek_api_key: str = _env("DEEPSEEK_API_KEY", "")
     deepseek_base_url: str = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     deepseek_model: str = _env("DEEPSEEK_MODEL", "deepseek-chat")
-    enrichment_batch_size: int = _env_int("ENRICHMENT_BATCH_SIZE", 40)
-    enrichment_max_items: int = _env_int("ENRICHMENT_MAX_ITEMS", 120)
+    enrichment_batch_size: int = _env_int("ENRICHMENT_BATCH_SIZE", 10)
+    enrichment_max_items: int = _env_int("ENRICHMENT_MAX_ITEMS", 30)
     enrichment_cache_ttl_hours: int = _env_int("ENRICHMENT_CACHE_TTL_HOURS", 24)
 
     # --- Collector behaviour ---
-    # Demo-режим: дашборд должен заметно «дышать» во время демонстрации,
-    # поэтому интервалы / лукбэки / батчи установлены в 2× щедрее
-    # боевого default'а. Все значения override'ятся env'ом — на проде
-    # достаточно выставить COLLECTION_INTERVAL_MIN=30 и т.п.
-    collection_interval_minutes: int = _env_int("COLLECTION_INTERVAL_MIN", 15)
-    news_lookback_hours: int = _env_int("NEWS_LOOKBACK_HOURS", 48)
+    # Demo-режим (бережный): интервалы в 2× длиннее, окна и батчи в 2×
+    # меньше боевых, чтобы не сжигать токены DeepSeek и трафик API при
+    # показе системы. Все значения override'ятся env'ом — на проде
+    # выставляется COLLECTION_INTERVAL_MIN=30, NEWS_LOOKBACK_HOURS=24,
+    # WEATHER_INTERVAL_S=3600, SNAPSHOT_INTERVAL_S=3600,
+    # DEPUTY_TOPICS_INTERVAL_S=86400, ENRICHMENT_BATCH_SIZE=20.
+    collection_interval_minutes: int = _env_int("COLLECTION_INTERVAL_MIN", 60)
+    news_lookback_hours: int = _env_int("NEWS_LOOKBACK_HOURS", 12)
 
     # --- ML ---
     sentiment_model: str = _env(
