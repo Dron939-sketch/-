@@ -31,7 +31,18 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import os
 from typing import List, Optional
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 from ai.enricher import NewsEnricher
 from analytics.loops import analyze_loops
@@ -302,10 +313,13 @@ def start() -> None:
     if not settings.openweather_api_key:
         logger.info("scheduler: weather loop disabled (no OPENWEATHER_API_KEY)")
 
+    # Demo-режим: интервалы вдвое чаще боевых default'ов. На проде
+    # хватает выставить COLLECTION_INTERVAL_MIN=30 в env (collection),
+    # для weather/snapshot/deputy_topics — отдельные env'ы ниже.
     collection_s = max(300, settings.collection_interval_minutes * 60)
-    weather_s = 3600
-    snapshot_s = 3600
-    deputy_topics_s = 24 * 3600  # раз в сутки
+    weather_s = max(300, _env_int("WEATHER_INTERVAL_S", 1800))
+    snapshot_s = max(300, _env_int("SNAPSHOT_INTERVAL_S", 1800))
+    deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 12 * 3600))
 
     _tasks.append(asyncio.create_task(_collection_loop(collection_s), name="collection_loop"))
     if settings.openweather_api_key:
