@@ -160,9 +160,11 @@ async def top_endpoints(days: int = 30, limit: int = 20) -> List[Dict[str, Any]]
                 """,
                 since, limit,
             )
+        from .usage_humanize import humanize_path
         return [
             {
                 "path": r["path"],
+                "path_label": humanize_path("", r["path"]),
                 "hits": int(r["hits"]),
                 "distinct_users": int(r["distinct_users"] or 0),
                 "avg_ms": int(r["avg_ms"]) if r["avg_ms"] is not None else None,
@@ -212,7 +214,17 @@ async def daily_counts(days: int = 30) -> List[Dict[str, Any]]:
 
 
 async def user_timeline(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
-    """Per-user activity log — last N events, newest first."""
+    """Per-user activity log — last N events, newest first.
+
+    Возвращает кроме path/method/status/время ещё:
+      - path_label   — русская человекочитаемая метка раздела
+      - device_label — устройство/ОС/браузер из user_agent
+      - device_type  — mobile/tablet/desktop/bot/unknown
+      - ip_prefix    — сохранённый /24 (для группировки)
+      - user_agent   — сырой UA для tooltip'а
+    """
+    from .usage_humanize import device_from_user_agent, humanize_path
+
     pool = get_pool()
     if pool is None:
         return []
@@ -221,7 +233,8 @@ async def user_timeline(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT path, method, status, response_time_ms, created_at
+                SELECT path, method, status, response_time_ms, created_at,
+                       ip_prefix, user_agent
                 FROM usage_events
                 WHERE user_id = $1
                 ORDER BY created_at DESC
@@ -229,16 +242,188 @@ async def user_timeline(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
                 """,
                 int(user_id), limit,
             )
-        return [
-            {
+        out = []
+        for r in rows:
+            dev = device_from_user_agent(r["user_agent"])
+            out.append({
                 "path": r["path"],
+                "path_label": humanize_path(r["method"], r["path"]),
                 "method": r["method"],
                 "status": int(r["status"]),
                 "response_time_ms": r["response_time_ms"],
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-            }
-            for r in rows
-        ]
+                "ip_prefix": r["ip_prefix"],
+                "user_agent": r["user_agent"],
+                "device_type": dev["device"],
+                "device_label": dev["label"],
+            })
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+async def top_anonymous_sessions(days: int = 30, limit: int = 20) -> List[Dict[str, Any]]:
+    """Анонимные посетители — группируем по session_token_hash (cookie),
+    либо по ip_prefix если cookie вообще нет.
+
+    Возвращает список словарей {session_id, identifier, events, first_seen,
+    last_seen, ip_prefix, device_label, top_paths}. Сессии с user_id IS NOT
+    NULL не учитываются — это уже зарегистрированные.
+    """
+    from .usage_humanize import device_from_user_agent, humanize_path
+
+    pool = get_pool()
+    if pool is None:
+        return []
+    days = max(1, min(365, int(days)))
+    limit = max(1, min(200, int(limit)))
+    since = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    COALESCE(session_token_hash, 'ip:' || ip_prefix) AS session_id,
+                    session_token_hash,
+                    ip_prefix,
+                    COUNT(*)             AS events,
+                    MIN(created_at)      AS first_seen,
+                    MAX(created_at)      AS last_seen,
+                    (array_agg(user_agent ORDER BY created_at DESC))[1] AS last_ua
+                FROM usage_events
+                WHERE user_id IS NULL AND created_at >= $1
+                  AND (session_token_hash IS NOT NULL OR ip_prefix IS NOT NULL)
+                GROUP BY session_id, session_token_hash, ip_prefix
+                ORDER BY events DESC
+                LIMIT $2
+                """,
+                since, limit,
+            )
+        # Подтянем top-3 пути для каждой сессии — отдельным запросом, batched.
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            sid = r["session_id"]
+            top_paths_rows: list = []
+            try:
+                async with pool.acquire() as conn:
+                    if r["session_token_hash"]:
+                        top_paths_rows = await conn.fetch(
+                            """
+                            SELECT path, method, COUNT(*) AS cnt
+                            FROM usage_events
+                            WHERE user_id IS NULL
+                              AND session_token_hash = $1
+                              AND created_at >= $2
+                            GROUP BY path, method
+                            ORDER BY cnt DESC
+                            LIMIT 3
+                            """,
+                            r["session_token_hash"], since,
+                        )
+                    else:
+                        top_paths_rows = await conn.fetch(
+                            """
+                            SELECT path, method, COUNT(*) AS cnt
+                            FROM usage_events
+                            WHERE user_id IS NULL
+                              AND session_token_hash IS NULL
+                              AND ip_prefix = $1
+                              AND created_at >= $2
+                            GROUP BY path, method
+                            ORDER BY cnt DESC
+                            LIMIT 3
+                            """,
+                            r["ip_prefix"], since,
+                        )
+            except Exception:  # noqa: BLE001
+                top_paths_rows = []
+            top_paths = [
+                {
+                    "path": p["path"],
+                    "label": humanize_path(p["method"], p["path"]),
+                    "method": p["method"],
+                    "count": int(p["cnt"]),
+                }
+                for p in top_paths_rows
+            ]
+            dev = device_from_user_agent(r["last_ua"])
+            out.append({
+                "session_id":    sid,
+                "identifier":    sid[:16] + "…" if sid and len(sid) > 17 else sid,
+                "events":        int(r["events"]),
+                "first_seen":    r["first_seen"].isoformat() if r["first_seen"] else None,
+                "last_seen":     r["last_seen"].isoformat() if r["last_seen"] else None,
+                "ip_prefix":     r["ip_prefix"],
+                "has_cookie":    r["session_token_hash"] is not None,
+                "device_type":   dev["device"],
+                "device_label":  dev["label"],
+                "top_paths":     top_paths,
+            })
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+async def anonymous_session_timeline(
+    *, session_token_hash: Optional[str] = None,
+    ip_prefix: Optional[str] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """Лента действий конкретной анонимной сессии — по token_hash или ip_prefix.
+
+    Один из двух параметров обязателен. Если переданы оба — фильтруем по
+    token_hash (он точнее).
+    """
+    from .usage_humanize import device_from_user_agent, humanize_path
+
+    pool = get_pool()
+    if pool is None:
+        return []
+    if not session_token_hash and not ip_prefix:
+        return []
+    limit = max(1, min(500, int(limit)))
+    try:
+        async with pool.acquire() as conn:
+            if session_token_hash:
+                rows = await conn.fetch(
+                    """
+                    SELECT path, method, status, response_time_ms, created_at,
+                           ip_prefix, user_agent
+                    FROM usage_events
+                    WHERE user_id IS NULL AND session_token_hash = $1
+                    ORDER BY created_at DESC
+                    LIMIT $2
+                    """,
+                    session_token_hash, limit,
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT path, method, status, response_time_ms, created_at,
+                           ip_prefix, user_agent
+                    FROM usage_events
+                    WHERE user_id IS NULL AND session_token_hash IS NULL
+                      AND ip_prefix = $1
+                    ORDER BY created_at DESC
+                    LIMIT $2
+                    """,
+                    ip_prefix, limit,
+                )
+        out = []
+        for r in rows:
+            dev = device_from_user_agent(r["user_agent"])
+            out.append({
+                "path": r["path"],
+                "path_label": humanize_path(r["method"], r["path"]),
+                "method": r["method"],
+                "status": int(r["status"]),
+                "response_time_ms": r["response_time_ms"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "ip_prefix": r["ip_prefix"],
+                "device_type": dev["device"],
+                "device_label": dev["label"],
+            })
+        return out
     except Exception:  # noqa: BLE001
         return []
 

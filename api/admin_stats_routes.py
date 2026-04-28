@@ -13,7 +13,15 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ops.usage import daily_counts, summary, top_endpoints, top_users, user_timeline
+from ops.usage import (
+    anonymous_session_timeline,
+    daily_counts,
+    summary,
+    top_anonymous_sessions,
+    top_endpoints,
+    top_users,
+    user_timeline,
+)
 
 from .auth_routes import require_role
 
@@ -74,4 +82,48 @@ async def stats_one_user(
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         "user_id": user_id,
         "events": await user_timeline(user_id=user_id, limit=limit),
+    }
+
+
+@router.get("/anonymous")
+async def stats_anonymous(
+    days: int = 7, limit: int = 30,
+    _user: dict = Depends(require_role("admin")),
+) -> dict:
+    """Анонимные посетители — кто-то заходит и что-то делает без регистрации.
+
+    Группирует по session_token_hash (cookie) или ip_prefix (если cookie
+    нет вообще). Возвращает список с ID сессии, числом действий, периодом
+    активности, устройством и топ-3 разделами, которые посетитель смотрел.
+    """
+    return {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "window_days": days,
+        "sessions": await top_anonymous_sessions(days=days, limit=limit),
+    }
+
+
+@router.get("/anonymous/timeline")
+async def stats_anonymous_timeline(
+    session: Optional[str] = None,
+    ip: Optional[str] = None,
+    limit: int = 100,
+    _user: dict = Depends(require_role("admin")),
+) -> dict:
+    """Лента действий конкретной анонимной сессии.
+
+    Передаётся либо `session` (хеш cookie), либо `ip` (ip_prefix). Если
+    ни одного — возвращает 422.
+    """
+    if not session and not ip:
+        raise HTTPException(
+            status_code=422, detail="Передайте session или ip параметром.",
+        )
+    return {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "session": session,
+        "ip_prefix": ip,
+        "events": await anonymous_session_timeline(
+            session_token_hash=session, ip_prefix=ip, limit=limit,
+        ),
     }
