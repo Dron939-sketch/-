@@ -1372,6 +1372,37 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
     if cached is not None and cached[1] > now:
         return cached[0]
 
+    try:
+        return await _build_agenda(cfg, now)
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001
+        # Дашборд не должен падать из-за единичной ошибки в построении
+        # агенды (битый enrichment, кривой item, тайм-аут DeepSeek и т.д.).
+        # Логируем и отдаём safe stub — в /tasks и /eisenhower тоже не
+        # каскадирует 500.
+        logger.exception("daily_agenda failed for %s — returning stub", cfg["name"])
+        return _stub_agenda(cfg)
+
+
+def _stub_agenda(cfg: Dict[str, Any]) -> "schemas.AgendaResponse":
+    return schemas.AgendaResponse(
+        city=cfg["name"],
+        date=datetime.now(tz=timezone.utc),
+        headline="Сводка временно недоступна",
+        description="Сборщики или AI-обогатитель сейчас недоступны — данные появятся после следующего цикла.",
+        actions=["Обновите страницу через 1–2 минуты"],
+        top_complaints=[],
+        top_praises=[],
+        vectors={"СБ": 3.0, "ТФ": 3.0, "УБ": 3.0, "ЧВ": 3.0},
+        weather_line="",
+        happiness=None,
+        trust=None,
+        markdown=f"🏙️ **{cfg['name']}** — сводка временно недоступна.",
+    )
+
+
+async def _build_agenda(cfg: Dict[str, Any], now: float) -> "schemas.AgendaResponse":
     news_response = await collect_news(cfg["name"], limit=200)
     news_items = [
         CollectedItem(

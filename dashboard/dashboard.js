@@ -2839,16 +2839,49 @@ async function init() {
   refreshTimer = setInterval(refresh, REFRESH_MS);
 }
 
-// -------------------------------------------------- Modals & New Features
+// -------------------------------------------------- Сценарии / Действия (модалки)
 
-function openModal(id) {
-  document.getElementById(id).hidden = false;
+const INTERVENTION_OPTIONS = [
+  { code: "patrol", name: "Патрулирование ДНД", vector: "safety", cost: 2_000_000 },
+  { code: "cctv", name: "Видеонаблюдение", vector: "safety", cost: 5_000_000 },
+  { code: "lighting", name: "Уличное освещение", vector: "safety", cost: 3_000_000 },
+  { code: "youth_programs", name: "Программы для молодёжи", vector: "safety", cost: 1_500_000 },
+  { code: "tax_holidays", name: "Налоговые каникулы", vector: "economy", cost: 4_000_000 },
+  { code: "biz_forum", name: "Инвестфорум", vector: "economy", cost: 2_500_000 },
+  { code: "subsidies", name: "Льготные кредиты", vector: "economy", cost: 6_000_000 },
+  { code: "industrial_zone", name: "Промзона", vector: "economy", cost: 15_000_000 },
+  { code: "roads", name: "Ремонт дорог", vector: "quality", cost: 8_000_000 },
+  { code: "transport", name: "Общественный транспорт", vector: "quality", cost: 5_000_000 },
+  { code: "parks", name: "Парки и скверы", vector: "quality", cost: 3_500_000 },
+  { code: "clinics", name: "Поликлиники", vector: "quality", cost: 7_000_000 },
+  { code: "ngo_grants", name: "Гранты НКО", vector: "social", cost: 1_500_000 },
+  { code: "festivals", name: "Фестивали", vector: "social", cost: 2_000_000 },
+  { code: "volunteering", name: "Волонтёрство", vector: "social", cost: 1_000_000 },
+  { code: "school_councils", name: "Школьные советы", vector: "social", cost: 800_000 },
+];
+
+const PRIORITY_LABELS = {
+  critical: { label: "⚡ Критично", cls: "cm-pri-critical" },
+  high:     { label: "❗ Важно",   cls: "cm-pri-high" },
+  medium:   { label: "📋 План",   cls: "cm-pri-medium" },
+  low:      { label: "🗒 Отложено", cls: "cm-pri-low" },
+};
+
+function fmtMln(rub) { return `${(rub / 1_000_000).toFixed(1)} млн ₽`; }
+
+function openCmModal(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.hidden = false;
+  document.body.style.overflow = "hidden";
 }
 
-function closeModal(id) {
-  document.getElementById(id).hidden = true;
-  // Clear results
-  const results = document.getElementById(id.replace("modal-", "") + "-results");
+function closeCmModal(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.hidden = true;
+  document.body.style.overflow = "";
+  const results = m.querySelector(".cm-results-block");
   if (results) {
     results.hidden = true;
     results.innerHTML = "";
@@ -2857,160 +2890,185 @@ function closeModal(id) {
 
 function addInterventionRow() {
   const container = document.getElementById("interventions-list");
+  if (!container) return;
   const row = document.createElement("div");
   row.className = "intervention-row";
-  
-  let optionsHtml = '<option value="">Выберите вмешательство</option>';
-  INTERVENTION_OPTIONS.forEach(opt => {
-    optionsHtml += `<option value="${opt.code}" data-cost="${opt.cost}">${opt.name} (~${(opt.cost/1000000).toFixed(1)} млн ₽)</option>`;
+  const opts = ['<option value="">Выберите вмешательство</option>'];
+  INTERVENTION_OPTIONS.forEach((o) => {
+    opts.push(`<option value="${o.code}" data-cost="${o.cost}">${o.name} (~${fmtMln(o.cost)})</option>`);
   });
-  
   row.innerHTML = `
-    <select class="intervention-code" onchange="updateBudgetSuggestion(this)">${optionsHtml}</select>
-    <input type="number" class="intervention-budget" placeholder="Бюджет (₽)" min="0" step="100000" />
-    <input type="number" class="intervention-month" placeholder="Месяц" min="0" max="36" value="0" />
-    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">✕</button>
+    <select class="intervention-code">${opts.join("")}</select>
+    <input type="number" class="intervention-budget" placeholder="Бюджет, ₽" min="0" step="100000" />
+    <input type="number" class="intervention-month" placeholder="Мес." min="0" max="36" value="0" />
+    <button type="button" class="btn-remove" aria-label="Удалить строку">✕</button>
   `;
-  
+  const select = row.querySelector(".intervention-code");
+  const budgetInput = row.querySelector(".intervention-budget");
+  select.addEventListener("change", () => {
+    const opt = select.selectedOptions[0];
+    if (opt && opt.dataset.cost) budgetInput.value = opt.dataset.cost;
+  });
+  row.querySelector(".btn-remove").addEventListener("click", () => row.remove());
   container.appendChild(row);
 }
 
-function updateBudgetSuggestion(select) {
-  const option = select.selectedOptions[0];
-  const budgetInput = select.parentElement.querySelector(".intervention-budget");
-  if (option && option.dataset.cost) {
-    budgetInput.value = option.dataset.cost;
-  }
-}
-
 async function runScenario() {
-  const name = document.getElementById("scenario-name").value || "Сценарий";
-  const horizon = parseInt(document.getElementById("scenario-horizon").value) || 12;
-  
+  const resultsDiv = document.getElementById("scenario-results");
+  if (!currentCity) return;
+
+  const name = document.getElementById("scenario-name").value.trim() || "Сценарий";
+  const horizon = parseInt(document.getElementById("scenario-horizon").value, 10) || 12;
   const interventions = [];
-  document.querySelectorAll(".intervention-row").forEach(row => {
+  document.querySelectorAll("#interventions-list .intervention-row").forEach((row) => {
     const code = row.querySelector(".intervention-code").value;
-    const budget = parseInt(row.querySelector(".intervention-budget").value) || 0;
-    const month = parseInt(row.querySelector(".intervention-month").value) || 0;
-    
-    if (code && budget > 0) {
-      interventions.push({ code, budget_rub: budget, start_month: month });
-    }
+    const budget = parseInt(row.querySelector(".intervention-budget").value, 10) || 0;
+    const month = parseInt(row.querySelector(".intervention-month").value, 10) || 0;
+    if (code && budget > 0) interventions.push({ code, budget_rub: budget, start_month: month });
   });
-  
+
   if (interventions.length === 0) {
-    alert("Добавьте хотя бы одно вмешательство");
+    resultsDiv.hidden = false;
+    resultsDiv.innerHTML = `<p style="color: var(--danger)">Добавьте хотя бы одно вмешательство с положительным бюджетом.</p>`;
     return;
   }
-  
-  const resultsDiv = document.getElementById("scenario-results");
-  resultsDiv.innerHTML = "<p>Запуск симуляции...</p>";
+
   resultsDiv.hidden = false;
-  
+  resultsDiv.innerHTML = `<p class="muted">Запуск симуляции…</p>`;
+
   try {
-    const slug = currentCity.slug;
-    const response = await fetch(`/api/city/${slug}/scenario`, {
+    const res = await fetch(`/api/city/${currentCity.slug}/scenario`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scenario_name: name,
-        horizon_months: horizon,
-        interventions,
-      }),
+      body: JSON.stringify({ scenario_name: name, horizon_months: horizon, interventions }),
     });
-    
-    if (!response.ok) throw new Error(await response.text());
-    
-    const data = await response.json();
-    displayScenarioResults(data.scenario);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    renderScenarioResults(data.scenario);
   } catch (e) {
-    resultsDiv.innerHTML = `<p style="color: var(--danger)">Ошибка: ${e.message}</p>`;
+    resultsDiv.innerHTML = `<p style="color: var(--danger)">Не удалось получить прогноз: ${e.message}</p>`;
   }
 }
 
-function displayScenarioResults(scenario) {
+function renderScenarioResults(scenario) {
   const resultsDiv = document.getElementById("scenario-results");
-  
-  const deltaText = Object.entries(scenario.delta_vectors)
-    .map(([k, v]) => `${k}: ${v > 0 ? '+' : ''}${(v*100).toFixed(1)}%`)
-    .join(", ");
-  
-  const timelineSummary = scenario.timeline
-    .filter((_, i) => i % 3 === 0 || i === scenario.timeline.length - 1)
-    .map(t => `Месяц ${t.month}: ${Object.entries(t.vectors).map(([k,v]) => `${k}: ${(v*100).toFixed(0)}%`).join(", ")}`)
+  const deltas = Object.entries(scenario.delta_vectors || {})
+    .map(([k, v]) => `${k}: ${v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`)
+    .join(" · ");
+  const timeline = (scenario.timeline || [])
+    .filter((_, i, a) => i % 3 === 0 || i === a.length - 1)
+    .map((t) => {
+      const v = Object.entries(t.vectors || {})
+        .map(([k, val]) => `${k}: ${(val * 100).toFixed(0)}%`)
+        .join(", ");
+      return `Месяц ${t.month}: ${v}`;
+    })
     .join("\n");
-  
+  const conf = { high: "Высокая ✓", medium: "Средняя", low: "Низкая" }[scenario.confidence] || "—";
+  const notes = (scenario.notes || []).join("; ");
   resultsDiv.innerHTML = `
-    <h3>Результаты: ${scenario.scenario_name}</h3>
-    <p><strong>Общий бюджет:</strong> ${(scenario.total_cost_rub / 1000000).toFixed(1)} млн ₽</p>
-    <p><strong>Уверенность:</strong> ${scenario.confidence === 'high' ? 'Высокая ✓' : scenario.confidence === 'medium' ? 'Средняя' : 'Низкая'}</p>
-    <p><strong>Изменения:</strong> ${deltaText}</p>
-    <h4>Динамика по месяцам:</h4>
-    <pre>${timelineSummary}</pre>
-    ${scenario.notes.length > 0 ? `<p><strong>Заметки:</strong> ${scenario.notes.join("; ")}</p>` : ""}
+    <h3>${scenario.scenario_name || "Сценарий"}</h3>
+    <p><strong>Общий бюджет:</strong> ${fmtMln(scenario.total_cost_rub || 0)}</p>
+    <p><strong>Уверенность прогноза:</strong> ${conf}</p>
+    <p><strong>Изменения векторов:</strong> ${deltas || "—"}</p>
+    ${timeline ? `<h4>Динамика по месяцам</h4><pre>${timeline}</pre>` : ""}
+    ${notes ? `<p><strong>Заметки:</strong> ${notes}</p>` : ""}
   `;
 }
 
 async function generateActions() {
-  const problemsText = document.getElementById("problems-text").value;
-  const includeMetrics = document.getElementById("include-metrics").checked;
-  
-  const problems = problemsText.split("\n").map(s => s.trim()).filter(s => s.length > 0);
-  
+  const resultsDiv = document.getElementById("actions-results");
+  if (!currentCity) return;
+
+  const problems = document.getElementById("problems-text").value
+    .split("\n").map((s) => s.trim()).filter((s) => s.length > 0);
+  const include = document.getElementById("include-metrics").checked;
+
   if (problems.length === 0) {
-    alert("Введите хотя бы одну проблему");
+    resultsDiv.hidden = false;
+    resultsDiv.innerHTML = `<p style="color: var(--danger)">Введите хотя бы одну проблему.</p>`;
     return;
   }
-  
-  const resultsDiv = document.getElementById("actions-results");
-  resultsDiv.innerHTML = "<p>Генерация плана действий...</p>";
+
   resultsDiv.hidden = false;
-  
+  resultsDiv.innerHTML = `<p class="muted">Генерация плана действий…</p>`;
+
   try {
-    const slug = currentCity.slug;
-    const response = await fetch(`/api/city/${slug}/actions`, {
+    const res = await fetch(`/api/city/${currentCity.slug}/actions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        problems,
-        include_metric_alerts: includeMetrics,
-      }),
+      body: JSON.stringify({ problems, include_metric_alerts: include }),
     });
-    
-    if (!response.ok) throw new Error(await response.text());
-    
-    const data = await response.json();
-    displayActionPlan(data.plan);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    renderActionPlan(data.plan);
   } catch (e) {
-    resultsDiv.innerHTML = `<p style="color: var(--danger)">Ошибка: ${e.message}</p>`;
+    resultsDiv.innerHTML = `<p style="color: var(--danger)">Не удалось сгенерировать план: ${e.message}</p>`;
   }
 }
 
-function displayActionPlan(plan) {
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function renderActionPlan(plan) {
   const resultsDiv = document.getElementById("actions-results");
-  
-  const actionsHtml = plan.actions.map(a => `
-    <div style="padding: 12px; margin: 8px 0; background: rgba(197,160,89,0.05); border-left: 3px solid var(--gold); border-radius: 6px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <strong style="color: var(--gold-light)">${a.title}</strong>
-        <span style="font-size:0.8rem; padding: 2px 8px; border-radius: 4px; background: ${a.priority === 'critical' ? 'rgba(224,91,91,0.2)' : a.priority === 'high' ? 'rgba(232,168,95,0.2)' : 'rgba(139,155,180,0.2)'}">
-          ${a.priority === 'critical' ? '⚡ Критично' : a.priority === 'high' ? '❗ Важно' : '📋 План'}
-        </span>
-      </div>
-      <p style="margin: 4px 0; font-size: 0.9rem; color: var(--muted);">${a.description}</p>
-      <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Ответственный:</strong> ${a.responsible.role}</p>
-      <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Срок:</strong> ${a.deadline_days} дн.</p>
-      <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Результат:</strong> ${a.expected_outcome}</p>
-    </div>
-  `).join("");
-  
+  const actions = (plan.actions || []).map((a) => {
+    const pri = PRIORITY_LABELS[a.priority] || PRIORITY_LABELS.medium;
+    const responsible = a.responsible?.role || a.responsible || "—";
+    return `
+      <div class="cm-action-card">
+        <div class="cm-action-head">
+          <span class="cm-action-title">${escapeHtml(a.title)}</span>
+          <span class="cm-priority-chip ${pri.cls}">${pri.label}</span>
+        </div>
+        <div class="cm-action-meta">${escapeHtml(a.description || "")}</div>
+        <div class="cm-action-meta"><strong>Ответственный:</strong> ${escapeHtml(responsible)}</div>
+        <div class="cm-action-meta"><strong>Срок:</strong> ${a.deadline_days ?? "—"} дн.</div>
+        ${a.expected_outcome ? `<div class="cm-action-meta"><strong>Результат:</strong> ${escapeHtml(a.expected_outcome)}</div>` : ""}
+      </div>`;
+  }).join("");
   resultsDiv.innerHTML = `
-    <h3>План действий для ${plan.city}</h3>
-    <p><strong>Резюме:</strong> ${plan.summary}</p>
-    ${plan.total_estimated_cost_rub > 0 ? `<p><strong>Оценка стоимости:</strong> ${(plan.total_estimated_cost_rub / 1000000).toFixed(1)} млн ₽</p>` : ""}
-    <hr style="border: none; border-top: 1px solid rgba(197,160,89,0.15); margin: 16px 0;" />
-    ${actionsHtml}
+    <h3>План для ${escapeHtml(plan.city || currentCity.name)}</h3>
+    ${plan.summary ? `<p><strong>Резюме:</strong> ${escapeHtml(plan.summary)}</p>` : ""}
+    ${plan.total_estimated_cost_rub > 0 ? `<p><strong>Оценка стоимости:</strong> ${fmtMln(plan.total_estimated_cost_rub)}</p>` : ""}
+    ${actions || `<p class="muted">Нет действий, удовлетворяющих условиям.</p>`}
   `;
 }
+
+function wireScenarioActionButtons() {
+  const scenarioBtn = document.getElementById("btn-scenario");
+  const actionsBtn = document.getElementById("btn-actions");
+  if (scenarioBtn) {
+    scenarioBtn.addEventListener("click", () => {
+      openCmModal("modal-scenario");
+      const list = document.getElementById("interventions-list");
+      if (list && list.children.length === 0) addInterventionRow();
+    });
+  }
+  if (actionsBtn) {
+    actionsBtn.addEventListener("click", () => openCmModal("modal-actions"));
+  }
+  // delegate close clicks (backdrop + ✕ + cancel buttons)
+  document.querySelectorAll('[data-close]').forEach((el) => {
+    el.addEventListener("click", () => closeCmModal(el.getAttribute("data-close")));
+  });
+  // wire the form action buttons once
+  const addBtn = document.getElementById("btn-add-intervention");
+  if (addBtn) addBtn.addEventListener("click", addInterventionRow);
+  const runBtn = document.getElementById("btn-run-scenario");
+  if (runBtn) runBtn.addEventListener("click", runScenario);
+  const genBtn = document.getElementById("btn-generate-actions");
+  if (genBtn) genBtn.addEventListener("click", generateActions);
+  // ESC closes whichever cm-modal is open
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    document.querySelectorAll(".cm-modal:not([hidden])").forEach((m) => closeCmModal(m.id));
+  });
+}
+
+wireScenarioActionButtons();
 
 init();
