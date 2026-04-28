@@ -10,8 +10,10 @@
   const STORAGE_HISTORY = "jarvis.history";
   const STORAGE_VOICE_OFF = "jarvis.voiceOff";
   const STORAGE_IDENTITY = "jarvis.identity";
+  const STORAGE_LAST_ALERT_ID = "jarvis.lastAlertId";
   const SESSION_GREETED = "jarvis.greeted";
   const GREETING_DELAY_MS = 10_000;
+  const ALERTS_POLL_MS = 90_000;
   const MAX_HISTORY = 16;
 
   // Anonymous identity — persistent UUID, генерится один раз. Никаких PII.
@@ -419,6 +421,51 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Проактивность — polling /alerts каждые 90s
+  // ---------------------------------------------------------------------------
+
+  function getLastAlertId() {
+    try { return parseInt(localStorage.getItem(STORAGE_LAST_ALERT_ID) || "0", 10) || 0; }
+    catch (_) { return 0; }
+  }
+  function setLastAlertId(id) {
+    try { localStorage.setItem(STORAGE_LAST_ALERT_ID, String(id || 0)); } catch (_) {}
+  }
+
+  async function pollAlerts() {
+    try {
+      const since = getLastAlertId();
+      const url = `/api/copilot/alerts?city=${encodeURIComponent(currentCityName())}&since_id=${since}&limit=5`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      const alerts = data.alerts || [];
+      if (alerts.length === 0) return;
+      // Показываем только самый «громкий» — критический раньше warning'а.
+      const sorted = alerts.slice().sort((a, b) => {
+        const w = (lvl) => ({ critical: 3, warning: 2, info: 1 })[lvl] || 0;
+        return w(b.level) - w(a.level);
+      });
+      const top = sorted[0];
+      if (top) announceAlert(top);
+      setLastAlertId(data.max_id || alerts[alerts.length - 1].id);
+    } catch (_) {
+      // тихо игнорируем — следующий тик попробует ещё раз
+    }
+  }
+
+  function announceAlert(alert) {
+    const text = alert.title + (alert.summary ? ". " + alert.summary : "");
+    showToast(`⚠ ${text}`);
+    if (voiceEnabled()) {
+      // Префикс «Я заметил…» — голос Джарвиса как смотрящего.
+      const said = `Я заметил: ${alert.title.toLowerCase()}.`
+        + (alert.summary ? " " + alert.summary : "");
+      speak(said);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Greeting (через 10 секунд после первой загрузки за сессию)
   // ---------------------------------------------------------------------------
 
@@ -535,6 +582,12 @@
     if (!alreadyGreeted()) {
       setTimeout(() => { greet(); }, GREETING_DELAY_MS);
     }
+    // Проактивность: первый poll через 30s после загрузки (даём загрузиться
+    // дашборду), потом каждые 90s.
+    setTimeout(() => {
+      pollAlerts();
+      setInterval(pollAlerts, ALERTS_POLL_MS);
+    }, 30_000);
   }
 
   if (document.readyState === "loading") {

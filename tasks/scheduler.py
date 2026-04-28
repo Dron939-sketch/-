@@ -263,6 +263,39 @@ async def _snapshot_loop(interval_s: int) -> None:
         await asyncio.sleep(interval_s)
 
 
+async def _jarvis_alerts_loop(interval_s: int) -> None:
+    """Раз в interval_s — проверяем все сидированные города на кризис /
+    просевшие метрики / резкое падение трендов. Алерты пишутся в
+    jarvis_alerts; фронт polling'ит их и показывает toast'ом голосом.
+    """
+    await asyncio.sleep(45 * 60)  # ждём пока collection + snapshot успеют
+    from config.deputies import DEPUTIES_BY_CITY
+    from tasks.jarvis_proactive import check_city, cleanup_expired_alerts
+
+    while True:
+        # Городам мы уже сидируем депутатов — отсюда же берём список,
+        # чтобы не конфликтовать с CITIES (которые могут включать пилоты,
+        # для которых ещё нет данных).
+        cities = list(DEPUTIES_BY_CITY.keys()) or list(CITIES.keys())
+        total_alerts = 0
+        for city_name in cities:
+            try:
+                ups = await check_city(city_name)
+                total_alerts += len(ups)
+            except Exception:  # noqa: BLE001
+                logger.exception("jarvis_alerts_loop failed for %s", city_name)
+        try:
+            removed = await cleanup_expired_alerts()
+            if removed:
+                logger.info("jarvis_alerts: cleaned %d expired", removed)
+        except Exception:  # noqa: BLE001
+            pass
+        if total_alerts:
+            logger.info("jarvis_alerts: upsert %d alerts in this cycle", total_alerts)
+        Heartbeat.tick("jarvis_alerts")
+        await asyncio.sleep(interval_s)
+
+
 async def _deputy_topics_loop(interval_s: int) -> None:
     """Раз в interval_s — auto-генерация тем для каждого города из
     DEPUTIES_BY_CITY. Создаёт темы только если есть signals (≥3 жалоб
@@ -321,6 +354,7 @@ def start() -> None:
     weather_s = max(300, _env_int("WEATHER_INTERVAL_S", 7200))
     snapshot_s = max(300, _env_int("SNAPSHOT_INTERVAL_S", 7200))
     deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 48 * 3600))
+    jarvis_alerts_s = max(300, _env_int("JARVIS_ALERTS_INTERVAL_S", 15 * 60))
 
     _tasks.append(asyncio.create_task(_collection_loop(collection_s), name="collection_loop"))
     if settings.openweather_api_key:
@@ -329,10 +363,13 @@ def start() -> None:
     _tasks.append(asyncio.create_task(
         _deputy_topics_loop(deputy_topics_s), name="deputy_topics_loop",
     ))
+    _tasks.append(asyncio.create_task(
+        _jarvis_alerts_loop(jarvis_alerts_s), name="jarvis_alerts_loop",
+    ))
     logger.info(
         "scheduler started: collection every %ds, weather every %ds, "
-        "snapshot every %ds, deputy_topics every %ds",
-        collection_s, weather_s, snapshot_s, deputy_topics_s,
+        "snapshot every %ds, deputy_topics every %ds, jarvis_alerts every %ds",
+        collection_s, weather_s, snapshot_s, deputy_topics_s, jarvis_alerts_s,
     )
 
 
