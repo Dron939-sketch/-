@@ -147,7 +147,12 @@
       replay.className = "cp-replay-btn";
       replay.title = "Озвучить ещё раз";
       replay.textContent = "▶";
-      replay.addEventListener("click", () => speak(text));
+      // Сохраняем MP3 на bubble чтобы replay использовал тот же Fish-аудио
+      // вместо повторного запроса синтеза.
+      const fishPayload = (opts && opts.audio)
+        ? { audio: opts.audio, audio_mime: opts.audio_mime }
+        : null;
+      replay.addEventListener("click", () => speak(text, fishPayload));
       div.appendChild(replay);
     }
     log.appendChild(div);
@@ -209,11 +214,29 @@
   }
 
   // ---------------------------------------------------------------------------
-  // TTS — speechSynthesis
+  // TTS — Fish Audio (MP3) с fallback на browser speechSynthesis
   // ---------------------------------------------------------------------------
 
-  function speak(text) {
-    if (!voiceEnabled()) return;
+  let audioPlayer = null;
+  function getAudioPlayer() {
+    if (!audioPlayer) {
+      audioPlayer = new Audio();
+      audioPlayer.preload = "none";
+    }
+    return audioPlayer;
+  }
+
+  function playAudioFromBase64(b64, mime) {
+    const player = getAudioPlayer();
+    try { player.pause(); } catch (_) {}
+    player.src = `data:${mime || "audio/mpeg"};base64,${b64}`;
+    player.play().catch(() => {
+      // Автоплей заблокирован — это редко, но бывает на iOS до взаимодействия.
+      // В этом случае просто ничего не делаем, пользователь нажмёт ▶.
+    });
+  }
+
+  function speakBrowser(text) {
     const synth = window.speechSynthesis;
     if (!synth) return;
     try {
@@ -228,9 +251,24 @@
     } catch (_) {}
   }
 
+  // speak(text, fishPayload?) — если бэкенд вернул MP3, играем его;
+  // иначе — браузерный синтезатор. Используется и при autoplay ответа,
+  // и при клике ▶ (replay) — без MP3-payload играем заново через synth.
+  function speak(text, fishPayload) {
+    if (!voiceEnabled()) return;
+    if (fishPayload && fishPayload.audio) {
+      playAudioFromBase64(fishPayload.audio, fishPayload.audio_mime);
+      return;
+    }
+    speakBrowser(text);
+  }
+
   function stopSpeaking() {
     if (window.speechSynthesis) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+    if (audioPlayer) {
+      try { audioPlayer.pause(); } catch (_) {}
     }
   }
 
@@ -342,12 +380,15 @@
       addBubble("assistant", reply, {
         action: data.action || null,
         sources: data.sources || [],
+        audio: data.audio || null,
+        audio_mime: data.audio_mime || null,
       });
       const updated = loadHistory();
       updated.push({ role: "assistant", text: reply });
       saveHistory(updated);
-      setHint(voiceEnabled() ? "🔊 Озвучиваю…" : "Готово.");
-      if (voiceEnabled()) speak(reply);
+      const engine = data.tts_engine === "fish" ? "🔊 Fish Audio…" : "🔊 Озвучиваю…";
+      setHint(voiceEnabled() ? engine : "Готово.");
+      if (voiceEnabled()) speak(reply, { audio: data.audio, audio_mime: data.audio_mime });
       else stopSpeaking();
     } catch (e) {
       showTyping(false);
