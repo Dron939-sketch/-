@@ -40,6 +40,7 @@ class CopilotIn(BaseModel):
     city: str = Field("Коломна", max_length=120)
     history: List[HistoryTurn] = Field(default_factory=list, max_length=20)
     speak: bool = Field(True, description="Если есть Fish Audio — вернуть MP3 в base64")
+    identity: str = Field("", max_length=80, description="UUID Джарвиса (anon ID для памяти)")
 
 
 def _resolve_city_safe(name_or_slug: str) -> Dict[str, Any]:
@@ -391,6 +392,22 @@ async def _run_deputy_topics(city_name: str, cid: Optional[int]) -> tuple[str, L
     )
 
 
+class ForgetIn(BaseModel):
+    identity: str = Field(..., min_length=1, max_length=80)
+
+
+@router.post("/forget")
+async def copilot_forget(payload: ForgetIn) -> dict:
+    """Полная очистка долговременной памяти Джарвиса по identity.
+    Вызывается с фронта при кнопке «⟳ Очистить»."""
+    try:
+        from db.jarvis_memory_queries import forget_all
+        await forget_all(payload.identity)
+    except Exception:  # noqa: BLE001
+        logger.exception("forget_all failed")
+    return {"ok": True}
+
+
 @router.get("/greeting")
 async def copilot_greeting() -> dict:
     """Короткое приветствие Джарвиса. Используется фронтом через
@@ -423,8 +440,28 @@ async def copilot_greeting() -> dict:
 async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
     cfg = _resolve_city_safe(payload.city)
     ctx = await _build_context(cfg["name"], payload.message)
+
+    # Долговременная память — подмешиваем 2-4 строки в context
+    if payload.identity:
+        try:
+            from ai.jarvis_memory import build_memory_lines
+            mem_lines = await build_memory_lines(payload.identity)
+            if mem_lines:
+                ctx["memory"] = mem_lines
+        except Exception:  # noqa: BLE001
+            logger.exception("memory load failed")
+
     history = [{"role": t.role, "text": t.text} for t in payload.history]
     result = await copilot_chat(payload.message, ctx, history)
+
+    # Запись turn'а в память — fire-and-forget, не блокирует ответ.
+    if payload.identity:
+        try:
+            import asyncio as _asyncio
+            from ai.jarvis_memory import record_user_turn
+            _asyncio.create_task(record_user_turn(payload.identity, payload.message))
+        except Exception:  # noqa: BLE001
+            pass
 
     response: Dict[str, Any] = {
         "city":    cfg["name"],
