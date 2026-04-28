@@ -124,9 +124,14 @@ def _time_of_day_ru(now: Optional[datetime] = None) -> str:
 
 
 def _build_system_prompt(emotion_block: Dict[str, str]) -> str:
-    """Финальный system prompt = база + блок эмоции собеседника +
-    указание времени суток для упоминаний."""
+    """Финальный system prompt = база + KB + блок эмоции + время суток."""
     parts = [_SYSTEM_PROMPT_BASE]
+    # Подмешиваем мини-БЗ (людей, которых Джарвис «знает по имени»)
+    try:
+        from config.knowledge_base import kb_prompt_block
+        parts.append(kb_prompt_block())
+    except Exception:  # noqa: BLE001
+        pass
     if emotion_block.get("instruction"):
         parts.append(
             "Тон ответа: " + emotion_block.get("tone", "friendly")
@@ -282,12 +287,16 @@ def _normalize_sources(value: Any) -> List[str]:
 
 def _parse_response(data: Any) -> Dict[str, Any]:
     """Приводим LLM-ответ к {text, action, sources}."""
+    from .voice_service import expand_temperatures
+
     if not isinstance(data, dict):
         return {"text": "Я задумался. Спросите ещё раз — попроще.",
                 "action": None, "sources": []}
     text = (data.get("text") or data.get("reply") or "").strip()
     if not text:
         text = "Я задумался. Спросите ещё раз — попроще."
+    # «+12°C» → «плюс 12 градусов Цельсия» — и в bubble, и в TTS
+    text = expand_temperatures(text)
     return {
         "text":    text[:1200],
         "action":  _normalize_action(data.get("action")),
@@ -313,6 +322,32 @@ async def chat(
     if not q:
         return {"text": "Я слушаю. Сформулируйте вопрос или команду.",
                 "action": None, "sources": []}
+
+    # Детерминированный ответ на «кто тебя создал?» — не зависит от LLM,
+    # отвечает мгновенно без расхода токенов.
+    try:
+        from config.knowledge_base import (
+            deterministic_creator_answer, find_person, is_creator_question,
+            deterministic_person_answer,
+        )
+        if is_creator_question(q):
+            return {
+                "text": deterministic_creator_answer(),
+                "action": None, "sources": ["knowledge_base"],
+                "emotion": "neutral", "tone": "friendly",
+            }
+        # «Кто X?» — короткий вопрос, явно про человека из БЗ
+        if len(q) < 80 and re.search(r"\b(кто|расскажи о|расскажи про)\b", q, re.I):
+            person = find_person(q)
+            if person:
+                return {
+                    "text": deterministic_person_answer(person),
+                    "action": None, "sources": ["knowledge_base"],
+                    "emotion": "neutral", "tone": "friendly",
+                }
+    except Exception:  # noqa: BLE001
+        logger.debug("knowledge_base shortcut failed", exc_info=False)
+
     ctx = city_context or {}
     user_prompt = build_user_prompt(q, ctx, history or [])
 

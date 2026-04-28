@@ -50,9 +50,55 @@ _EMOJI_RE = re.compile(
 )
 
 
+_TEMP_RE = re.compile(r"([+\-−]?)\s*(\d+)\s*°\s*[CС]", re.IGNORECASE)
+
+
+def expand_temperatures(text: str) -> str:
+    """Раскрыть `+12°C` → `плюс 12 градусов Цельсия` для голоса.
+    Применяется как к Fish Audio TTS, так и к финальному text-ответу,
+    который потом озвучивается speechSynthesis на фронте.
+    Если text пустой/без °C — возвращает без изменений."""
+    if not text:
+        return text
+    return _TEMP_RE.sub(_expand_temperature, text)
+
+
+def _expand_temperature(match: "re.Match[str]") -> str:
+    """+12°C  → плюс 12 градусов Цельсия
+       -3°C   → минус 3 градуса Цельсия
+       0°C    → 0 градусов Цельсия
+       12°C   → 12 градусов Цельсия
+
+    Склонение «градус/градуса/градусов» делаем по правилам русского:
+      1, 21, 31, ... → градус
+      2-4, 22-24, … → градуса
+      все остальные (включая 11-14) → градусов
+    """
+    sign_raw = match.group(1) or ""
+    n = int(match.group(2))
+    if sign_raw in ("-", "−"):
+        sign = "минус "
+    elif sign_raw == "+":
+        sign = "плюс "
+    else:
+        sign = ""
+    # Склонение
+    last = n % 10
+    last_two = n % 100
+    if 11 <= last_two <= 14:
+        word = "градусов"
+    elif last == 1:
+        word = "градус"
+    elif 2 <= last <= 4:
+        word = "градуса"
+    else:
+        word = "градусов"
+    return f"{sign}{n} {word} Цельсия"
+
+
 def normalize_for_tts(text: str) -> str:
     """Чистим текст для Yandex TTS: убираем эмодзи / спецсимволы / Markdown,
-    добавляем точку в конце, нормализуем пробелы."""
+    раскрываем «°C» в «градусов Цельсия», добавляем точку в конце."""
     if not text:
         return "Я тут. Расскажите ещё."
     t = _EMOJI_RE.sub("", text)
@@ -62,6 +108,8 @@ def normalize_for_tts(text: str) -> str:
     t = re.sub(r"`([^`]+)`", r"\1", t)
     # Скобки-ремарки (вздыхает) (с улыбкой) — содержат кириллицу
     t = re.sub(r"\([^)]*[а-яёА-ЯЁ][^)]*\)\s*", "", t)
+    # «+12°C» → «плюс 12 градусов Цельсия» — иначе TTS читает «12 С».
+    t = _TEMP_RE.sub(_expand_temperature, t)
     # Спецсимволы, которые TTS не любит
     t = re.sub(r"[#_`~<>|@$%^&+={}\\]", "", t)
     # Кириллица строчная + заглавная подряд → пробел между ними
