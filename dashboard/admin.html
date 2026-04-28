@@ -70,7 +70,7 @@
       <section class="card wide admin-daily-card">
         <div class="card-eyebrow">
           <span>Дневной график</span>
-          <span class="muted small">Hits / уникальные пользователи / сессии</span>
+          <span class="muted small">Обращения / уникальные пользователи / сессии</span>
         </div>
         <div class="daily-chart" id="admin-daily"></div>
       </section>
@@ -89,10 +89,19 @@
         </div>
       </section>
 
-      <!-- per-user drill-down -->
+      <!-- anonymous visitors -->
+      <section class="card wide admin-anon-card">
+        <div class="card-eyebrow">
+          <span>Анонимные посетители</span>
+          <span class="muted small">Зашли без регистрации — отслеживаем по cookie или /24-IP</span>
+        </div>
+        <ul class="stats-anon-list" id="admin-anon"></ul>
+      </section>
+
+      <!-- per-user drill-down (also serves anonymous timeline) -->
       <section class="card wide admin-user-detail" id="admin-user-detail" hidden>
         <div class="card-eyebrow">
-          <span>Лента пользователя <span id="admin-user-email">—</span></span>
+          <span>Лента действий <span id="admin-user-email">—</span></span>
           <button type="button" class="admin-close-user" id="admin-close-user">✕</button>
         </div>
         <ul class="user-timeline" id="admin-user-timeline"></ul>

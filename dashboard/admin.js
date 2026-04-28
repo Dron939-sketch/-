@@ -118,7 +118,7 @@ function renderDaily(rows) {
     const bar = document.createElement("div");
     bar.className = "bar";
     bar.style.height = `${Math.max(2, (r.hits / maxHits) * 120)}px`;
-    bar.title = `${fmtDateShort(r.day)} — ${r.hits} hits · ${r.users} польз. · ${r.sessions} сес.`;
+    bar.title = `${fmtDateShort(r.day)} — ${r.hits} обращений · ${r.users} польз. · ${r.sessions} сес.`;
     const lbl = document.createElement("span");
     lbl.className = "dlabel";
     lbl.textContent = fmtDateShort(r.day);
@@ -164,12 +164,13 @@ function renderEndpoints(endpoints) {
     const errSeg = [];
     if (e.errors_5xx) errSeg.push(`<span style="color: var(--danger);">5xx: ${e.errors_5xx}</span>`);
     if (e.errors_4xx) errSeg.push(`<span style="color: var(--warn);">4xx: ${e.errors_4xx}</span>`);
+    const label = e.path_label || e.path;
     li.innerHTML = `
       <div>
-        <div class="path">${escapeHtml(e.path)}</div>
+        <div class="path" title="${escapeHtml(e.path)}">${escapeHtml(label)}</div>
         <div class="sub">${e.distinct_users || 0} польз. · сред. ${e.avg_ms || 0} мс${errSeg.length ? " · " + errSeg.join(" · ") : ""}</div>
       </div>
-      <div class="hits">${e.hits}</div>
+      <div class="hits" title="обращений">${e.hits}</div>
     `;
     list.appendChild(li);
   });
@@ -191,17 +192,7 @@ async function openUserDetail(user) {
       return;
     }
     timeline.innerHTML = "";
-    events.forEach((e) => {
-      const li = document.createElement("li");
-      const statusCls = e.status >= 500 ? "err" : e.status >= 400 ? "err" : e.status >= 300 ? "redir" : "ok";
-      li.innerHTML = `
-        <span class="ts">${fmtTime(e.created_at)}</span>
-        <span class="method">${e.method}</span>
-        <span class="path">${escapeHtml(e.path)}</span>
-        <span class="status ${statusCls}">${e.status}${e.response_time_ms != null ? ` · ${e.response_time_ms}мс` : ""}</span>
-      `;
-      timeline.appendChild(li);
-    });
+    events.forEach((e) => renderTimelineEvent(timeline, e));
     section.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     timeline.innerHTML = `<li class="stats-empty">Ошибка: ${err.message}</li>`;
@@ -212,16 +203,18 @@ async function openUserDetail(user) {
 
 async function loadAll() {
   try {
-    const [sum, users, endpoints, daily] = await Promise.all([
+    const [sum, users, endpoints, daily, anon] = await Promise.all([
       fetchJson(`/api/admin/stats/summary?days=${currentRange}`),
       fetchJson(`/api/admin/stats/users?days=${currentRange}&limit=20`),
       fetchJson(`/api/admin/stats/endpoints?days=${currentRange}&limit=20`),
       fetchJson(`/api/admin/stats/daily?days=${currentRange}`),
+      fetchJson(`/api/admin/stats/anonymous?days=${currentRange}&limit=30`),
     ]);
     renderSummary(sum);
     renderUsers(users.users || []);
     renderEndpoints(endpoints.endpoints || []);
     renderDaily(daily.days || []);
+    renderAnonymous(anon.sessions || []);
     const upd = document.getElementById("updated-at");
     if (upd) upd.textContent = "Обновлено: " + new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   } catch (e) {
@@ -232,6 +225,83 @@ async function loadAll() {
       showAuthGate("У вас нет роли admin. Попросите администратора.");
     }
   }
+}
+
+function renderAnonymous(sessions) {
+  const list = document.getElementById("admin-anon");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!sessions.length) {
+    list.innerHTML = '<li class="stats-empty">Анонимных посетителей не было.</li>';
+    return;
+  }
+  sessions.forEach((s) => {
+    const li = document.createElement("li");
+    const ident = s.has_cookie ? `Сессия ${escapeHtml(s.identifier || "—")}` : `IP ${escapeHtml(s.ip_prefix || "—")}`;
+    const lastSeen = s.last_seen ? fmtDateShort(s.last_seen) : "—";
+    const topPathsHtml = (s.top_paths || [])
+      .map((p) => `<span class="anon-chip">${escapeHtml(p.label || p.path)} ×${p.count}</span>`)
+      .join("");
+    li.innerHTML = `
+      <div class="anon-row">
+        <div class="anon-row-main">
+          <div class="anon-id">${ident}</div>
+          <div class="muted small">
+            ${escapeHtml(s.device_label || "—")}
+            · ${s.has_cookie ? "с cookie" : "без cookie"}
+            · последний визит: ${lastSeen}
+          </div>
+          <div class="anon-paths">${topPathsHtml}</div>
+        </div>
+        <div class="anon-events">${s.events}</div>
+      </div>
+    `;
+    li.addEventListener("click", () => openAnonDetail(s));
+    list.appendChild(li);
+  });
+}
+
+async function openAnonDetail(session) {
+  const sectionEl = document.getElementById("admin-user-detail");
+  const emailEl = document.getElementById("admin-user-email");
+  const timeline = document.getElementById("admin-user-timeline");
+  if (!sectionEl) return;
+  sectionEl.hidden = false;
+  const isCookie = session.has_cookie;
+  emailEl.textContent = isCookie
+    ? `анонимная сессия ${session.identifier || ""}`
+    : `анонимный IP ${session.ip_prefix || ""}`;
+  timeline.innerHTML = '<li class="stats-empty">Загружаю…</li>';
+  const params = isCookie
+    ? `session=${encodeURIComponent(session.session_id)}`
+    : `ip=${encodeURIComponent(session.ip_prefix)}`;
+  try {
+    const data = await fetchJson(`/api/admin/stats/anonymous/timeline?${params}&limit=100`);
+    const events = data.events || [];
+    if (!events.length) {
+      timeline.innerHTML = '<li class="stats-empty">Нет действий в этом окне.</li>';
+      return;
+    }
+    timeline.innerHTML = "";
+    events.forEach((e) => renderTimelineEvent(timeline, e));
+    sectionEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    timeline.innerHTML = `<li class="stats-empty">Ошибка: ${err.message}</li>`;
+  }
+}
+
+function renderTimelineEvent(timeline, e) {
+  const li = document.createElement("li");
+  const statusCls = e.status >= 500 ? "err" : e.status >= 400 ? "err" : e.status >= 300 ? "redir" : "ok";
+  const label = e.path_label || e.path;
+  const device = e.device_label ? ` · ${escapeHtml(e.device_label)}` : "";
+  li.innerHTML = `
+    <span class="ts">${fmtTime(e.created_at)}</span>
+    <span class="method">${e.method}</span>
+    <span class="path" title="${escapeHtml(e.path)}">${escapeHtml(label)}${device}</span>
+    <span class="status ${statusCls}">${e.status}${e.response_time_ms != null ? ` · ${e.response_time_ms}мс` : ""}</span>
+  `;
+  timeline.appendChild(li);
 }
 
 function showAuthGate(msg) {
