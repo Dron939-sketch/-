@@ -531,6 +531,121 @@ async def topics_auto_generate(
 
 
 # ---------------------------------------------------------------------------
+# Coverage snapshot — топ жалоб vs закрытые темы (для главного дашборда)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/deputy-coverage")
+async def deputy_coverage(
+    name: str,
+    hours: int = 24,
+    _u: dict = Depends(require_user),
+) -> dict:
+    """Снимок покрытия соц-повестки.
+
+    Берёт топ-категории жалоб за окно `hours` часов и сопоставляет с
+    активными темами через CATEGORY_LABELS — если в заголовке темы есть
+    label категории (case-insensitive), считаем категорию закрытой и
+    показываем прогресс по постам.
+
+    Используется на главном дашборде («Покрытие соц-повестки») и
+    в координаторской панели «Депутаты».
+    """
+    from analytics.deputy_topic_generator import CATEGORY_LABELS, CATEGORY_TO_SECTORS
+    from collections import Counter
+    from db.queries import news_window
+
+    cfg = _resolve_city(name)
+    _require_pool()
+    cid = await _city_id_or_503(cfg["name"])
+
+    if hours < 1 or hours > 168:
+        raise HTTPException(status_code=422, detail="hours must be 1..168")
+
+    news_items = await news_window(cid, hours=hours)
+    active_topics = await q.list_topics(cid, status="active")
+
+    # 1. Counter негативных категорий
+    counter: Counter[str] = Counter()
+    for it in news_items:
+        cat = (it.category or "").lower()
+        if cat in CATEGORY_TO_SECTORS:
+            # учитываем только phenomenologically «социальные» категории
+            sentiment = None
+            if it.enrichment:
+                sentiment = it.enrichment.get("sentiment")
+            is_neg = cat in {"complaints", "incidents", "utilities"} or (
+                sentiment is not None and float(sentiment) <= -0.2
+            )
+            if is_neg:
+                counter[cat] += 1
+
+    top_categories = counter.most_common(8)
+
+    # 2. Для каждой категории — есть ли матчинговая active topic
+    title_lower_to_topic = {(t.get("title") or "").lower(): t for t in active_topics}
+    breakdown: List[dict] = []
+    for cat, count in top_categories:
+        label = CATEGORY_LABELS.get(cat, cat)
+        label_low = label.lower()
+        matched = next(
+            (t for k, t in title_lower_to_topic.items() if label_low in k),
+            None,
+        )
+        if matched is not None:
+            req = int(matched.get("required_posts") or 0)
+            done = int(matched.get("completed_posts") or 0)
+            pct = round(100.0 * done / req, 1) if req > 0 else None
+            breakdown.append({
+                "category": cat,
+                "label": label,
+                "complaints_count": count,
+                "covered": True,
+                "topic_id": matched["id"],
+                "topic_title": matched.get("title"),
+                "priority": matched.get("priority"),
+                "required_posts": req,
+                "completed_posts": done,
+                "completion_pct": pct,
+            })
+        else:
+            breakdown.append({
+                "category": cat,
+                "label": label,
+                "complaints_count": count,
+                "covered": False,
+                "topic_id": None,
+                "target_sectors": CATEGORY_TO_SECTORS.get(cat, []),
+            })
+
+    # 3. Aggregate
+    total = len(breakdown)
+    covered = sum(1 for b in breakdown if b["covered"])
+    coverage_pct = round(100.0 * covered / total, 1) if total > 0 else None
+
+    sum_required = sum(int(b.get("required_posts") or 0) for b in breakdown if b["covered"])
+    sum_completed = sum(int(b.get("completed_posts") or 0) for b in breakdown if b["covered"])
+    posts_pct = (
+        round(100.0 * sum_completed / sum_required, 1) if sum_required > 0 else None
+    )
+
+    return {
+        "city": cfg["name"],
+        "window_hours": hours,
+        "summary": {
+            "total_top_categories": total,
+            "covered_count": covered,
+            "uncovered_count": total - covered,
+            "coverage_pct": coverage_pct,
+            "sum_required_posts": sum_required,
+            "sum_completed_posts": sum_completed,
+            "posts_pct": posts_pct,
+        },
+        "breakdown": breakdown,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
 

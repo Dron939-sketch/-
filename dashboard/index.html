@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/style.css?v=3" />
+  <link rel="stylesheet" href="/style.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -136,6 +136,20 @@
       <div class="card-eyebrow">Активные петли</div>
       <ul class="loops-list" id="loops-list"></ul>
       <div class="loop-action muted small">Нажмите на петлю, чтобы увидеть точки разрыва.</div>
+    </section>
+
+    <!-- row 3.5: deputy coverage of social agenda (visible only after auth) -->
+    <section class="card wide deputy-coverage" id="deputy-coverage" hidden>
+      <div class="card-eyebrow">
+        <span>Покрытие соц-повестки депутатами</span>
+        <a class="muted small" href="/deputies.html" style="margin-left:auto;">К координатору →</a>
+      </div>
+      <div class="cov-headline" id="cov-headline">—</div>
+      <div class="cov-progress">
+        <div class="cov-bar"><div class="cov-bar-fill" id="cov-bar-fill"></div></div>
+        <div class="cov-progress-meta muted small" id="cov-progress-meta">—</div>
+      </div>
+      <ul class="cov-breakdown" id="cov-breakdown"></ul>
     </section>
 
     <!-- row 4: 9-element Meister graph -->
@@ -740,6 +754,6 @@
   <script
     src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"
     defer></script>
-  <script src="/dashboard.js?v=3" defer></script>
+  <script src="/dashboard.js?v=4" defer></script>
 </body>
 </html>

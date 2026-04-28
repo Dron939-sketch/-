@@ -2721,7 +2721,81 @@ async function refresh() {
   } catch (e) {
     console.warn("happiness events unavailable", e);
   }
+  // Покрытие соц-повестки — только для авторизованных. На 401/403 карточка
+  // остаётся скрытой и анонимный посетитель её не увидит.
+  try {
+    const cov = await fetchJson(`/api/city/${slug}/deputy-coverage?hours=24`);
+    renderCoverage(cov);
+  } catch (e) {
+    const card = document.getElementById("deputy-coverage");
+    if (card) card.hidden = true;
+  }
   setUpdated();
+}
+
+function renderCoverage(data) {
+  const card = document.getElementById("deputy-coverage");
+  if (!card) return;
+  const s = data.summary || {};
+  const breakdown = data.breakdown || [];
+  if ((s.total_top_categories || 0) === 0) {
+    // Нет жалоб в окне — карточку не показываем, повестка спокойная.
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+
+  const covered = s.covered_count || 0;
+  const total = s.total_top_categories || 0;
+  const headline = document.getElementById("cov-headline");
+  if (headline) {
+    headline.textContent =
+      total === covered
+        ? `Все ${total} категорий жалоб закрыты темами депутатов`
+        : `${covered} из ${total} категорий жалоб закрыты · ${total - covered} без темы`;
+  }
+
+  const fill = document.getElementById("cov-bar-fill");
+  const meta = document.getElementById("cov-progress-meta");
+  if (fill) {
+    const pct = s.posts_pct == null ? 0 : Math.min(100, s.posts_pct);
+    fill.style.width = `${pct}%`;
+  }
+  if (meta) {
+    if (s.posts_pct == null) {
+      meta.textContent = "Постов по закрытым темам пока нет.";
+    } else {
+      meta.textContent = `Постов сделано: ${s.sum_completed_posts} из ${s.sum_required_posts} (${s.posts_pct.toFixed(0)}%)`;
+    }
+  }
+
+  const ul = document.getElementById("cov-breakdown");
+  if (!ul) return;
+  ul.innerHTML = "";
+  for (const b of breakdown) {
+    const li = document.createElement("li");
+    li.className = "cov-row " + (b.covered ? "cov-covered" : "cov-uncovered");
+    const status = b.covered
+      ? `<span class="cov-status cov-yes">✓ В работе</span>`
+      : `<span class="cov-status cov-no">⚠ Без темы</span>`;
+    const progress = b.covered && b.required_posts > 0
+      ? `<span class="muted small">${b.completed_posts}/${b.required_posts} постов</span>`
+      : `<span class="muted small">Секторы: ${(b.target_sectors || []).join(", ") || "—"}</span>`;
+    li.innerHTML = `
+      <div class="cov-row-main">
+        <span class="cov-cat">${escCov(b.label)}</span>
+        <span class="muted small">· ${b.complaints_count} жалоб</span>
+      </div>
+      <div class="cov-row-side">${status} ${progress}</div>
+    `;
+    ul.appendChild(li);
+  }
+}
+
+function escCov(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
 }
 
 async function switchCity(city) {
