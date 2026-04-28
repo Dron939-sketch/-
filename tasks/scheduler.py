@@ -252,6 +252,43 @@ async def _snapshot_loop(interval_s: int) -> None:
         await asyncio.sleep(interval_s)
 
 
+async def _deputy_topics_loop(interval_s: int) -> None:
+    """Раз в interval_s — auto-генерация тем для каждого города из
+    DEPUTIES_BY_CITY. Создаёт темы только если есть signals (≥3 жалоб
+    одной категории или метрика < 3.0); внутри run_auto_generate
+    срабатывает dedup по title против active topics, поэтому повторные
+    запуски не плодят клонов.
+    """
+    # Просыпаемся не сразу — пусть collection и snapshot накопят
+    # минимальные данные за первые ~30 минут.
+    await asyncio.sleep(30 * 60)
+    from config.deputies import DEPUTIES_BY_CITY
+    from db.seed import city_id_by_name
+    from tasks.deputy_jobs import run_auto_generate
+
+    while True:
+        for city_name in DEPUTIES_BY_CITY.keys():
+            try:
+                cid = await city_id_by_name(city_name)
+                if cid is None:
+                    continue
+                result = await run_auto_generate(
+                    city_name=city_name, city_id=cid,
+                    hours=24, deadline_days=5, dry_run=False,
+                )
+                created = result.get("created") or []
+                skipped = result.get("skipped_duplicate", 0)
+                if created or skipped:
+                    logger.info(
+                        "deputy_topics_loop %s: created=%d skipped_duplicate=%d",
+                        city_name, len(created), skipped,
+                    )
+            except Exception:  # noqa: BLE001
+                logger.exception("deputy_topics_loop failed for %s", city_name)
+        Heartbeat.tick("deputy_topics")
+        await asyncio.sleep(interval_s)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -268,14 +305,19 @@ def start() -> None:
     collection_s = max(300, settings.collection_interval_minutes * 60)
     weather_s = 3600
     snapshot_s = 3600
+    deputy_topics_s = 24 * 3600  # раз в сутки
 
     _tasks.append(asyncio.create_task(_collection_loop(collection_s), name="collection_loop"))
     if settings.openweather_api_key:
         _tasks.append(asyncio.create_task(_weather_loop(weather_s), name="weather_loop"))
     _tasks.append(asyncio.create_task(_snapshot_loop(snapshot_s), name="snapshot_loop"))
+    _tasks.append(asyncio.create_task(
+        _deputy_topics_loop(deputy_topics_s), name="deputy_topics_loop",
+    ))
     logger.info(
-        "scheduler started: collection every %ds, weather every %ds, snapshot every %ds",
-        collection_s, weather_s, snapshot_s,
+        "scheduler started: collection every %ds, weather every %ds, "
+        "snapshot every %ds, deputy_topics every %ds",
+        collection_s, weather_s, snapshot_s, deputy_topics_s,
     )
 
 

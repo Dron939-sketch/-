@@ -455,79 +455,19 @@ async def topics_auto_generate(
     публиковать. `dry_run=false` — записать темы и сразу авто-назначить
     депутатов по target_sectors.
     """
-    from analytics.deputy_topic_generator import (
-        auto_assign_deputies,
-        generate_topics_from_signals,
-    )
-    from db.queries import latest_metrics, news_window
+    from tasks.deputy_jobs import run_auto_generate
 
     cfg = _resolve_city(name)
     _require_pool()
     cid = await _city_id_or_503(cfg["name"])
 
-    news_items = await news_window(cid, hours=payload.hours)
-    metric_row = await latest_metrics(cid)
-    metrics = None
-    if metric_row is not None:
-        metrics = {
-            "sb":  metric_row.get("sb"),
-            "tf":  metric_row.get("tf"),
-            "ub":  metric_row.get("ub"),
-            "chv": metric_row.get("chv"),
-        }
-
-    candidates = generate_topics_from_signals(
-        news=news_items,
-        metrics=metrics,
+    return await run_auto_generate(
+        city_name=cfg["name"],
+        city_id=cid,
+        hours=payload.hours,
         deadline_days=payload.deadline_days,
+        dry_run=payload.dry_run,
     )
-
-    if payload.dry_run:
-        return {
-            "city": cfg["name"],
-            "dry_run": True,
-            "found_signals": {
-                "news_items_in_window": len(news_items),
-                "metrics_present": metrics is not None,
-            },
-            "candidates": candidates,
-        }
-
-    # Реальная запись + auto-assign + dedup по title против активных тем,
-    # чтобы повторный запуск в течение суток не плодил клонов.
-    deputies = await q.list_deputies(cid)
-    active_titles = {
-        (t.get("title") or "").strip().lower()
-        for t in await q.list_topics(cid, status="active")
-    }
-    created: List[dict] = []
-    skipped_duplicate = 0
-    for cand in candidates:
-        if cand["title"].strip().lower() in active_titles:
-            skipped_duplicate += 1
-            continue
-        body = dict(cand)
-        body.pop("target_sectors", None)
-        body.pop("external_id", None)  # схема `deputy_topics` без этой колонки
-        assignees = auto_assign_deputies(cand, deputies)
-        body["assignees"] = assignees
-        topic_id = await q.insert_topic(cid, body)
-        if topic_id is not None:
-            created.append({
-                "topic_id": topic_id,
-                "title": cand["title"],
-                "priority": cand["priority"],
-                "source": cand["source"],
-                "assigned_count": len(assignees),
-            })
-
-    return {
-        "city": cfg["name"],
-        "dry_run": False,
-        "created": created,
-        "skipped_duplicate": skipped_duplicate,
-        "failed_to_persist": len(candidates) - len(created) - skipped_duplicate,
-    }
 
 
 # ---------------------------------------------------------------------------
