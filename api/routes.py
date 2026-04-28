@@ -13,16 +13,17 @@ Endpoints:
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Set
+from datetime import datetime, timezone, date
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, HTTPException
 
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
 from ai import NewsEnricher
+from analytics.scenario_simulator import ScenarioSimulator, Intervention
+from analytics.action_generator import ActionGenerator
 from collectors import (
     AppealsCollector,
     NewsCollector,
@@ -387,6 +388,90 @@ async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResp
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return schemas.RoadmapResponse(city=cfg["name"], roadmap=plan.to_dict())
+
+
+@router.post("/api/city/{name}/scenario", response_model=schemas.ScenarioResponse)
+async def run_scenario(name: str, req: schemas.ScenarioRequest) -> schemas.ScenarioResponse:
+    """Сценарное моделирование (What-If анализ).
+    
+    Позволяет смоделировать влияние бюджетных решений на показатели города.
+    """
+    import asyncio
+    
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+    
+    # Получаем текущие метрики
+    baseline_vectors = {"safety": 0.5, "economy": 0.5, "quality": 0.5, "social": 0.5}
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            def _to_unit(v):
+                return None if v is None else round(float(v) / 6.0, 3)
+            baseline_vectors = {
+                "safety": _to_unit(metric_row.get("sb")) or 0.5,
+                "economy": _to_unit(metric_row.get("tf")) or 0.5,
+                "quality": _to_unit(metric_row.get("ub")) or 0.5,
+                "social": _to_unit(metric_row.get("chv")) or 0.5,
+            }
+    
+    # Конвертируем интервенции
+    interventions = [
+        Intervention(
+            code=i.code,
+            budget_rub=i.budget_rub,
+            start_month=i.start_month,
+        )
+        for i in req.interventions
+    ]
+    
+    # Запускаем симуляцию
+    simulator = ScenarioSimulator(cfg["name"])
+    result = simulator.simulate(
+        baseline_vectors=baseline_vectors,
+        interventions=interventions,
+        horizon_months=req.horizon_months,
+        scenario_name=req.scenario_name,
+    )
+    
+    return schemas.ScenarioResponse(city=cfg["name"], scenario=result.to_dict())
+
+
+@router.post("/api/city/{name}/actions", response_model=schemas.ActionPlanResponse)
+async def generate_actions(name: str, req: schemas.ActionPlanRequest) -> schemas.ActionPlanResponse:
+    """Генератор конкретных действий.
+    
+    Преобразует проблемы и жалобы в структурированные поручения с исполнителями и сроками.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+    
+    # Получаем метрики для превентивных действий
+    metrics = None
+    trends = None
+    if req.include_metric_alerts and city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        trend_row = await metrics_trend_7d(city_id)
+        if metric_row is not None:
+            def _to_unit(v):
+                return None if v is None else round(float(v) / 6.0, 3)
+            metrics = {
+                "safety": _to_unit(metric_row.get("sb")),
+                "economy": _to_unit(metric_row.get("tf")),
+                "quality": _to_unit(metric_row.get("ub")),
+                "social": _to_unit(metric_row.get("chv")),
+            }
+            trends = trend_row or {}
+    
+    # Генерируем план действий
+    generator = ActionGenerator(cfg["name"])
+    plan = generator.create_daily_plan(
+        problems=req.problems,
+        metrics=metrics,
+        trends=trends,
+    )
+    
+    return schemas.ActionPlanResponse(city=cfg["name"], plan=plan.to_dict())
 
 
 # ----- helpers -----

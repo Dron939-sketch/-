@@ -27,6 +27,14 @@
     </div>
 
     <div class="topbar-right">
+      <button type="button" class="nav-button" id="btn-scenario" title="Сценарное моделирование">
+        <span class="nav-icon">🎯</span>
+        <span class="nav-label">Сценарии</span>
+      </button>
+      <button type="button" class="nav-button" id="btn-actions" title="Генератор действий">
+        <span class="nav-icon">✓</span>
+        <span class="nav-label">Действия</span>
+      </button>
       <span class="updated" id="updated-at">—</span>
       <span class="avatar" title="Профиль">👤</span>
     </div>
@@ -122,6 +130,74 @@
     <span>Городской Разум · прогнозное управление городом</span>
     <span class="muted small" id="footer-tag">алгоритм Мейстера</span>
   </footer>
+
+  <!-- Modal: Scenario Simulator -->
+  <div class="modal" id="modal-scenario" hidden>
+    <div class="modal-content modal-wide">
+      <div class="modal-header">
+        <h2>🎯 Сценарное моделирование</h2>
+        <button class="modal-close" onclick="closeModal('modal-scenario')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Смоделируйте влияние бюджетных решений на показатели города</p>
+        
+        <div class="form-section">
+          <label>Название сценария</label>
+          <input type="text" id="scenario-name" value="Бюджетный план 2025" />
+        </div>
+        
+        <div class="form-section">
+          <label>Горизонт прогноза (месяцев)</label>
+          <input type="number" id="scenario-horizon" min="1" max="36" value="12" />
+        </div>
+        
+        <div class="form-section">
+          <label>Вмешательства</label>
+          <div id="interventions-list"></div>
+          <button type="button" class="btn-add" onclick="addInterventionRow()">+ Добавить вмешательство</button>
+        </div>
+        
+        <div class="form-actions">
+          <button type="button" class="btn-primary" onclick="runScenario()">Запустить симуляцию</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('modal-scenario')">Отмена</button>
+        </div>
+        
+        <div id="scenario-results" class="results-block" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Action Generator -->
+  <div class="modal" id="modal-actions" hidden>
+    <div class="modal-content modal-wide">
+      <div class="modal-header">
+        <h2>✓ Генератор конкретных действий</h2>
+        <button class="modal-close" onclick="closeModal('modal-actions')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Преобразуйте проблемы в структурированные поручения</p>
+        
+        <div class="form-section">
+          <label>Проблемы / Жалобы (каждая с новой строки)</label>
+          <textarea id="problems-text" rows="6" placeholder="Пример:&#10;Ямы на дороге ул. Ленина&#10;Перебои с отоплением в мкр. Щурово&#10;Рост краж в центре города"></textarea>
+        </div>
+        
+        <div class="form-section checkbox">
+          <label>
+            <input type="checkbox" id="include-metrics" checked />
+            Включить превентивные действия по метрикам
+          </label>
+        </div>
+        
+        <div class="form-actions">
+          <button type="button" class="btn-primary" onclick="generateActions()">Сгенерировать план</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('modal-actions')">Отмена</button>
+        </div>
+        
+        <div id="actions-results" class="results-block" hidden></div>
+      </div>
+    </div>
+  </div>
 
   <script src="/dashboard.js"></script>
 </body>
