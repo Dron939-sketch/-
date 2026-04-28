@@ -70,6 +70,9 @@ def create_app() -> FastAPI:
         if pool is not None:
             await run_migrations(str(_MIGRATION_PATH))
             await seed_cities()
+            # Депутаты — после городов: внешние ключи на cities(id).
+            from db.seed_deputies import seed_deputies
+            await seed_deputies()
             # Bootstrap default admin if env vars (or hardcoded default)
             # provided — идемпотентно, не перезаписывает пароль
             # существующего пользователя.
