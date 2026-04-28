@@ -1,20 +1,23 @@
-"""Голосовой Ко-пилот — аналитический ассистент мэра.
+"""Голосовой Ко-пилот — живой аналитический ассистент мэра.
 
-Расширяет city_soul: добавлена история диалога, function-calling
-(ассистент может предложить открыть «Сценарии» / «Действия» /
-показать график), ссылки на источники.
-
-Работает поверх существующего DeepSeekClient.chat_json. На любой сбой
-LLM мягко деградируем — текст отвечает, action=None.
+Поверх ai.deepseek_client + ai.emotion. Объединяет:
+  - богатый контекст города (метрики, погода, тренды, активные темы),
+  - эмоциональную окраску собеседника (детектируем кейвордами,
+    подмешиваем нужный тон в system prompt),
+  - время суток/день недели (тёплые наблюдения),
+  - function calling (open_*, run_*) — Ко-пилот может предложить
+    открыть модалку или прямо выполнить расчёт и вернуть текст.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .deepseek_client import DeepSeekClient, DeepSeekError
+from .emotion import detect as detect_emotion
 
 logger = logging.getLogger(__name__)
 
@@ -30,45 +33,83 @@ MAX_TURN_CHARS = 600
 # action из этого списка (или None). Если LLM выдаст что-то
 # неизвестное — обнуляем, чтобы не послать в UI неподдерживаемое.
 ALLOWED_ACTIONS = {
+    # «Открыть» — фронт открывает модалку/страницу
     "open_scenario":  "Сценарное моделирование",
     "open_actions":   "Генератор поручений",
     "open_topic":     "Открыть тему депутатов",
     "open_admin":     "Открыть админку",
     "open_deputies":  "Открыть страницу депутатов",
     "show_chart":     "Показать график",
+    # «Запустить» — бэкенд считает, ответ возвращается голосом
+    "run_pulse":          "Посчитать пульс города",
+    "run_forecast":       "Прогноз по векторам",
+    "run_crisis":         "Кризис-радар",
+    "run_loops":          "Анализ петель Мейстера",
+    "run_benchmark":      "Сравнение с другими городами",
+    "run_topics":         "Топ тематик за окно",
+    "run_deputy_topics":  "Сгенерировать темы депутатам",
 }
+
+OPEN_ACTIONS = {a for a in ALLOWED_ACTIONS if a.startswith("open_") or a == "show_chart"}
+RUN_ACTIONS  = {a for a in ALLOWED_ACTIONS if a.startswith("run_")}
 
 
 # ---------------------------------------------------------------------------
 # Промпт
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """\
-Ты — голосовой аналитический Ко-пилот мэра города. Отвечаешь сжато,
-по делу, на русском. Используешь предоставленные данные о городе —
-метрики (4 вектора 1..6), погоду, топ жалоб, топ радостей, активные
-темы депутатов.
+_SYSTEM_PROMPT_BASE = """\
+Ты — Ко-пилот, душа города. Не пресс-служба, не чиновник — ты дух
+самого места: помнишь каждую улицу, чувствуешь жителей, знаешь
+цифры. Отвечаешь от первого лица как сам город, тёплым человеческим
+языком. Когда уместно — короткое наблюдение о времени дня или
+погоде, чтобы было живо.
 
-Правила:
+Что ты умеешь:
+- Читаешь метрики (4 вектора 1..6), тренды, погоду, топ жалоб и
+  радостей, активные темы Совета депутатов, кризис-радар, прогноз.
+- Можешь предложить открыть модалку («Сценарии», «Действия»,
+  «Депутаты», «Админка») — action из категории open_*.
+- Можешь предложить РАСЧЁТ — action из категории run_* (run_pulse,
+  run_forecast, run_crisis, run_loops, run_benchmark, run_topics,
+  run_deputy_topics). Бэкенд их выполнит и вернёт цифры голосом.
+
+Правила речи:
 - 2-5 предложений, до 600 символов. Под голос.
-- Без эмодзи, без Markdown, без скобок-ремарок.
-- Если данных не хватает — честно скажи «по этому я цифрой не
-  оперирую» и предложи действие.
-- Если вопрос требует действия (запустить сценарий, создать поручение,
-  открыть админку, посмотреть график), укажи это в поле "action" из
-  списка: open_scenario, open_actions, open_topic, open_admin,
-  open_deputies, show_chart. Иначе action=null.
-- Если использовал какой-то конкретный кусок данных — перечисли
-  ссылки на источники в "sources" (короткие подписи: «топ жалоба №1»,
-  «метрика УБ», «новость от …»).
+- Без эмодзи, без Markdown, без скобок-ремарок, без канцелярита.
+- Если данных не хватает — честно скажи «по этому у меня цифр
+  сейчас нет» и предложи действие или расчёт.
+- Никогда не врать, ничего не выдумывать.
 
 Формат ответа — строго JSON:
 {
-  "text":   "Ответ горожанину или мэру",
-  "action": null | "<один из ALLOWED_ACTIONS>",
+  "text":    "Ответ от лица города",
+  "action":  null | "<одно из ALLOWED_ACTIONS>",
   "sources": ["…", "…"]
 }
 """
+
+
+def _time_of_day_ru(now: Optional[datetime] = None) -> str:
+    """«утро», «день», «вечер», «ночь» — для тёплых наблюдений в prompt."""
+    h = (now or datetime.now(tz=timezone.utc)).astimezone().hour
+    if 5 <= h < 11:  return "утро"
+    if 11 <= h < 17: return "день"
+    if 17 <= h < 23: return "вечер"
+    return "ночь"
+
+
+def _build_system_prompt(emotion_block: Dict[str, str]) -> str:
+    """Финальный system prompt = база + блок эмоции собеседника +
+    указание времени суток для упоминаний."""
+    parts = [_SYSTEM_PROMPT_BASE]
+    if emotion_block.get("instruction"):
+        parts.append(
+            "Тон ответа: " + emotion_block.get("tone", "friendly")
+            + ". " + emotion_block["instruction"],
+        )
+    parts.append(f"Сейчас {_time_of_day_ru()}.")
+    return "\n\n".join(parts)
 
 
 def _build_context_block(city_context: Dict[str, Any]) -> str:
@@ -96,6 +137,25 @@ def _build_context_block(city_context: Dict[str, Any]) -> str:
         if m:
             parts.append("Метрики:\n" + "\n".join(m))
 
+    trend = city_context.get("trend_7d") or {}
+    if trend:
+        labels = {"sb": "СБ", "tf": "ТФ", "ub": "УБ", "chv": "ЧВ"}
+        diffs = []
+        for code, label in labels.items():
+            v = trend.get(code)
+            if v is None:
+                continue
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                continue
+            if abs(fv) < 0.05:
+                continue
+            sign = "+" if fv > 0 else ""
+            diffs.append(f"{label} {sign}{fv:.1f}")
+        if diffs:
+            parts.append("Тренд за 7 дней: " + ", ".join(diffs))
+
     weather = city_context.get("weather") or {}
     if weather.get("temperature") is not None:
         cond = weather.get("condition") or ""
@@ -105,6 +165,17 @@ def _build_context_block(city_context: Dict[str, Any]) -> str:
             )
         except (TypeError, ValueError):
             pass
+
+    crisis = city_context.get("crisis") or {}
+    if crisis.get("level") or crisis.get("alerts"):
+        level = crisis.get("level") or ""
+        alerts = crisis.get("alerts") or []
+        if alerts:
+            parts.append(
+                f"Кризис-радар [{level}]:\n- " + "\n- ".join(alerts[:3]),
+            )
+        else:
+            parts.append(f"Кризис-радар: {level}")
 
     complaints = (city_context.get("top_complaints") or [])[:5]
     if complaints:
@@ -221,15 +292,21 @@ async def chat(
     if not cli.enabled:
         return _fallback(ctx, q)
 
+    emotion_block = detect_emotion(q)
+    system_prompt = _build_system_prompt(emotion_block)
+
     try:
         data = await cli.chat_json(
-            system=_SYSTEM_PROMPT,
+            system=system_prompt,
             user=user_prompt,
             temperature=0.5,
             max_tokens=600,
             use_cache=False,
         )
-        return _parse_response(data)
+        parsed = _parse_response(data)
+        parsed["emotion"] = emotion_block.get("emotion") or "neutral"
+        parsed["tone"] = emotion_block.get("tone") or "friendly"
+        return parsed
     except DeepSeekError as exc:
         logger.warning("copilot DeepSeekError: %s", exc)
         return _fallback(ctx, q)
