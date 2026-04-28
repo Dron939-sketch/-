@@ -8,6 +8,8 @@ pydantic==2.9.2
 # Required by pydantic.EmailStr in api/auth_routes.py — CI tests now import
 # that module through tests/test_auth_routes_import.py to catch regressions.
 email-validator==2.2.0
+# python-multipart — для тестов api/voice_routes.py (UploadFile).
+python-multipart==0.0.20
 aiohttp==3.10.5
 # httpx — required by fastapi.testclient (starlette.TestClient) for
 # tests/test_deputy_routes.py smoke tests against the FastAPI app.
