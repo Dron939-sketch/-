@@ -213,6 +213,10 @@ def _build_context_block(city_context: Dict[str, Any]) -> str:
     if active_topics:
         parts.append("Активные темы депутатов:\n- " + "\n- ".join(active_topics))
 
+    memory = city_context.get("memory") or []
+    if memory:
+        parts.append("Что ты помнишь о собеседнике:\n" + "\n".join(memory))
+
     return "\n\n".join(parts)
 
 

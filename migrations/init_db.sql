@@ -341,3 +341,28 @@ CREATE TABLE IF NOT EXISTS deputy_posts (
 
 CREATE INDEX IF NOT EXISTS deputy_posts_topic_idx ON deputy_posts (topic_id, published_at DESC);
 CREATE INDEX IF NOT EXISTS deputy_posts_deputy_idx ON deputy_posts (deputy_id, published_at DESC);
+
+-- @SEGMENT jarvis_memory_table
+-- Долговременная память Джарвиса. Identity — случайный UUID на стороне
+-- клиента (localStorage), не привязан к user_id, чтобы не делать
+-- регистрацию обязательной. kind различает тип факта:
+--   "topic"      → тематика, payload: «транспорт» / «ЖКХ» / «здравоохранение»
+--   "recent_q"   → последний вопрос пользователя (для «вчера ты спрашивал…»)
+--   "fact"       → пользователь сам сказал что-то о себе
+-- Уникальность по (identity, kind, payload) — UPSERT увеличивает weight
+-- при повторе, чтобы Джарвис понимал «он часто спрашивает про дороги».
+CREATE TABLE IF NOT EXISTS jarvis_memory (
+    id            BIGSERIAL PRIMARY KEY,
+    identity      TEXT NOT NULL,
+    kind          TEXT NOT NULL,
+    payload       TEXT NOT NULL,
+    weight        INTEGER NOT NULL DEFAULT 1,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (identity, kind, payload)
+);
+
+CREATE INDEX IF NOT EXISTS jarvis_memory_identity_idx
+    ON jarvis_memory (identity, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS jarvis_memory_identity_kind_idx
+    ON jarvis_memory (identity, kind);

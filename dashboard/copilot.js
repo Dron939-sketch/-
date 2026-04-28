@@ -9,9 +9,26 @@
 
   const STORAGE_HISTORY = "jarvis.history";
   const STORAGE_VOICE_OFF = "jarvis.voiceOff";
+  const STORAGE_IDENTITY = "jarvis.identity";
   const SESSION_GREETED = "jarvis.greeted";
   const GREETING_DELAY_MS = 10_000;
   const MAX_HISTORY = 16;
+
+  // Anonymous identity — persistent UUID, генерится один раз. Никаких PII.
+  function getIdentity() {
+    try {
+      let id = localStorage.getItem(STORAGE_IDENTITY);
+      if (id && id.length >= 16) return id;
+      // Простой UUID-генератор без зависимостей
+      const a = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(a);
+      id = Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem(STORAGE_IDENTITY, id);
+      return id;
+    } catch (_) {
+      return "";  // приватный режим — память отключена, ассистент работает
+    }
+  }
 
   const el = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
@@ -372,6 +389,7 @@
         body: JSON.stringify({
           message: text, city: currentCityName(),
           history: history.slice(-8, -1), speak: voiceEnabled(),
+          identity: getIdentity(),
         }),
       });
       if (!res.ok) {
@@ -473,8 +491,19 @@
       refreshVoiceToggle();
       if (!voiceEnabled()) stopSpeaking();
     });
-    el("jv-clear")?.addEventListener("click", () => {
+    el("jv-clear")?.addEventListener("click", async () => {
       clearHistory();
+      // Сервер тоже забывает про этого собеседника — fire-and-forget
+      const id = getIdentity();
+      if (id) {
+        try {
+          await fetch("/api/copilot/forget", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identity: id }),
+          });
+        } catch (_) {}
+      }
       const log = el("jv-log");
       if (log) log.innerHTML = "";
       addBubble("assistant", "Память очищена. Я готов.");
