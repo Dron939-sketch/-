@@ -1,15 +1,16 @@
 // =============================================================================
-// Голосовой Ко-пилот — универсальный виджет (главная / админка / депутаты).
-// Использует браузерный SpeechRecognition (где доступен) для STT и
-// speechSynthesis для TTS. На сервер ходит только за контекстным ответом —
-// /api/copilot/chat. Никаких внешних зависимостей, IIFE.
+// Джарвис — голосовой ассистент города. Voice-only, без текстового ввода.
+// FAB-орб пульсирует в углу. Через 10 секунд после первой загрузки страницы
+// один раз за сессию здоровается голосом.
 // =============================================================================
 
 (function () {
   "use strict";
 
-  const STORAGE_HISTORY = "cityCopilot.history";
-  const STORAGE_VOICE_OFF = "cityCopilot.voiceOff";
+  const STORAGE_HISTORY = "jarvis.history";
+  const STORAGE_VOICE_OFF = "jarvis.voiceOff";
+  const SESSION_GREETED = "jarvis.greeted";
+  const GREETING_DELAY_MS = 10_000;
   const MAX_HISTORY = 16;
 
   const el = (id) => document.getElementById(id);
@@ -18,65 +19,72 @@
   }[c]));
 
   // ---------------------------------------------------------------------------
-  // Markup — вставляется в DOM один раз при load.
+  // Markup
   // ---------------------------------------------------------------------------
 
   function injectMarkup() {
-    if (el("cp-fab")) return;
+    if (el("jv-fab")) return;
     const wrap = document.createElement("div");
     wrap.innerHTML = `
-      <button type="button" class="cp-fab" id="cp-fab" title="Голосовой Ко-пилот" aria-label="Открыть Ко-пилота">
-        <span class="cp-fab-icon" aria-hidden="true">🤖</span>
+      <button type="button" class="jv-fab" id="jv-fab" title="Поговорить с Джарвисом" aria-label="Активировать Джарвиса">
+        <span class="jv-orb" aria-hidden="true">
+          <span class="jv-orb-core"></span>
+          <span class="jv-orb-ring"></span>
+        </span>
+        <span class="jv-fab-label">Джарвис</span>
       </button>
-      <aside class="cp-panel" id="cp-panel" hidden role="dialog" aria-label="Голосовой Ко-пилот">
-        <header class="cp-head">
+
+      <aside class="jv-panel" id="jv-panel" hidden role="dialog" aria-label="Джарвис">
+        <header class="jv-head">
           <div>
-            <div class="cp-eyebrow">Голосовой Ко-пилот</div>
-            <h2 class="cp-title">Аналитический ассистент</h2>
+            <div class="jv-eyebrow">Джарвис</div>
+            <h2 class="jv-title" id="jv-title">Слушаю.</h2>
           </div>
-          <div class="cp-head-controls">
-            <button type="button" class="cp-icon-btn" id="cp-voice-toggle" title="Включить/выключить озвучку" aria-label="Озвучка">🔊</button>
-            <button type="button" class="cp-icon-btn" id="cp-clear" title="Очистить историю" aria-label="Очистить">🗑</button>
-            <button type="button" class="cp-close" id="cp-close" aria-label="Закрыть">&times;</button>
+          <div class="jv-head-controls">
+            <button type="button" class="jv-icon-btn" id="jv-voice-toggle" title="Звук" aria-label="Звук">🔊</button>
+            <button type="button" class="jv-icon-btn" id="jv-clear" title="Очистить" aria-label="Очистить">⟳</button>
+            <button type="button" class="jv-close" id="jv-close" aria-label="Закрыть">×</button>
           </div>
         </header>
-        <div class="cp-log" id="cp-log" aria-live="polite"></div>
-        <div class="cp-typing" id="cp-typing" hidden>
-          <span></span><span></span><span></span>
+
+        <div class="jv-log" id="jv-log" aria-live="polite"></div>
+
+        <div class="jv-mic-wrap">
+          <button type="button" class="jv-mic" id="jv-mic" aria-label="Говорить">
+            <span class="jv-mic-icon">🎙</span>
+          </button>
+          <div class="jv-hint" id="jv-hint">Нажмите и говорите.</div>
         </div>
-        <div class="cp-input-row">
-          <input type="text" id="cp-text" placeholder="Спросите Ко-пилота…" autocomplete="off" />
-          <button type="button" class="cp-send" id="cp-send" title="Отправить">→</button>
-          <button type="button" class="cp-mic" id="cp-mic" title="Голосовой ввод" aria-label="Микрофон">🎙</button>
-        </div>
-        <div class="muted small cp-hint" id="cp-hint">🎙 голос или Enter для текста.</div>
       </aside>
+
+      <!-- Невидимый toast c приветствием при первом заходе -->
+      <div class="jv-toast" id="jv-toast" hidden role="status" aria-live="polite">
+        <span class="jv-toast-orb"></span>
+        <span class="jv-toast-text" id="jv-toast-text">Я рядом.</span>
+        <button type="button" class="jv-toast-close" id="jv-toast-close" aria-label="Скрыть">×</button>
+      </div>
     `;
     document.body.appendChild(wrap);
   }
 
   // ---------------------------------------------------------------------------
-  // Helpers
+  // Storage helpers
   // ---------------------------------------------------------------------------
 
   function loadHistory() {
     try {
       const raw = localStorage.getItem(STORAGE_HISTORY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
+      const parsed = raw ? JSON.parse(raw) : [];
       return Array.isArray(parsed) ? parsed.slice(-MAX_HISTORY) : [];
     } catch (_) { return []; }
   }
-
   function saveHistory(arr) {
     try { localStorage.setItem(STORAGE_HISTORY, JSON.stringify(arr.slice(-MAX_HISTORY))); }
     catch (_) {}
   }
-
   function clearHistory() {
     try { localStorage.removeItem(STORAGE_HISTORY); } catch (_) {}
   }
-
   function voiceEnabled() {
     return localStorage.getItem(STORAGE_VOICE_OFF) !== "1";
   }
@@ -84,12 +92,30 @@
     if (on) localStorage.removeItem(STORAGE_VOICE_OFF);
     else localStorage.setItem(STORAGE_VOICE_OFF, "1");
   }
+  function alreadyGreeted() {
+    try { return sessionStorage.getItem(SESSION_GREETED) === "1"; }
+    catch (_) { return false; }
+  }
+  function markGreeted() {
+    try { sessionStorage.setItem(SESSION_GREETED, "1"); } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // City / TTS
+  // ---------------------------------------------------------------------------
+
+  function currentCityName() {
+    if (window.currentCity?.name) return window.currentCity.name;
+    if (typeof currentCity !== "undefined" && currentCity?.name) return currentCity.name;
+    const slug = window.location.pathname.replace(/^\/+/, "").split("/")[0];
+    if (slug && /^[a-z\-]+$/.test(slug)) return slug;
+    return "Коломна";
+  }
 
   function pickRussianVoice() {
     const synth = window.speechSynthesis;
     if (!synth) return null;
     const voices = synth.getVoices() || [];
-    // Предпочитаем Google русский / Yandex / Microsoft Irina / любой ru-RU
     const sorted = voices.sort((a, b) => {
       const score = (v) => (
         (v.lang === "ru-RU" ? 100 : v.lang.startsWith("ru") ? 50 : 0) +
@@ -100,58 +126,73 @@
     return sorted[0] || null;
   }
 
-  // ---------------------------------------------------------------------------
-  // Determine current city slug from URL or window.currentCity
-  // ---------------------------------------------------------------------------
-
-  function currentCityName() {
-    if (window.currentCity?.name) return window.currentCity.name;
-    if (typeof currentCity !== "undefined" && currentCity?.name) return currentCity.name;
-    // URL slug fallback (if dashboard.js не успел инициализироваться)
-    const slug = window.location.pathname.replace(/^\/+/, "").split("/")[0];
-    if (slug && /^[a-z\-]+$/.test(slug)) return slug;
-    return "Коломна";
+  let audioPlayer = null;
+  function getAudioPlayer() {
+    if (!audioPlayer) {
+      audioPlayer = new Audio();
+      audioPlayer.preload = "none";
+    }
+    return audioPlayer;
+  }
+  function playB64(b64, mime) {
+    const p = getAudioPlayer();
+    try { p.pause(); } catch (_) {}
+    p.src = `data:${mime || "audio/mpeg"};base64,${b64}`;
+    p.play().catch(() => {});
+  }
+  function speakBrowser(text) {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    try {
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "ru-RU"; u.rate = 1.0; u.pitch = 1.0;
+      const v = pickRussianVoice();
+      if (v) u.voice = v;
+      synth.speak(u);
+    } catch (_) {}
+  }
+  function speak(text, fishPayload) {
+    if (!voiceEnabled()) return;
+    if (fishPayload && fishPayload.audio) {
+      playB64(fishPayload.audio, fishPayload.audio_mime);
+      return;
+    }
+    speakBrowser(text);
+  }
+  function stopSpeaking() {
+    if (window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+    if (audioPlayer) { try { audioPlayer.pause(); } catch (_) {} }
   }
 
   // ---------------------------------------------------------------------------
-  // UI rendering
+  // Bubble + status rendering
   // ---------------------------------------------------------------------------
 
   function addBubble(role, text, opts) {
-    const log = el("cp-log");
+    const log = el("jv-log");
     if (!log) return null;
     const div = document.createElement("div");
-    div.className = `cp-bubble cp-${role}`;
+    div.className = `jv-bubble jv-${role}`;
     div.innerHTML = esc(text);
     if (opts && opts.action) {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "cp-action-btn";
+      btn.className = "jv-action-btn";
       btn.textContent = actionLabel(opts.action);
       btn.addEventListener("click", () => handleAction(opts.action));
       div.appendChild(btn);
     }
-    if (opts && Array.isArray(opts.sources) && opts.sources.length > 0) {
-      const ul = document.createElement("ul");
-      ul.className = "cp-sources";
-      opts.sources.slice(0, 5).forEach((s) => {
-        const li = document.createElement("li");
-        li.textContent = s;
-        ul.appendChild(li);
-      });
-      div.appendChild(ul);
-    }
     if (role === "assistant") {
       const replay = document.createElement("button");
       replay.type = "button";
-      replay.className = "cp-replay-btn";
+      replay.className = "jv-replay-btn";
       replay.title = "Озвучить ещё раз";
       replay.textContent = "▶";
-      // Сохраняем MP3 на bubble чтобы replay использовал тот же Fish-аудио
-      // вместо повторного запроса синтеза.
       const fishPayload = (opts && opts.audio)
-        ? { audio: opts.audio, audio_mime: opts.audio_mime }
-        : null;
+        ? { audio: opts.audio, audio_mime: opts.audio_mime } : null;
       replay.addEventListener("click", () => speak(text, fishPayload));
       div.appendChild(replay);
     }
@@ -160,37 +201,39 @@
     return div;
   }
 
-  function showTyping(on) {
-    const t = el("cp-typing");
-    if (!t) return;
-    t.hidden = !on;
-    if (on) {
-      const log = el("cp-log");
-      if (log) log.scrollTop = log.scrollHeight;
-    }
+  function setStatus(msg) {
+    const t = el("jv-title");
+    if (t) t.textContent = msg;
+    const h = el("jv-hint");
+    if (h) h.textContent = msg;
   }
 
-  function setHint(msg) {
-    const h = el("cp-hint");
-    if (h) h.textContent = msg;
+  function setOrbState(state) {
+    // state: idle | listening | thinking | speaking
+    const fab = el("jv-fab");
+    const panel = el("jv-panel");
+    [fab, panel].forEach((root) => {
+      if (!root) return;
+      root.dataset.state = state;
+    });
   }
 
   function actionLabel(action) {
     return ({
-      open_scenario:     "🎯 Открыть сценарии",
-      open_actions:      "✓ Открыть генератор действий",
-      open_topic:        "🗂 Открыть тему",
-      open_admin:        "⚙️ Открыть админку",
-      open_deputies:     "🏛 Открыть депутатов",
-      show_chart:        "📊 Показать график",
-      run_pulse:         "💓 Посчитать пульс",
-      run_forecast:      "🔮 Прогноз на 30 дней",
-      run_crisis:        "🚨 Кризис-радар",
-      run_loops:         "🧠 Петли Мейстера",
-      run_benchmark:     "📊 Сравнить с другими",
-      run_topics:        "🗂 Топ тематик",
+      open_scenario:     "🎯 Сценарии",
+      open_actions:      "✓ Действия",
+      open_topic:        "🗂 Тема",
+      open_admin:        "⚙️ Админка",
+      open_deputies:     "🏛 Депутаты",
+      show_chart:        "📊 График",
+      run_pulse:         "💓 Пульс",
+      run_forecast:      "🔮 Прогноз",
+      run_crisis:        "🚨 Кризис",
+      run_loops:         "🧠 Петли",
+      run_benchmark:     "📊 Сравнить",
+      run_topics:        "🗂 Темы",
       run_deputy_topics: "📝 Темы депутатам",
-    })[action] || "Выполнить";
+    })[action] || "Запустить";
   }
 
   async function handleAction(action) {
@@ -205,106 +248,45 @@
           document.querySelector(".forecast, .deep-forecast, .history")?.scrollIntoView({
             behavior: "smooth", block: "start",
           });
-          break;
       }
       return;
     }
     if (action.startsWith("run_")) {
-      // Прямое выполнение через /api/copilot/execute — ответ как обычный bubble.
-      showTyping(true);
-      setHint("Считаю…");
+      setOrbState("thinking");
+      setStatus("Считаю…");
       try {
         const res = await fetch("/api/copilot/execute", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action, city: currentCityName(), speak: voiceEnabled() }),
         });
-        showTyping(false);
         if (!res.ok) {
           addBubble("assistant", `Расчёт не удался (${res.status}).`);
-          setHint("Ошибка.");
+          setOrbState("idle"); setStatus("Готов.");
           return;
         }
         const data = await res.json();
         const reply = data.text || "Готово.";
         addBubble("assistant", reply, {
-          action: null, sources: data.sources || [],
-          audio: data.audio || null, audio_mime: data.audio_mime || null,
+          action: null, audio: data.audio || null, audio_mime: data.audio_mime || null,
         });
         const updated = loadHistory();
         updated.push({ role: "assistant", text: reply });
         saveHistory(updated);
-        if (voiceEnabled()) speak(reply, { audio: data.audio, audio_mime: data.audio_mime });
-        setHint("Готово.");
-      } catch (e) {
-        showTyping(false);
-        addBubble("assistant", "Связь дрогнула при расчёте.");
-        setHint("Сеть недоступна.");
+        if (voiceEnabled()) {
+          setOrbState("speaking");
+          speak(reply, { audio: data.audio, audio_mime: data.audio_mime });
+        }
+        setStatus("Готов.");
+        setTimeout(() => setOrbState("idle"), 5000);
+      } catch (_) {
+        addBubble("assistant", "Связь дрогнула.");
+        setOrbState("idle"); setStatus("Сеть недоступна.");
       }
     }
   }
 
   // ---------------------------------------------------------------------------
-  // TTS — Fish Audio (MP3) с fallback на browser speechSynthesis
-  // ---------------------------------------------------------------------------
-
-  let audioPlayer = null;
-  function getAudioPlayer() {
-    if (!audioPlayer) {
-      audioPlayer = new Audio();
-      audioPlayer.preload = "none";
-    }
-    return audioPlayer;
-  }
-
-  function playAudioFromBase64(b64, mime) {
-    const player = getAudioPlayer();
-    try { player.pause(); } catch (_) {}
-    player.src = `data:${mime || "audio/mpeg"};base64,${b64}`;
-    player.play().catch(() => {
-      // Автоплей заблокирован — это редко, но бывает на iOS до взаимодействия.
-      // В этом случае просто ничего не делаем, пользователь нажмёт ▶.
-    });
-  }
-
-  function speakBrowser(text) {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    try {
-      synth.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "ru-RU";
-      u.rate = 1.0;
-      u.pitch = 1.0;
-      const v = pickRussianVoice();
-      if (v) u.voice = v;
-      synth.speak(u);
-    } catch (_) {}
-  }
-
-  // speak(text, fishPayload?) — если бэкенд вернул MP3, играем его;
-  // иначе — браузерный синтезатор. Используется и при autoplay ответа,
-  // и при клике ▶ (replay) — без MP3-payload играем заново через synth.
-  function speak(text, fishPayload) {
-    if (!voiceEnabled()) return;
-    if (fishPayload && fishPayload.audio) {
-      playAudioFromBase64(fishPayload.audio, fishPayload.audio_mime);
-      return;
-    }
-    speakBrowser(text);
-  }
-
-  function stopSpeaking() {
-    if (window.speechSynthesis) {
-      try { window.speechSynthesis.cancel(); } catch (_) {}
-    }
-    if (audioPlayer) {
-      try { audioPlayer.pause(); } catch (_) {}
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // STT — SpeechRecognition (где доступен)
+  // STT — SpeechRecognition
   // ---------------------------------------------------------------------------
 
   let recognition = null;
@@ -314,56 +296,58 @@
     const Klass = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Klass) return null;
     const r = new Klass();
-    r.lang = "ru-RU";
-    r.interimResults = true;
-    r.continuous = false;
+    r.lang = "ru-RU"; r.interimResults = true; r.continuous = false;
     r.maxAlternatives = 1;
     return r;
   }
 
   function startRecognition() {
-    if (recognising) return stopRecognition();
+    if (recognising) { stopRecognition(); return; }
     if (!recognition) recognition = setupRecognition();
     if (!recognition) {
-      setHint("Голосовой ввод не поддерживается в этом браузере.");
+      setStatus("Голосовой ввод не поддерживается этим браузером.");
       return;
     }
     stopSpeaking();
-    const input = el("cp-text");
-    const mic = el("cp-mic");
     let finalText = "";
     recognition.onresult = (ev) => {
       let interim = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const res = ev.results[i];
-        if (res.isFinal) finalText += res[0].transcript;
-        else interim += res[0].transcript;
+        const r = ev.results[i];
+        if (r.isFinal) finalText += r[0].transcript;
+        else interim += r[0].transcript;
       }
-      if (input) input.value = (finalText + interim).trim();
+      const txt = (finalText + interim).trim();
+      if (txt) setStatus(txt);
     };
     recognition.onerror = (e) => {
-      setHint(e.error === "not-allowed"
+      setStatus(e.error === "not-allowed"
         ? "Доступ к микрофону отклонён."
-        : `Ошибка распознавания: ${e.error}`);
-      stopRecognition();
+        : `Сбой распознавания: ${e.error}`);
+      finishRec();
     };
     recognition.onend = () => {
-      recognising = false;
-      if (mic) { mic.classList.remove("cp-mic-active"); mic.textContent = "🎙"; }
-      if (finalText.trim()) {
-        // Auto-send 500ms после конца речи (как в ТЗ)
-        setTimeout(sendText, 500);
+      finishRec();
+      const txt = finalText.trim();
+      if (txt) {
+        addBubble("user", txt);
+        sendToCopilot(txt);
       } else {
-        setHint("Я не уловила. Попробуйте ещё.");
+        setStatus("Не уловил, скажите ещё раз.");
       }
     };
     try {
       recognition.start();
       recognising = true;
-      if (mic) { mic.classList.add("cp-mic-active"); mic.textContent = "■"; }
-      setHint("Слушаю… говорите.");
-    } catch (e) {
-      setHint("Не удалось запустить запись.");
+      setOrbState("listening");
+      setStatus("Слушаю…");
+    } catch (_) {
+      setStatus("Не удалось запустить запись.");
+    }
+
+    function finishRec() {
+      recognising = false;
+      setOrbState("idle");
     }
   }
 
@@ -373,59 +357,74 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Send to backend
+  // POST /api/copilot/chat
   // ---------------------------------------------------------------------------
 
-  async function sendText() {
-    const input = el("cp-text");
-    const text = (input?.value || "").trim();
-    if (!text) return;
-    addBubble("user", text);
-    if (input) input.value = "";
-
+  async function sendToCopilot(text) {
+    setOrbState("thinking");
+    setStatus("Думаю…");
     const history = loadHistory();
     history.push({ role: "user", text });
     saveHistory(history);
-
-    showTyping(true);
-    setHint("Ко-пилот думает…");
-
     try {
       const res = await fetch("/api/copilot/chat", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text,
-          city: currentCityName(),
-          history: history.slice(-8, -1),  // последние 8 минус только что добавленный
+          message: text, city: currentCityName(),
+          history: history.slice(-8, -1), speak: voiceEnabled(),
         }),
       });
-      showTyping(false);
       if (!res.ok) {
-        addBubble("assistant", `Сервер ответил ${res.status}. Попробуйте позже.`);
-        setHint("Ошибка сети.");
+        addBubble("assistant", `Ошибка ${res.status}.`);
+        setOrbState("idle"); setStatus("Сбой сети.");
         return;
       }
       const data = await res.json();
-      const reply = data.text || "Ответ не получен.";
+      const reply = data.text || "…";
       addBubble("assistant", reply, {
         action: data.action || null,
-        sources: data.sources || [],
-        audio: data.audio || null,
-        audio_mime: data.audio_mime || null,
+        audio: data.audio || null, audio_mime: data.audio_mime || null,
       });
-      const updated = loadHistory();
-      updated.push({ role: "assistant", text: reply });
-      saveHistory(updated);
-      const engine = data.tts_engine === "fish" ? "🔊 Fish Audio…" : "🔊 Озвучиваю…";
-      setHint(voiceEnabled() ? engine : "Готово.");
-      if (voiceEnabled()) speak(reply, { audio: data.audio, audio_mime: data.audio_mime });
-      else stopSpeaking();
-    } catch (e) {
-      showTyping(false);
-      addBubble("assistant", "Связь дрогнула. Попробуйте через минуту.");
-      setHint("Сеть недоступна.");
+      const upd = loadHistory();
+      upd.push({ role: "assistant", text: reply });
+      saveHistory(upd);
+      if (voiceEnabled()) {
+        setOrbState("speaking");
+        speak(reply, { audio: data.audio, audio_mime: data.audio_mime });
+      }
+      setStatus("Слушаю.");
+      setTimeout(() => setOrbState("idle"), 5000);
+    } catch (_) {
+      addBubble("assistant", "Связь дрогнула.");
+      setOrbState("idle"); setStatus("Сеть недоступна.");
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Greeting (через 10 секунд после первой загрузки за сессию)
+  // ---------------------------------------------------------------------------
+
+  async function greet() {
+    if (alreadyGreeted()) return;
+    markGreeted();   // помечаем сразу, чтобы не зациклить при ошибке
+    let payload = null;
+    try {
+      const res = await fetch("/api/copilot/greeting");
+      if (res.ok) payload = await res.json();
+    } catch (_) {}
+    const text = (payload && payload.text)
+      || "Я Джарвис, ваш помощник по городу. Я рядом, в фоне.";
+    showToast(text);
+    if (voiceEnabled()) speak(text, payload);
+  }
+
+  function showToast(text) {
+    const t = el("jv-toast");
+    const tt = el("jv-toast-text");
+    if (!t || !tt) return;
+    tt.textContent = text;
+    t.hidden = false;
+    setTimeout(() => { t.hidden = true; }, 12_000);
   }
 
   // ---------------------------------------------------------------------------
@@ -433,77 +432,80 @@
   // ---------------------------------------------------------------------------
 
   function openPanel() {
-    const p = el("cp-panel");
+    const p = el("jv-panel");
     if (!p) return;
     p.hidden = false;
-    setTimeout(() => el("cp-text")?.focus(), 50);
-    if (el("cp-log").children.length === 0) {
-      // Восстановим историю из localStorage
+    if (el("jv-log").children.length === 0) {
       const h = loadHistory();
       if (h.length === 0) {
         addBubble("assistant",
-          "Здравствуйте. Я голосовой Ко-пилот мэра. Спросите про город — метрики, жалобы, прогноз. Можно голосом.",
-        );
+          "Я рядом. Нажмите микрофон и спросите — про метрики, прогноз, депутатов, что угодно.");
       } else {
         h.forEach((turn) => addBubble(turn.role, turn.text));
       }
     }
     refreshVoiceToggle();
+    setStatus("Готов слушать.");
+    setOrbState("idle");
   }
 
   function closePanel() {
-    const p = el("cp-panel");
+    const p = el("jv-panel");
     if (p) p.hidden = true;
     stopRecognition();
     stopSpeaking();
+    setOrbState("idle");
   }
 
   function refreshVoiceToggle() {
-    const btn = el("cp-voice-toggle");
+    const btn = el("jv-voice-toggle");
     if (!btn) return;
     btn.textContent = voiceEnabled() ? "🔊" : "🔇";
-    btn.title = voiceEnabled() ? "Выключить озвучку" : "Включить озвучку";
+    btn.title = voiceEnabled() ? "Выключить звук" : "Включить звук";
   }
 
   function wire() {
-    el("cp-fab")?.addEventListener("click", openPanel);
-    el("cp-close")?.addEventListener("click", closePanel);
-    el("cp-send")?.addEventListener("click", sendText);
-    el("cp-mic")?.addEventListener("click", startRecognition);
-    el("cp-text")?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); sendText(); }
-    });
-    el("cp-voice-toggle")?.addEventListener("click", () => {
+    el("jv-fab")?.addEventListener("click", openPanel);
+    el("jv-close")?.addEventListener("click", closePanel);
+    el("jv-mic")?.addEventListener("click", startRecognition);
+    el("jv-voice-toggle")?.addEventListener("click", () => {
       setVoiceEnabled(!voiceEnabled());
       refreshVoiceToggle();
       if (!voiceEnabled()) stopSpeaking();
     });
-    el("cp-clear")?.addEventListener("click", () => {
+    el("jv-clear")?.addEventListener("click", () => {
       clearHistory();
-      const log = el("cp-log");
+      const log = el("jv-log");
       if (log) log.innerHTML = "";
-      addBubble("assistant", "История очищена. Я готов слушать.");
+      addBubble("assistant", "Память очищена. Я готов.");
+    });
+    el("jv-toast-close")?.addEventListener("click", () => {
+      const t = el("jv-toast"); if (t) t.hidden = true;
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !el("cp-panel")?.hidden) closePanel();
+      if (e.key === "Escape" && !el("jv-panel")?.hidden) closePanel();
     });
-
-    // На некоторых браузерах getVoices() пуст до speechSynthesis.onvoiceschanged
+    // У некоторых браузеров getVoices() пустой пока не сработал voiceschanged
     if (window.speechSynthesis) {
       window.speechSynthesis.onvoiceschanged = () => {};
     }
-
-    // Спрятать 🎙 если SpeechRecognition не поддержан и нет fallback
+    // Без SpeechRecognition нет смысла открывать панель — но FAB всё
+    // равно покажем, чтобы пользователь увидел Джарвиса.
     const Klass = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Klass) {
-      const m = el("cp-mic");
-      if (m) m.style.display = "none";
+      const m = el("jv-mic"); const h = el("jv-hint");
+      if (m) m.disabled = true;
+      if (h) h.textContent = "Голосовой ввод не поддерживается. Откройте Chrome / Edge / Yandex Browser.";
     }
   }
 
   function init() {
     injectMarkup();
     wire();
+    // Авто-приветствие через 10 секунд после первой загрузки за сессию.
+    if (!alreadyGreeted()) {
+      setTimeout(() => { greet(); }, GREETING_DELAY_MS);
+    }
   }
 
   if (document.readyState === "loading") {
