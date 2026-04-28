@@ -50,6 +50,7 @@ ALLOWED_ACTIONS = {
     "run_deputy_topics":  "Сгенерировать темы депутатам",
     "run_search_vk":      "Поиск в VK (группы / люди / посты)",
     "run_search_web":     "Поиск в интернете",
+    "run_daily_brief":    "Сводка дня — главное по городу одной фразой",
 }
 
 OPEN_ACTIONS = {a for a in ALLOWED_ACTIONS if a.startswith("open_") or a == "show_chart"}
@@ -289,7 +290,7 @@ def _normalize_sources(value: Any) -> List[str]:
 
 def _parse_response(data: Any) -> Dict[str, Any]:
     """Приводим LLM-ответ к {text, action, sources}."""
-    from .voice_service import expand_temperatures
+    from .voice_service import expand_temperatures, expand_units
 
     if not isinstance(data, dict):
         return {"text": "Я задумался. Спросите ещё раз — попроще.",
@@ -297,8 +298,10 @@ def _parse_response(data: Any) -> Dict[str, Any]:
     text = (data.get("text") or data.get("reply") or "").strip()
     if not text:
         text = "Я задумался. Спросите ещё раз — попроще."
-    # «+12°C» → «плюс 12 градусов Цельсия» — и в bubble, и в TTS
+    # Расширяем для голоса: «+12°C» → «плюс 12 градусов Цельсия»,
+    # «25%» → «25 процентов», «10 руб» → «10 рублей», «3 м/с» → «3 м.вс».
     text = expand_temperatures(text)
+    text = expand_units(text)
     return {
         "text":    text[:1200],
         "action":  _normalize_action(data.get("action")),

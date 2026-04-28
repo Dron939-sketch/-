@@ -88,7 +88,8 @@ def test_find_person_zam():
 
 
 def test_find_person_unknown_returns_none():
-    p = find_person("Кто такой Иванов Иван Иванович?")
+    # Сидор Сидоров — гарантированно ни в KB-руководстве, ни в Совете депутатов
+    p = find_person("Кто такой Сидоров Сидор Сидорович?")
     assert p is None
 
 
