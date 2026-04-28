@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/style.css?v=6" />
+  <link rel="stylesheet" href="/style.css?v=7" />
 </head>
 <body>
   <header class="topbar">
@@ -750,10 +750,36 @@
     </div>
   </div>
 
+  <!-- Голосовой помощник «Душа города» -->
+  <button type="button" class="soul-fab" id="soul-fab" title="Поговорить с Душой города" aria-label="Открыть голосового помощника">
+    <span class="soul-fab-icon">🌆</span>
+  </button>
+
+  <aside class="soul-panel" id="soul-panel" hidden aria-label="Голосовой помощник">
+    <header class="soul-head">
+      <div class="soul-head-text">
+        <div class="soul-eyebrow">Душа города</div>
+        <h2 class="soul-title">Я слышу вас</h2>
+      </div>
+      <button type="button" class="soul-close" id="soul-close" aria-label="Закрыть">&times;</button>
+    </header>
+
+    <div class="soul-log" id="soul-log" aria-live="polite"></div>
+
+    <div class="soul-input-row">
+      <input type="text" id="soul-text" placeholder="Спросите у города…" autocomplete="off" />
+      <button type="button" class="soul-send" id="soul-send" title="Отправить">→</button>
+      <button type="button" class="soul-mic" id="soul-mic" title="Записать голос" aria-label="Записать голос">🎙</button>
+    </div>
+
+    <div class="muted small soul-hint" id="soul-hint">Нажмите 🎙 — задайте вопрос голосом, или напишите.</div>
+    <audio id="soul-player" preload="none"></audio>
+  </aside>
+
   <!-- Cytoscape.js for the Meister graph (loaded once from CDN) -->
   <script
     src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"
     defer></script>
-  <script src="/dashboard.js?v=6" defer></script>
+  <script src="/dashboard.js?v=7" defer></script>
 </body>
 </html>

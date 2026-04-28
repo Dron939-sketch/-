@@ -85,6 +85,7 @@ class Settings:
     telegram_api_hash: str = _env("TELEGRAM_API_HASH", "")
     telegram_session: str = _env("TELEGRAM_SESSION", "citymind")
     yandex_api_key: str = _env("YANDEX_API_KEY", "")
+    deepgram_api_key: str = _env("DEEPGRAM_API_KEY", "")
     gosuslugi_api_key: str = _env("GOSUSLUGI_API_KEY", "")
 
     # --- DeepSeek LLM (news enrichment) ---

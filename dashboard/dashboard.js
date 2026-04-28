@@ -3156,7 +3156,189 @@ function wireScenarioActionButtons() {
   });
 }
 
+// -------------------------------------------------- Голосовой помощник «Душа города»
+
+const SoulAssistant = (() => {
+  let mediaRecorder = null;
+  let recordChunks = [];
+  let recording = false;
+
+  const $ = (id) => document.getElementById(id);
+  const escSoul = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+
+  function open() {
+    const p = $("soul-panel");
+    if (!p) return;
+    p.hidden = false;
+    setTimeout(() => $("soul-text")?.focus(), 50);
+    if ($("soul-log").children.length === 0) {
+      addBubble("soul", "Здравствуй, друг. Я — Коломна. Расскажи, что тебя ко мне привело?");
+    }
+  }
+  function close() {
+    if ($("soul-panel")) $("soul-panel").hidden = true;
+    if (recording) cancelRecord();
+  }
+
+  function addBubble(who, text) {
+    const log = $("soul-log");
+    if (!log) return null;
+    const div = document.createElement("div");
+    div.className = `soul-bubble soul-${who}`;
+    div.innerHTML = escSoul(text);
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    return div;
+  }
+
+  function setHint(msg) {
+    const h = $("soul-hint");
+    if (h) h.textContent = msg;
+  }
+
+  async function ask({ text, audioBlob, audioFormat }) {
+    const slug = (window.currentCity?.slug) || (typeof currentCity !== "undefined" ? currentCity?.slug : null) || "kolomna";
+    const cityPath = encodeURIComponent(slug);
+    let res;
+    try {
+      if (audioBlob) {
+        const fd = new FormData();
+        fd.append("audio", audioBlob, `q.${audioFormat}`);
+        fd.append("audio_format", audioFormat);
+        fd.append("speak", "true");
+        res = await fetch(`/api/city/${cityPath}/voice/ask-audio`, { method: "POST", body: fd });
+      } else {
+        res = await fetch(`/api/city/${cityPath}/voice/ask`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text, speak: true }),
+        });
+      }
+    } catch (e) {
+      addBubble("soul", "Связь дрогнула. Попробуйте ещё раз через минуту.");
+      return;
+    }
+    if (!res.ok) {
+      addBubble("soul", `Не получилось: ${res.status}`);
+      return;
+    }
+    const data = await res.json();
+    if (data.transcript && audioBlob) addBubble("user", data.transcript);
+    if (data.stt_failed) {
+      addBubble("soul", "Я не расслышала. Скажите ещё раз громче, пожалуйста.");
+    } else if (data.reply_text) {
+      addBubble("soul", data.reply_text);
+    }
+    if (data.reply_audio_base64 && data.audio_mime) {
+      playB64Audio(data.reply_audio_base64, data.audio_mime);
+    }
+  }
+
+  function playB64Audio(b64, mime) {
+    const player = $("soul-player");
+    if (!player) return;
+    player.src = `data:${mime};base64,${b64}`;
+    player.play().catch(() => {});
+  }
+
+  async function sendText() {
+    const input = $("soul-text");
+    if (!input) return;
+    const t = input.value.trim();
+    if (!t) return;
+    addBubble("user", t);
+    input.value = "";
+    setHint("Город размышляет…");
+    await ask({ text: t });
+    setHint("Можно ещё. Или нажмите 🎙 для голоса.");
+  }
+
+  function pickAudioFormat() {
+    if (typeof MediaRecorder === "undefined") return null;
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+    ];
+    for (const t of candidates) {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return "";
+  }
+
+  async function startRecord() {
+    if (recording) return stopRecord();
+    if (!navigator.mediaDevices?.getUserMedia) {
+      addBubble("soul", "Браузер не поддерживает запись с микрофона.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickAudioFormat();
+      mediaRecorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recordChunks = [];
+      mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) recordChunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (!recordChunks.length) {
+          setHint("Запись пуста. Попробуйте ещё.");
+          return;
+        }
+        const type = mediaRecorder.mimeType || "audio/webm";
+        const blob = new Blob(recordChunks, { type });
+        const fmt = type.includes("mp4") ? "mp4" : type.includes("ogg") ? "ogg" : "webm";
+        setHint("Город слушает…");
+        await ask({ audioBlob: blob, audioFormat: fmt });
+        setHint("Можно ещё. Или напишите.");
+      };
+      mediaRecorder.start();
+      recording = true;
+      const mic = $("soul-mic");
+      if (mic) { mic.classList.add("soul-mic-active"); mic.textContent = "■"; }
+      setHint("Говорите… Нажмите ■ когда закончите.");
+    } catch (e) {
+      addBubble("soul", "Доступ к микрофону отклонён. Можно набрать вопрос текстом.");
+    }
+  }
+
+  function stopRecord() {
+    if (!recording || !mediaRecorder) return;
+    recording = false;
+    const mic = $("soul-mic");
+    if (mic) { mic.classList.remove("soul-mic-active"); mic.textContent = "🎙"; }
+    try { mediaRecorder.stop(); } catch (_) {}
+  }
+
+  function cancelRecord() {
+    if (!recording || !mediaRecorder) return;
+    recording = false;
+    const mic = $("soul-mic");
+    if (mic) { mic.classList.remove("soul-mic-active"); mic.textContent = "🎙"; }
+    try { mediaRecorder.stream?.getTracks?.().forEach((t) => t.stop()); } catch (_) {}
+    recordChunks = [];
+  }
+
+  function wire() {
+    $("soul-fab")?.addEventListener("click", open);
+    $("soul-close")?.addEventListener("click", close);
+    $("soul-send")?.addEventListener("click", sendText);
+    $("soul-mic")?.addEventListener("click", startRecord);
+    $("soul-text")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); sendText(); }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !$("soul-panel")?.hidden) close();
+    });
+  }
+
+  return { wire };
+})();
+
 wireStaticTopbarButtons();
 wireScenarioActionButtons();
+SoulAssistant.wire();
 
 init();

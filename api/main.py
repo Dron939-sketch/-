@@ -30,6 +30,7 @@ from .auth_routes import router as auth_router
 from .deputy_routes import router as deputy_router
 from .routes import router
 from .usage_middleware import UsageLoggingMiddleware
+from .voice_routes import router as voice_router
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(admin_stats_router)
     app.include_router(deputy_router)
+    app.include_router(voice_router)
     app.include_router(router)
 
     @app.on_event("startup")
