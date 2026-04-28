@@ -43,6 +43,7 @@ def test_deputy_router_registered():
         "/api/city/{name}/deputy-topics/{topic_id}/draft",
         "/api/city/{name}/deputy-topics/{topic_id}/posts",
         "/api/city/{name}/deputy-topics/auto-generate",
+        "/api/city/{name}/deputy-coverage",
         "/api/city/{name}/deputy-dashboard",
     }
     missing = expected - paths
@@ -89,6 +90,12 @@ def test_autogen_endpoint_requires_role(client):
         f"/api/city/{_CITY}/deputy-topics/auto-generate",
         json={"dry_run": True, "hours": 24, "deadline_days": 5},
     )
+    assert r.status_code == 401
+
+
+def test_coverage_endpoint_requires_auth(client):
+    """GET /deputy-coverage — публичная карточка только для залогиненных."""
+    r = client.get(f"/api/city/{_CITY}/deputy-coverage?hours=24")
     assert r.status_code == 401
 
 
