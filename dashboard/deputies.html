@@ -220,6 +220,37 @@
     </div>
   </div>
 
+  <!-- Deputy profile modal -->
+  <div class="dep-card" id="dep-card" hidden>
+    <div class="dep-card-backdrop" data-card-close></div>
+    <div class="dep-card-content" role="dialog" aria-modal="true" aria-labelledby="dep-card-title">
+      <header class="dep-card-head">
+        <div>
+          <div class="dep-card-eyebrow muted small" id="dep-card-eyebrow">—</div>
+          <h2 id="dep-card-title">—</h2>
+          <div class="dep-card-sub muted small" id="dep-card-sub">—</div>
+        </div>
+        <button type="button" class="dep-card-close" data-card-close aria-label="Закрыть">&times;</button>
+      </header>
+
+      <section class="dep-card-stats" id="dep-card-stats" aria-live="polite"></section>
+
+      <section class="dep-card-section">
+        <h3>Активные темы</h3>
+        <ul class="dep-card-topics" id="dep-card-topics"></ul>
+        <div class="muted small" id="dep-card-topics-empty" hidden>Активных тем нет.</div>
+      </section>
+
+      <section class="dep-card-section">
+        <h3>Последние посты</h3>
+        <ul class="dep-card-posts" id="dep-card-posts"></ul>
+        <div class="muted small" id="dep-card-posts-empty" hidden>Постов пока не зарегистрировано.</div>
+      </section>
+
+      <div class="dep-card-error" id="dep-card-error" hidden></div>
+    </div>
+  </div>
+
   <script src="/deputies.js" defer></script>
 </body>
 </html>

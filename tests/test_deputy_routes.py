@@ -35,12 +35,14 @@ def test_deputy_router_registered():
     expected = {
         "/api/city/{name}/deputies",
         "/api/city/{name}/deputies/{deputy_id}",
+        "/api/city/{name}/deputies/{deputy_id}/profile",
         "/api/city/{name}/deputy-topics",
         "/api/city/{name}/deputy-topics/{topic_id}",
         "/api/city/{name}/deputy-topics/{topic_id}/assign",
         "/api/city/{name}/deputy-topics/{topic_id}/status",
         "/api/city/{name}/deputy-topics/{topic_id}/draft",
         "/api/city/{name}/deputy-topics/{topic_id}/posts",
+        "/api/city/{name}/deputy-topics/auto-generate",
         "/api/city/{name}/deputy-dashboard",
     }
     missing = expected - paths
@@ -72,6 +74,21 @@ def test_unknown_city_resolution_does_not_crash(client):
     (no cookie), proving the route is wired and dependencies fire in
     the right order."""
     r = client.get("/api/city/CityThatDoesNotExist/deputies")
+    assert r.status_code == 401
+
+
+def test_profile_endpoint_requires_auth(client):
+    """GET /deputies/{id}/profile должен требовать сессию."""
+    r = client.get(f"/api/city/{_CITY}/deputies/1/profile")
+    assert r.status_code == 401
+
+
+def test_autogen_endpoint_requires_role(client):
+    """POST /deputy-topics/auto-generate — admin/editor only."""
+    r = client.post(
+        f"/api/city/{_CITY}/deputy-topics/auto-generate",
+        json={"dry_run": True, "hours": 24, "deadline_days": 5},
+    )
     assert r.status_code == 401
 
 

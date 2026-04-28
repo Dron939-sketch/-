@@ -233,6 +233,56 @@ async def deputies_delete(
     return {"deleted": True}
 
 
+@router.get("/deputies/{deputy_id}/profile")
+async def deputy_profile(
+    name: str, deputy_id: int, _u: dict = Depends(require_user),
+) -> dict:
+    """Карточка одного депутата: активные темы + последние посты + статистика.
+
+    Активные темы — где деп. в `assignees`, статус active.
+    Последние посты — до 20 штук, с привязкой к теме.
+    Статистика — суммарные просмотры/лайки/комментарии/репосты + процент
+    выполнения плана (∑completed / ∑required по active topics).
+    """
+    cfg = _resolve_city(name)
+    _require_pool()
+    cid = await _city_id_or_503(cfg["name"])
+    deputies = await q.list_deputies(cid)
+    deputy = next((d for d in deputies if int(d["id"]) == int(deputy_id)), None)
+    if deputy is None:
+        raise HTTPException(status_code=404, detail="Депутат не найден.")
+
+    active_topics = await q.list_topics_for_deputy(cid, deputy_id, status="active")
+    recent_posts = await q.list_posts_for_deputy(cid, deputy_id, limit=20)
+
+    sum_required = sum(int(t.get("required_posts") or 0) for t in active_topics)
+    sum_completed = sum(int(t.get("completed_posts") or 0) for t in active_topics)
+    completion_pct = (
+        round(100.0 * sum_completed / sum_required, 1) if sum_required > 0 else None
+    )
+    engagement = {
+        "total_posts":   len(recent_posts),
+        "total_views":   sum(int(p.get("views")    or 0) for p in recent_posts),
+        "total_likes":   sum(int(p.get("likes")    or 0) for p in recent_posts),
+        "total_comments": sum(int(p.get("comments") or 0) for p in recent_posts),
+        "total_reposts": sum(int(p.get("reposts")  or 0) for p in recent_posts),
+    }
+
+    return {
+        "city": cfg["name"],
+        "deputy": deputy,
+        "active_topics": active_topics,
+        "recent_posts": recent_posts,
+        "stats": {
+            "active_topics_count": len(active_topics),
+            "completion_pct": completion_pct,
+            "sum_required_posts": sum_required,
+            "sum_completed_posts": sum_completed,
+            **engagement,
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Routes — topics
 # ---------------------------------------------------------------------------
