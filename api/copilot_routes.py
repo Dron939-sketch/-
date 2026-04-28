@@ -243,13 +243,15 @@ async def copilot_execute(payload: ExecuteIn) -> dict:
     return response
 
 
-async def _execute_action(action: str, city_name: str, city_id: Optional[int]) -> tuple[str, List[str]]:
+async def _execute_action(
+    action: str, city_name: str, city_id: Optional[int],
+    query: Optional[str] = None,
+) -> tuple[str, List[str]]:
     """Pure async «функциональный switch» — каждый action возвращает
     короткий human-readable текст для голоса + список sources.
     Все ошибки заглушаются в honest fallback-сообщение.
     Все returnable-тексты прогоняются через expand_temperatures, чтобы
-    «+12°C» в любой фразе стал «плюс 12 градусов Цельсия» — и в TTS,
-    и в bubble UI."""
+    «+12°C» в любой фразе стал «плюс 12 градусов Цельсия»."""
     from ai.voice_service import expand_temperatures
 
     try:
@@ -267,6 +269,10 @@ async def _execute_action(action: str, city_name: str, city_id: Optional[int]) -
             text, src = await _run_topics(city_name)
         elif action == "run_deputy_topics":
             text, src = await _run_deputy_topics(city_name, city_id)
+        elif action == "run_search_vk":
+            text, src = await _run_search_vk(query or city_name)
+        elif action == "run_search_web":
+            text, src = await _run_search_web(query or city_name)
         else:
             text, src = (
                 f"Расчёт «{action}» у меня не заложен.",
@@ -281,6 +287,52 @@ async def _execute_action(action: str, city_name: str, city_id: Optional[int]) -
         "Попробуй переформулировать или открой соответствующий раздел дашборда.",
         [],
     )
+
+
+async def _run_search_vk(query: str) -> tuple[str, List[str]]:
+    """Поиск VK: люди + группы + свежие посты. Сжимаем в одну фразу
+    под голос (3-5 фактов)."""
+    from collectors.vk_discover import search_groups, search_news, search_users
+
+    groups = await search_groups(query, limit=3)
+    users = await search_users(query, limit=3)
+    posts = await search_news(query, count=3)
+
+    if not (groups or users or posts):
+        return (f"В VK по запросу «{query}» ничего не нашёл.", ["vk"])
+
+    parts: List[str] = [f"Поиск в VK по «{query}»:"]
+    if users:
+        names = ", ".join(f"{u['name']} ({u['domain']})" for u in users[:3])
+        parts.append(f"Люди: {names}.")
+    if groups:
+        names = "; ".join(
+            f"{g['name']} ({g.get('members_count') or 0} участников)"
+            for g in groups[:3]
+        )
+        parts.append(f"Группы: {names}.")
+    if posts:
+        snip = "; ".join(p["text"][:80] for p in posts[:2])
+        parts.append(f"Свежие посты: {snip}.")
+    return (" ".join(parts), ["vk"])
+
+
+async def _run_search_web(query: str) -> tuple[str, List[str]]:
+    """Поиск в интернете через DuckDuckGo. Возвращает 3 топ-результата
+    в одной фразе под голос."""
+    from ai.web_search import search
+
+    results = await search(query, limit=3)
+    if not results:
+        return (
+            f"В интернете по запросу «{query}» ничего полезного не нашёл.",
+            ["web"],
+        )
+    bits = "; ".join(
+        f"{r['title']} — {r['snippet'][:120]}"
+        for r in results[:3] if r.get("title")
+    )
+    return (f"Нашёл в интернете по «{query}»: {bits}", ["web"])
 
 
 async def _run_pulse(city_name: str, cid: Optional[int]) -> tuple[str, List[str]]:
@@ -508,7 +560,9 @@ async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
                 pass
 
             async def _run(action: str) -> Dict[str, Any]:
-                text, src = await _execute_action(action, cfg["name"], cid)
+                text, src = await _execute_action(
+                    action, cfg["name"], cid, query=payload.message,
+                )
                 return {"text": text, "sources": src}
 
             plan_info = await run_plan(payload.message, _run)
