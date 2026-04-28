@@ -27,6 +27,7 @@ from db.seed import run_migrations, seed_cities
 
 from .admin_stats_routes import router as admin_stats_router
 from .auth_routes import router as auth_router
+from .copilot_routes import router as copilot_router
 from .deputy_routes import router as deputy_router
 from .routes import router
 from .usage_middleware import UsageLoggingMiddleware
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_stats_router)
     app.include_router(deputy_router)
     app.include_router(voice_router)
+    app.include_router(copilot_router)
     app.include_router(router)
 
     @app.on_event("startup")

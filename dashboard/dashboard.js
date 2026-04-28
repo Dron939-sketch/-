@@ -3339,6 +3339,8 @@ const SoulAssistant = (() => {
 
 wireStaticTopbarButtons();
 wireScenarioActionButtons();
-SoulAssistant.wire();
+// Soul-виджет вытеснил Ко-пилот (см. /copilot.js + /copilot.css);
+// сама IIFE SoulAssistant остаётся как dead code, можно удалить
+// отдельным cleanup-PR без риска регресса.
 
 init();
