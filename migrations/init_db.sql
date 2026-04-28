@@ -366,3 +366,30 @@ CREATE INDEX IF NOT EXISTS jarvis_memory_identity_idx
     ON jarvis_memory (identity, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS jarvis_memory_identity_kind_idx
     ON jarvis_memory (identity, kind);
+
+-- @SEGMENT jarvis_alerts_table
+-- Проактивные алерты Джарвиса. Раз в N минут scheduler обходит города,
+-- проверяет кризис-радар + просевшие метрики, и пишет сюда. Фронт
+-- polling'ит /api/copilot/alerts?since_id=N и показывает toast'ом
+-- + озвучивает.
+--
+-- key — стабильный идентификатор источника (напр. "crisis_high",
+-- "metric_ub_low") — уникальный per-city, чтобы повторные триггеры
+-- не плодили дубли. ON CONFLICT (city_id, key) DO UPDATE обновляет
+-- last_triggered_at + сбрасывает expires_at.
+CREATE TABLE IF NOT EXISTS jarvis_alerts (
+    id                BIGSERIAL PRIMARY KEY,
+    city_id           INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+    key               TEXT NOT NULL,
+    level             TEXT NOT NULL DEFAULT 'info',
+    title             TEXT NOT NULL,
+    summary           TEXT,
+    payload           JSONB,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_triggered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at        TIMESTAMPTZ,
+    UNIQUE (city_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS jarvis_alerts_city_idx
+    ON jarvis_alerts (city_id, last_triggered_at DESC);

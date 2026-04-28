@@ -408,6 +408,37 @@ async def copilot_forget(payload: ForgetIn) -> dict:
     return {"ok": True}
 
 
+@router.get("/alerts")
+async def copilot_alerts(
+    city: str = "Коломна",
+    since_id: int = 0,
+    limit: int = 10,
+) -> dict:
+    """Проактивные алерты Джарвиса. Фронт polling'ит раз в ~90s.
+
+    Возвращает только алерты с id > since_id, чтобы не показывать
+    клиенту дважды то же самое. Когда фронт получил алерты, он
+    запоминает max(id) в localStorage и при следующем polling'е
+    шлёт его как since_id.
+    """
+    cfg = _resolve_city_safe(city)
+    cid: Optional[int] = None
+    try:
+        from db.seed import city_id_by_name
+        cid = await city_id_by_name(cfg["name"])
+    except Exception:  # noqa: BLE001
+        pass
+    if cid is None:
+        return {"city": cfg["name"], "alerts": [], "max_id": int(since_id)}
+    try:
+        from db.jarvis_alerts_queries import list_active_for_city
+        alerts = await list_active_for_city(cid, since_id=since_id, limit=limit)
+    except Exception:  # noqa: BLE001
+        alerts = []
+    max_id = max([a["id"] for a in alerts] + [int(since_id)])
+    return {"city": cfg["name"], "alerts": alerts, "max_id": max_id}
+
+
 @router.get("/greeting")
 async def copilot_greeting() -> dict:
     """Короткое приветствие Джарвиса. Используется фронтом через
