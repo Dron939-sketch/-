@@ -33,6 +33,14 @@
     <div class="topbar-right">
       <a class="admin-link" id="deputies-link" href="/deputies.html" hidden title="Повестка депутатов">🏛️ Депутаты</a>
       <a class="admin-link" id="admin-link" href="/admin.html" hidden title="Админ-панель">⚙️ Админка</a>
+      <button type="button" class="nav-button" id="btn-scenario" title="Сценарное моделирование бюджетных решений">
+        <span class="nav-icon">🎯</span>
+        <span class="nav-label">Сценарии</span>
+      </button>
+      <button type="button" class="nav-button" id="btn-actions" title="Генератор конкретных поручений">
+        <span class="nav-icon">✓</span>
+        <span class="nav-label">Действия</span>
+      </button>
       <button type="button" class="help-button" id="help-button" aria-label="Справка о приложении" title="Справка">?</button>
       <span class="updated" id="updated-at">—</span>
       <div class="system-health" id="system-health">
@@ -656,6 +664,75 @@
       <p class="modal-description" id="simulator-subtitle"></p>
       <div class="sim-summary" id="simulator-summary"></div>
       <ul class="sim-results" id="simulator-results"></ul>
+    </div>
+  </div>
+
+  <!-- Modal: Scenario Simulator -->
+  <div class="cm-modal" id="modal-scenario" hidden>
+    <div class="cm-modal-backdrop" data-close="modal-scenario"></div>
+    <div class="cm-modal-content cm-modal-wide" role="dialog" aria-modal="true" aria-labelledby="modal-scenario-title">
+      <div class="cm-modal-head">
+        <h2 id="modal-scenario-title">🎯 Сценарное моделирование</h2>
+        <button type="button" class="cm-modal-close" data-close="modal-scenario" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="cm-modal-body">
+        <p class="cm-modal-desc">Смоделируйте влияние бюджетных решений на показатели города.</p>
+
+        <div class="cm-form-row">
+          <label class="cm-field">
+            <span class="cm-field-label">Название сценария</span>
+            <input type="text" id="scenario-name" value="Бюджетный план" />
+          </label>
+          <label class="cm-field cm-field-narrow">
+            <span class="cm-field-label">Горизонт, мес.</span>
+            <input type="number" id="scenario-horizon" min="1" max="36" value="12" />
+          </label>
+        </div>
+
+        <div class="cm-form-section">
+          <div class="cm-field-label">Вмешательства</div>
+          <div id="interventions-list"></div>
+          <button type="button" class="cm-btn-ghost" id="btn-add-intervention">+ Добавить вмешательство</button>
+        </div>
+
+        <div class="cm-form-actions">
+          <button type="button" class="cm-btn-primary" id="btn-run-scenario">Запустить симуляцию</button>
+          <button type="button" class="cm-btn-secondary" data-close="modal-scenario">Отмена</button>
+        </div>
+
+        <div id="scenario-results" class="cm-results-block" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Action Generator -->
+  <div class="cm-modal" id="modal-actions" hidden>
+    <div class="cm-modal-backdrop" data-close="modal-actions"></div>
+    <div class="cm-modal-content cm-modal-wide" role="dialog" aria-modal="true" aria-labelledby="modal-actions-title">
+      <div class="cm-modal-head">
+        <h2 id="modal-actions-title">✓ Генератор действий</h2>
+        <button type="button" class="cm-modal-close" data-close="modal-actions" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="cm-modal-body">
+        <p class="cm-modal-desc">Преобразуйте проблемы и жалобы в структурированные поручения с исполнителями и сроками.</p>
+
+        <label class="cm-field">
+          <span class="cm-field-label">Проблемы / жалобы (каждая с новой строки)</span>
+          <textarea id="problems-text" rows="6" placeholder="Пример:&#10;Ямы на дороге ул. Ленина&#10;Перебои с отоплением в мкр. Щурово&#10;Рост краж в центре города"></textarea>
+        </label>
+
+        <label class="cm-checkbox">
+          <input type="checkbox" id="include-metrics" checked />
+          <span>Включить превентивные действия по текущим метрикам</span>
+        </label>
+
+        <div class="cm-form-actions">
+          <button type="button" class="cm-btn-primary" id="btn-generate-actions">Сгенерировать план</button>
+          <button type="button" class="cm-btn-secondary" data-close="modal-actions">Отмена</button>
+        </div>
+
+        <div id="actions-results" class="cm-results-block" hidden></div>
+      </div>
     </div>
   </div>
 
