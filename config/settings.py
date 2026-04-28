@@ -51,6 +51,19 @@ class Settings:
     api_host: str = _env("API_HOST", "0.0.0.0")
     api_port: int = _env_int("API_PORT", 8000)
     secret_key: str = _env("SECRET_KEY", "dev-insecure-change-me")
+    # Required to call POST /api/auth/register. Prevents unattended signup on
+    # a public deploy — the first admin is bootstrapped by a trusted operator.
+    auth_registration_code: str = _env("AUTH_REGISTRATION_CODE", "")
+    # httpOnly cookie should go over HTTPS in production; dev keeps it permissive.
+    cookie_secure: bool = _env("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
+    # Default admin seeded on first startup (идемпотентно — если email
+    # уже есть, пароль не переписывается, только роль повышается до admin).
+    # ВНИМАНИЕ: дефолт оставлен только для быстрого первого входа —
+    # смените пароль в Render env (DEFAULT_ADMIN_PASSWORD) после первой
+    # авторизации и/или удалите из git, потому что значение будет в
+    # публичной истории репозитория.
+    default_admin_email: str = _env("DEFAULT_ADMIN_EMAIL", "dron939@yandex.ru")
+    default_admin_password: str = _env("DEFAULT_ADMIN_PASSWORD", "10041987")
     cors_origins: List[str] = field(
         default_factory=lambda: _env_list("CORS_ORIGINS", ["*"])
     )

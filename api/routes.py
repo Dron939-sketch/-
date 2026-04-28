@@ -2,32 +2,63 @@
 
 Endpoints:
   GET  /health
+  GET  /api/health/system
   GET  /api/cities
   GET  /api/city/{name}
   GET  /api/city/by-slug/{slug}
   GET  /api/city/{name}/news
   GET  /api/city/{name}/all_metrics
+  GET  /api/city/{name}/history
+  GET  /api/city/{name}/model
+  POST /api/city/{name}/simulate
+  GET  /api/city/{name}/root_cause/{node_id}
+  GET  /api/city/{name}/metric/{vector}/breakdown
+  GET  /api/city/{name}/crisis
+  GET  /api/city/{name}/reputation
+  GET  /api/city/{name}/investment
+  GET  /api/city/{name}/foresight
+  GET  /api/city/{name}/budget
+  POST /api/city/{name}/narratives
+  GET  /api/city/{name}/topics
+  GET  /api/city/{name}/decisions
+  GET  /api/city/{name}/deep_forecast
+  GET  /api/city/{name}/tasks
+  GET  /api/city/{name}/eisenhower
+  GET  /api/city/{name}/pulse
+  GET  /api/city/{name}/happiness_events
+  POST /api/admin/collect/{name}
+  POST /api/admin/collect_all
+  GET  /api/city/{name}/market_gaps
+  GET  /api/city/{name}/cases
+  GET  /api/benchmark
   GET  /api/city/{name}/agenda
   POST /api/city/{name}/roadmap
 """
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import logging
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from .auth_routes import require_role, require_user
 
 from agenda.daily_agenda import DailyAgendaBuilder
 from agenda.roadmap_planner import RoadmapPlanner
-from ai import NewsEnricher
-from analytics.scenario_simulator import ScenarioSimulator, Intervention
-from analytics.action_generator import ActionGenerator
+from ai import NewsEnricher, generate_narratives
+from ai.cache import ResponseCache
+from analytics import benchmark as benchmark_cities
+from analytics import breakdown as breakdown_metric
+from analytics import build_graph, detect_crises, simulate, trace_root_cause
+from analytics import analyze_market_gaps, bucket_eisenhower, compute_pulse, deep_forecast, derive_tasks, filter_decisions, foresight_forecast, investment_compute, recommend_cases, recommend_events, reputation_analyze, resource_plan, topics_analyze
 from collectors import (
     AppealsCollector,
     NewsCollector,
-    TelegramCollector,
     VKCollector,
 )
 from collectors.base import CollectedItem
@@ -35,22 +66,55 @@ from config.cities import CITIES, get_city, get_city_by_slug
 from config.settings import settings
 from db.loops_queries import latest_loops
 from db.queries import (
+    appeals_count,
     latest_metrics,
     latest_weather,
     metrics_history,
     metrics_trend_7d,
+    news_category_sentiment_counts,
     news_counts_last_24h,
+    news_negative_count,
+    news_total_count,
+    news_window,
+    news_window_range,
     top_recent_summaries,
 )
 from db.seed import city_id_by_name
+from db.pool import get_pool
 from metrics.forecast import build_forecast_block
+from ops.status import collect_health
 
 from . import schemas
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VERSION = "0.5.0"
+VERSION = "0.10.0"
+
+_AGENDA_ENRICHMENT_TIMEOUT_S = 10
+
+# Per-city TTL cache for the /agenda response. Building the agenda does a
+# live collect_news (67 RSS + enricher) — 10–15 s. Downstream calls
+# (/tasks, /eisenhower) piggyback on the cache instead of re-triggering.
+_AGENDA_CACHE_TTL_S = 300   # 5 minutes
+_AGENDA_CACHE: Dict[str, tuple] = {}   # city_name -> (response, expires_at_epoch)
+
+# Vector → the news categories that dominate its signal. Mirrors the
+# grouping in `metrics/snapshot.py` so the transparency endpoint and
+# the snapshot aggregator agree on which news items count where.
+_VECTOR_NEWS_CATEGORIES: Dict[str, Set[str]] = {
+    "safety":  {"incidents", "utilities", "complaints"},
+    "economy": {"business", "official"},
+    "quality": {"transport", "culture", "utilities"},
+    "social":  {"culture", "sport"},
+}
+
+_VECTOR_METRIC_COLUMN = {
+    "safety":  "sb",
+    "economy": "tf",
+    "quality": "ub",
+    "social":  "chv",
+}
 
 
 def _resolve_city(name_or_slug: str):
@@ -68,6 +132,28 @@ def _resolve_city(name_or_slug: str):
 async def health() -> schemas.HealthResponse:
     return schemas.HealthResponse(
         status="ok", version=VERSION, default_city=settings.default_city
+    )
+
+
+# Lazily-built singleton; the first /api/health/system call instantiates it
+# and every subsequent call reuses the same redis client for fast PINGs.
+_HEALTH_CACHE: Optional[ResponseCache] = None
+
+
+def _health_cache() -> ResponseCache:
+    global _HEALTH_CACHE
+    if _HEALTH_CACHE is None:
+        _HEALTH_CACHE = ResponseCache.from_settings()
+    return _HEALTH_CACHE
+
+
+@router.get("/api/health/system")
+async def system_health() -> dict:
+    """Full health check: DB ping + Redis ping + DeepSeek key + scheduler heartbeat."""
+    return await collect_health(
+        pool=get_pool(),
+        cache=_health_cache(),
+        deepseek_api_key=settings.deepseek_api_key,
     )
 
 
@@ -131,19 +217,70 @@ _PLACEHOLDER_FORECAST = {
 }
 
 _PLACEHOLDER_LOOPS: List[Dict[str, Any]] = [
-    {"name": "Безопасность → Экономика", "level": "critical"},
-    {"name": "Качество жизни → Отток",   "level": "warn"},
-    {"name": "Институциональная петля",  "level": "info"},
+    {
+        "name": "Безопасность → Экономика → Отток",
+        "level": "critical",
+        "strength": 0.75,
+        "description": (
+            "Рост инцидентов снижает инвестиционный фон. "
+            "Бизнес сокращается, часть жителей уезжает, "
+            "налоговая база падает — на безопасность остаётся меньше ресурсов."
+        ),
+        "break_points": {
+            "strategic_priority": "HIGH",
+            "break_timeline": "3-6 месяцев",
+            "effort_required": "Средние",
+            "advice": (
+                "Начать с точечных мер безопасности в проблемных "
+                "районах + публичный еженедельный отчёт."
+            ),
+            "recommended_resources": ["Правоохранительные органы", "СМИ", "ТОС"],
+            "length": 3,
+            "impact": 0.6,
+        },
+    },
+    {
+        "name": "Качество жизни → Отток молодёжи",
+        "level": "warn",
+        "strength": 0.55,
+        "description": (
+            "Нехватка досуга и инфраструктуры выталкивает молодёжь в Москву. "
+            "Остаётся стареющее население — падает потребительская активность."
+        ),
+        "break_points": {
+            "strategic_priority": "MEDIUM",
+            "break_timeline": "6-12 месяцев",
+            "effort_required": "Значительные",
+            "advice": "Программы удержания молодых специалистов + флагманский досуговый объект.",
+            "recommended_resources": ["Бюджет МСП", "ЦМК", "Работодатели"],
+            "length": 4,
+            "impact": 0.45,
+        },
+    },
+    {
+        "name": "Институциональная петля недоверия",
+        "level": "info",
+        "strength": 0.4,
+        "description": (
+            "Обращения теряются между службами — жители перестают обращаться — "
+            "проблемы накапливаются в тишине — вскрываются на ЧП."
+        ),
+        "break_points": {
+            "strategic_priority": "MEDIUM",
+            "break_timeline": "3 месяца",
+            "effort_required": "Низкие",
+            "advice": "Единый SLA-портал обращений + публичные метрики по отделам.",
+            "recommended_resources": ["ПОС", "Цифровая трансформация"],
+            "length": 2,
+            "impact": 0.35,
+        },
+    },
 ]
 
 
 @router.get("/api/city/{name}/all_metrics")
 async def all_metrics(name: str) -> dict:
-    """Aggregated metric snapshot consumed by the mayor dashboard.
-
-    Reads live values from the DB when present and falls back to
-    deterministic placeholders on a cold deploy.
-    """
+    """Aggregated metric snapshot consumed by the mayor dashboard."""
     cfg = _resolve_city(name)
 
     city_id = await city_id_by_name(cfg["name"])
@@ -273,8 +410,926 @@ async def all_metrics(name: str) -> dict:
     }
 
 
+@router.get("/api/city/{name}/history")
+async def city_history(
+    name: str,
+    days: int = Query(default=30, ge=1, le=365),
+) -> dict:
+    """Raw 4-vector history for sparklines."""
+    cfg = _resolve_city(name)
+    empty: Dict[str, List[List[Any]]] = {"sb": [], "tf": [], "ub": [], "chv": []}
+
+    city_id = await city_id_by_name(cfg["name"])
+    if city_id is None:
+        return {"city": cfg["name"], "days": days, "series": empty}
+
+    hist = await metrics_history(city_id, days=days)
+    series = {
+        key: [[ts.isoformat(), value] for ts, value in points]
+        for key, points in hist.items()
+    }
+    return {"city": cfg["name"], "days": days, "series": series}
+
+
+async def _build_city_graph(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Shared helper: pull the latest snapshot and build the graph."""
+    snapshot: Dict[str, float] = {"sb": 3.5, "tf": 3.5, "ub": 3.5, "chv": 3.5}
+    city_id = await city_id_by_name(cfg["name"])
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for key in ("sb", "tf", "ub", "chv"):
+                val = metric_row.get(key)
+                if val is not None:
+                    snapshot[key] = float(val)
+
+    loop = asyncio.get_running_loop()
+    # city_id is keyword-only on build_graph — wrap in a partial so the
+    # executor call doesn't pass it positionally (raises TypeError).
+    graph = await loop.run_in_executor(
+        None,
+        functools.partial(build_graph, cfg["name"], snapshot, city_id=city_id),
+    )
+    graph["slug"] = cfg.get("slug")
+    graph["snapshot"] = snapshot
+    return graph
+
+
+@router.get("/api/city/{name}/model")
+async def city_model(name: str) -> dict:
+    """9-element Meister graph for the dashboard's Cytoscape widget."""
+    cfg = _resolve_city(name)
+    return await _build_city_graph(cfg)
+
+
+class SimulateRequest(BaseModel):
+    source_node_id: str = Field(..., description="Node id (1..9) the mayor turns the dial on")
+    delta: float = Field(..., ge=-6.0, le=6.0, description="Absolute change in 1..6 scale")
+
+
+@router.post("/api/city/{name}/simulate")
+async def city_simulate(name: str, req: SimulateRequest) -> dict:
+    """Butterfly-effect simulator."""
+    cfg = _resolve_city(name)
+    graph = await _build_city_graph(cfg)
+    if graph.get("disabled"):
+        raise HTTPException(
+            status_code=503,
+            detail=f"confinement graph unavailable ({graph.get('reason')})",
+        )
+
+    sim = simulate(graph, req.source_node_id, req.delta)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        **sim.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/root_cause/{node_id}")
+async def city_root_cause(
+    name: str,
+    node_id: str,
+    max_depth: int = Query(default=5, ge=1, le=10),
+) -> dict:
+    """Root-cause trace backward from the problem node."""
+    cfg = _resolve_city(name)
+    graph = await _build_city_graph(cfg)
+    if graph.get("disabled"):
+        raise HTTPException(
+            status_code=503,
+            detail=f"confinement graph unavailable ({graph.get('reason')})",
+        )
+    result = trace_root_cause(graph, node_id, max_depth=max_depth)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/metric/{vector}/breakdown")
+async def city_metric_breakdown(name: str, vector: str) -> dict:
+    """Transparency breakdown: where each piece of the metric came from.
+
+    Gathers live signals from the DB (news window, latest snapshot) and
+    pipes them into the pure `analytics.breakdown` function, which knows
+    the source weights from TZ §3.1. When the DB has no data we still
+    return a well-formed response where every component is marked as
+    missing — the UI renders "нет данных" badges instead of crashing.
+    """
+    cfg = _resolve_city(name)
+    if vector not in _VECTOR_NEWS_CATEGORIES:
+        raise HTTPException(
+            status_code=422,
+            detail="vector must be one of safety / economy / quality / social",
+        )
+
+    context: Dict[str, Any] = {}
+    city_id = await city_id_by_name(cfg["name"])
+    if city_id is not None:
+        # News stats for this vector in the last 24h.
+        items = await news_window(city_id, hours=24)
+        cats = _VECTOR_NEWS_CATEGORIES[vector]
+        sentiments: List[float] = []
+        neg = pos = 0
+        for it in items:
+            enr = it.enrichment or {}
+            cat = enr.get("category") or it.category
+            if cat not in cats:
+                continue
+            sent = enr.get("sentiment") or it.raw.get("sentiment") if isinstance(getattr(it, "raw", None), dict) else enr.get("sentiment")
+            if sent is None:
+                continue
+            try:
+                sent_f = float(sent)
+            except (TypeError, ValueError):
+                continue
+            sentiments.append(sent_f)
+            if sent_f < -0.1:
+                neg += 1
+            elif sent_f > 0.1:
+                pos += 1
+        if sentiments:
+            context["news_avg_sentiment"] = sum(sentiments) / len(sentiments)
+            context["news_count"] = len(sentiments)
+            context["news_negative"] = neg
+            context["news_positive"] = pos
+
+        # Latest metric snapshot — drives forecast + happiness + trust.
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            col = _VECTOR_METRIC_COLUMN[vector]
+            val = metric_row.get(col)
+            if val is not None:
+                # Translate the 1..6 value into a [-1..+1] forecast signal.
+                context["forecast_signal"] = (float(val) - 3.5) / 2.5
+            if metric_row.get("happiness_index") is not None:
+                context["happiness_index"] = float(metric_row["happiness_index"])
+            if metric_row.get("trust_index") is not None:
+                context["trust_index"] = float(metric_row["trust_index"])
+
+    result = breakdown_metric(vector, context)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/crisis")
+async def city_crisis(name: str) -> dict:
+    """Early-warning report: metric drops + sentiment spike + severity + complaints.
+
+    Runs the pure `analytics.detect_crises` over live signals:
+      - latest_metrics + last-7-days history for metric_drop
+      - news window (24h + 7d negative baseline) for sentiment_spike
+      - same news window for high_severity (reads item.severity directly)
+      - appeals_count (24h + 7d baseline) for complaint_surge
+
+    All signals are optional — missing DB / empty window silently skip their
+    detector. The returned status is one of ok / watch / attention.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    current: Dict[str, float] = {}
+    history_7d: Dict[str, List[float]] = {}
+    news_24h: List[Dict[str, Any]] = []
+    neg_7d: Optional[int] = None
+    appeals_24h = 0
+    appeals_7d_avg = 0.0
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv"):
+                val = metric_row.get(col)
+                if val is not None:
+                    current[col] = float(val)
+
+        history = await metrics_history(city_id, days=7)
+        for col in ("sb", "tf", "ub", "chv"):
+            history_7d[col] = [val for _ts, val in history.get(col, [])]
+
+        window = await news_window(city_id, hours=24)
+        for item in window:
+            enr = item.enrichment or {}
+            raw = item.raw if isinstance(getattr(item, "raw", None), dict) else {}
+            news_24h.append(
+                {
+                    "title": item.title,
+                    "url": item.url,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                }
+            )
+
+        neg_7d = await news_negative_count(city_id, hours=24 * 7)
+        appeals_24h = await appeals_count(city_id, hours=24)
+        appeals_7d = await appeals_count(city_id, hours=24 * 7)
+        appeals_7d_avg = appeals_7d / 7.0
+
+    report = detect_crises(
+        current_metrics=current,
+        metrics_history_7d=history_7d,
+        news_24h=news_24h,
+        news_7d_neg_count=neg_7d,
+        appeals_24h=appeals_24h,
+        appeals_7d_avg=appeals_7d_avg,
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/reputation")
+async def city_reputation(name: str) -> dict:
+    """Media-reputation rollup: top negative authors + viral posts + risk.
+
+    Reads `news_window(24h)` rows, unpacks sentiment/severity/category from
+    either flat columns or the enrichment JSONB, and optionally computes the
+    7-day negative-share baseline so the rules can detect a fresh spike.
+    Returns the pure `analytics.reputation.analyze` output + a generated_at
+    timestamp. Everything is fail-safe: no DB means zero-mentions, risk=low.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    mentions: List[Dict[str, Any]] = []
+    prior_share: Optional[float] = None
+
+    if city_id is not None:
+        items = await news_window(city_id, hours=24)
+        for item in items:
+            enr = item.enrichment or {}
+            raw = item.raw if isinstance(getattr(item, "raw", None), dict) else {}
+            mentions.append(
+                {
+                    "author": item.author,
+                    "source_kind": item.source_kind,
+                    "source_handle": item.source_handle,
+                    "title": item.title,
+                    "url": item.url,
+                    "category": enr.get("category") or item.category,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                }
+            )
+
+        total_7d = await news_total_count(city_id, hours=24 * 7)
+        if total_7d > 0:
+            neg_7d = await news_negative_count(city_id, hours=24 * 7)
+            prior_share = neg_7d / total_7d
+
+    report = reputation_analyze(mentions, prior_negative_share=prior_share)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "window_hours": 24,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/investment")
+async def city_investment(name: str) -> dict:
+    """Investment-attractiveness profile: 6 factors + overall 0..100 + grade.
+
+    Assembles signals from:
+      - latest_metrics (sb / tf / ub / chv / trust / happiness)
+      - 7d business-category news sentiment counts
+      - population from CITIES config
+      - benchmark composite rank across all pilots (peer_rank)
+      - crisis_status from the rules-based detector
+
+    All signal fetches are fail-safe — missing ones neutralise their factor
+    at 0.5 in the pure analyzer, so a brand-new city reports as "mid-pack".
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    signals: Dict[str, Any] = {
+        "population": cfg.get("population"),
+    }
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv", "trust_index", "happiness_index"):
+                if metric_row.get(col) is not None:
+                    signals[col] = metric_row[col]
+
+        biz = await news_category_sentiment_counts(city_id, "business", hours=24 * 7)
+        signals["business_news_positive"] = biz["positive"]
+        signals["business_news_negative"] = biz["negative"]
+
+    # Peer rank from the existing benchmark — lightweight, same DB hits we
+    # already cache in /api/benchmark so this is effectively free.
+    try:
+        peer = await _peer_rank_for(cfg.get("slug"))
+        if peer is not None:
+            signals["peer_rank"] = peer
+    except Exception:  # noqa: BLE001
+        logger.warning("investment: peer_rank unavailable", exc_info=False)
+
+    # Crisis status: re-use the same data-gathering the /crisis endpoint does,
+    # but we only need the headline status (ok/watch/attention).
+    try:
+        crisis = await city_crisis(cfg["name"])
+        signals["crisis_status"] = crisis.get("status")
+    except Exception:  # noqa: BLE001
+        logger.warning("investment: crisis_status unavailable", exc_info=False)
+
+    profile = investment_compute(signals)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **profile.to_dict(),
+    }
+
+
+async def _peer_rank_for(slug: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Return `{position, total, leader_slug}` for this city vs the 6 pilots."""
+    if not slug:
+        return None
+    data = await cross_city_benchmark()
+    cities = data.get("cities") or []
+    if not cities:
+        return None
+    total = len([c for c in cities if c.get("composite") is not None])
+    leader = cities[0].get("slug") if cities else None
+    position = next(
+        (c.get("composite_rank") for c in cities if c.get("slug") == slug),
+        None,
+    )
+    if position is None:
+        return None
+    return {"position": position, "total": total or len(cities), "leader_slug": leader}
+
+
+# Trend dampener: the 7-day delta is noisy. We multiply it to get an annualised
+# slope that's visible over a 5-year horizon but not absurd. 1.2 means a typical
+# weekly move (≈0.02 normalised → 0.12 unit) projects to ≈0.72 over 5 years.
+_TREND_ANNUAL_MULTIPLIER = 1.2
+
+
+@router.get("/api/city/{name}/foresight")
+async def city_foresight(name: str) -> dict:
+    """Three-scenario 5-year projection + 10 megatrends grid.
+
+    Uses latest_metrics for the starting point and metrics_trend_7d for
+    per-vector direction. The trend is dampened (×1.2, de-normalised back
+    to the 1..6 scale) because a 7-day delta is a noisy signal to
+    extrapolate linearly over 5 years. Missing metrics → projections with
+    null values instead of crashing.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    current: Dict[str, float] = {}
+    trends: Dict[str, float] = {}
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv"):
+                if metric_row.get(col) is not None:
+                    current[col] = float(metric_row[col])
+
+        trend_7d = await metrics_trend_7d(city_id)
+        for vkey, value in trend_7d.items():
+            # trend_7d returns (a - b) / 6; undo /6 to get the unit delta,
+            # then scale by the annual multiplier.
+            trends[vkey] = value * 6.0 * _TREND_ANNUAL_MULTIPLIER
+
+    report = foresight_forecast(current_metrics=current, trend_per_vector=trends)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/budget")
+async def city_budget(name: str, per_capita_rub: int = 30_000) -> dict:
+    """Recommended annual budget allocation across the 4 Meister vectors.
+
+    Assembles signals:
+      - latest_metrics → per-vector scores for the low-boost / high-trim rules
+      - city_crisis alerts (filtered by .vector) → which vectors need a bump
+      - CITIES[name].population → total budget = population × per_capita_rub
+
+    Everything is fail-safe — a brand-new city still gets a plausible
+    baseline plan (equal 22.5% per vector + 10% reserve).
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    current: Dict[str, float] = {}
+    alerts: List[Dict[str, Any]] = []
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for col in ("sb", "tf", "ub", "chv"):
+                if metric_row.get(col) is not None:
+                    current[col] = float(metric_row[col])
+
+    try:
+        crisis = await city_crisis(cfg["name"])
+        alerts = crisis.get("alerts") or []
+    except Exception:  # noqa: BLE001
+        logger.warning("budget: crisis alerts unavailable", exc_info=False)
+
+    result = resource_plan(
+        current_metrics=current,
+        crisis_alerts=alerts,
+        population=cfg.get("population"),
+        per_capita_rub=per_capita_rub,
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **result.to_dict(),
+    }
+
+
+class NarrativesRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=200,
+                       description="Тема заявления (1-2 строки).")
+    context: str = Field("", max_length=1500,
+                         description="Короткий контекст / что именно случилось.")
+
+
+@router.post("/api/city/{name}/narratives")
+async def city_narratives(name: str, req: NarrativesRequest) -> dict:
+    """Generate 3 statement drafts (formal / empathetic / mobilizing) via DeepSeek.
+
+    Fully fail-safe — no DeepSeek key / API error / bad JSON all produce a
+    well-shaped response with the error field populated. The dashboard
+    renders the error as a friendly message instead of a 500.
+    """
+    cfg = _resolve_city(name)
+    result = await generate_narratives(
+        city=cfg["name"],
+        topic=req.topic,
+        context=req.context,
+    )
+    return {
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/topics")
+async def city_topics(name: str, days: int = 7) -> dict:
+    """Group last N days of news into 7 topic buckets + trend vs prior week.
+
+    Pulls news_window (current period) and news_window_range (same-size
+    slice immediately before it), hands both to the pure topics.analyze.
+    Returns a topic report sorted by current-period count desc.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+    days = max(1, min(30, int(days)))
+    hours = days * 24
+
+    current_items: List[Dict[str, Any]] = []
+    prior_items: List[Dict[str, Any]] = []
+
+    if city_id is not None:
+        cur = await news_window(city_id, hours=hours)
+        prior = await news_window_range(city_id, hours_from=hours, hours_to=hours * 2)
+
+        def _flatten(items: List[CollectedItem]) -> List[Dict[str, Any]]:
+            out: List[Dict[str, Any]] = []
+            for it in items:
+                enr = it.enrichment or {}
+                raw = it.raw if isinstance(getattr(it, "raw", None), dict) else {}
+                out.append({
+                    "title": it.title,
+                    "content": it.content,
+                    "url": it.url,
+                    "category": it.category,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                })
+            return out
+
+        current_items = _flatten(cur)
+        prior_items = _flatten(prior)
+
+    report = topics_analyze(current_items, prior_items)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "window_days": days,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.post("/api/admin/collect/{name}")
+async def admin_collect_now(
+    name: str,
+    _user: dict = Depends(require_role("admin", "editor")),
+) -> dict:
+    """Trigger a one-off collector run for a city and persist into DB.
+
+    Reuses `tasks.scheduler.collect_city` so the behaviour is identical
+    to the scheduled 10-minute tick — real sources (news RSS + appeals +
+    AI pulse) hit DeepSeek and then upsert into the news table. Response
+    echoes the number of rows written so an admin can verify immediately.
+    """
+    cfg = _resolve_city(name)
+    from tasks.scheduler import collect_city  # local import to avoid cycle
+    try:
+        written = await collect_city(cfg["name"])
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("admin collect failed for %s", cfg["name"])
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "rows_written": int(written),
+        "triggered_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
+@router.post("/api/admin/collect_all")
+async def admin_collect_all(
+    _user: dict = Depends(require_role("admin", "editor")),
+) -> dict:
+    """Sequentially collect news for all 6 pilot cities.
+
+    Useful for warming the DB — кнопка «заполнить всё что есть сейчас».
+    Returns per-city write counts. Errors on one city don't stop others.
+    Behind require_role because it's expensive (hits DeepSeek N times).
+    """
+    from tasks.scheduler import collect_city  # local import to avoid cycle
+    results: List[Dict[str, Any]] = []
+    total_written = 0
+    for city_name in CITIES:
+        try:
+            written = await collect_city(city_name)
+            total_written += int(written)
+            results.append({"city": city_name, "rows_written": int(written), "status": "ok"})
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("admin_collect_all failed for %s", city_name)
+            results.append({"city": city_name, "rows_written": 0, "status": "error",
+                            "detail": str(exc)[:200]})
+    return {
+        "triggered_at": datetime.now(tz=timezone.utc).isoformat(),
+        "cities": results,
+        "total_rows_written": total_written,
+    }
+
+
+@router.get("/api/admin/vk_discover")
+async def admin_vk_discover(
+    q: str,
+    limit: int = 30,
+    _user: dict = Depends(require_role("admin", "editor")),
+) -> dict:
+    """Find VK groups matching `q` so admin может pick handles for sources.
+
+    Использует public VK groups.search; sort=6 (по убыванию members count)
+    — крупные сообщества показываются первыми. Возвращает list с
+    `screen_name` (тот самый handle для config), `name`, `members_count`,
+    обрезанным описанием, типом группы и готовой строкой `config_line`
+    которую можно скопировать в `config/sources.py`.
+    """
+    from collectors.vk_discover import search_groups
+    if not q or not q.strip():
+        raise HTTPException(status_code=422, detail="q must be non-empty")
+    limit = max(1, min(100, int(limit)))
+    groups = await search_groups(q.strip(), limit=limit)
+    return {
+        "query": q.strip(),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "count": len(groups),
+        "groups": groups,
+    }
+
+
+@router.get("/api/city/{name}/pulse")
+async def city_pulse(name: str) -> dict:
+    """Композитный индекс 0..100 «пульса города».
+
+    Собирает четыре независимых подфактора через existing-endpoint'ы:
+      - latest_metrics → metrics_health
+      - city_crisis.status → crisis_calm
+      - 24h negative share via news_negative_count/news_total_count → media_calm
+      - appeals_count(24h) → appeals_relief
+    И передаёт их в pure `analytics.compute_pulse`. Каждый сигнал fail-safe —
+    missing → нейтрализуется в 50 на своём факторе.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    metrics: Optional[Dict[str, float]] = None
+    crisis_status: Optional[str] = None
+    negative_share: Optional[float] = None
+    appeals_24h_val: Optional[int] = None
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            vals: Dict[str, float] = {}
+            for col in ("sb", "tf", "ub", "chv"):
+                v = metric_row.get(col)
+                if v is not None:
+                    vals[col] = float(v)
+            if vals:
+                metrics = vals
+
+        total = await news_total_count(city_id, hours=24)
+        if total > 0:
+            neg = await news_negative_count(city_id, hours=24)
+            negative_share = neg / total
+
+        try:
+            appeals_24h_val = await appeals_count(city_id, hours=24)
+        except Exception:  # noqa: BLE001
+            appeals_24h_val = None
+
+    try:
+        crisis = await city_crisis(cfg["name"])
+        crisis_status = crisis.get("status")
+    except Exception:  # noqa: BLE001
+        logger.warning("pulse: crisis unavailable", exc_info=False)
+
+    report = compute_pulse(
+        metrics=metrics,
+        crisis_status=crisis_status,
+        negative_share=negative_share,
+        appeals_24h=appeals_24h_val,
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/happiness_events")
+async def city_happiness_events(
+    name: str,
+    season: Optional[str] = None,
+    audience: Optional[str] = None,
+    limit: int = 6,
+) -> dict:
+    """Recommended events from the regional happiness library.
+
+    Default season is today's meteorological season; audience defaults to
+    "all". Year-round events are always eligible. Limit clamped to [1, 12].
+    """
+    cfg = _resolve_city(name)
+    limit = max(1, min(12, int(limit)))
+    report = recommend_events(season=season, audience=audience, limit=limit)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/tasks")
+async def city_tasks(name: str) -> dict:
+    """Prioritised task list derived from current agenda + crisis alerts.
+
+    Pulls the agenda via daily_agenda route + crisis via city_crisis route,
+    hands both to analytics.derive_tasks. Roadmap input is skipped here
+    because roadmaps are on-demand (need vector + target + deadline); the
+    derive function accepts them if the UI later sends a roadmap snapshot.
+    """
+    cfg = _resolve_city(name)
+
+    agenda: Optional[Dict[str, Any]] = None
+    crisis: Optional[Dict[str, Any]] = None
+
+    try:
+        agenda_resp = await daily_agenda(cfg["name"])
+        # daily_agenda returns a pydantic AgendaResponse — convert to dict.
+        agenda = agenda_resp.model_dump() if hasattr(agenda_resp, "model_dump") else dict(agenda_resp)
+    except Exception:  # noqa: BLE001
+        logger.warning("tasks: agenda unavailable", exc_info=False)
+
+    try:
+        crisis = await city_crisis(cfg["name"])
+    except Exception:  # noqa: BLE001
+        logger.warning("tasks: crisis unavailable", exc_info=False)
+
+    result = derive_tasks(agenda=agenda, crisis=crisis)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **result.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/eisenhower")
+async def city_eisenhower(name: str) -> dict:
+    """Raspredelit' `derive_tasks` po 4 kvadrantam Eisenhower-matritsy.
+
+    Srochnoe-vajnoe / ne-srochnoe-vajnoe / srochnoe-ne-vajnoe /
+    ne-srochnoe-ne-vajnoe. Ispol'zuetsia dlia visualizatsii "traboutshoot"
+    na dashboard (otdel'nyi blok nad kartochkoi porucheniy).
+    """
+    cfg = _resolve_city(name)
+    tasks_payload = await city_tasks(cfg["name"])
+    report = bucket_eisenhower(tasks_payload.get("tasks") or [])
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/deep_forecast")
+async def city_deep_forecast(name: str) -> dict:
+    """Per-vector point forecast + confidence band at 7/30/90 days.
+
+    Bridges analytics.deep_forecast to the metrics_history we already query
+    for the 3-month forecast block. The underlying method (holt / trend /
+    flat / insufficient_data) is surfaced in the response so the UI can
+    label confidence honestly.
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    history_raw: Dict[str, List[Any]] = {}
+    if city_id is not None:
+        history = await metrics_history(city_id, days=90)
+        # metrics_history returns {vector_db_key: [(ts, val), ...]}. Strip ts.
+        for col in ("sb", "tf", "ub", "chv"):
+            history_raw[col] = [val for _ts, val in history.get(col, [])]
+
+    report = deep_forecast(history_raw)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/decisions")
+async def city_decisions(name: str, vector: Optional[str] = None) -> dict:
+    """Catalogue of 10 типичных управленческих решений с 3 сценариями каждое.
+
+    Optional `?vector=safety|economy|quality|social` filters the catalogue
+    to decisions that primarily affect that vector, or produce a non-trivial
+    realistic effect (|Δ| ≥ 0.15) on it.
+    """
+    cfg = _resolve_city(name)
+    decisions = filter_decisions(vector)
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "filter_vector": vector,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "decisions": [d.to_dict() for d in decisions],
+    }
+
+
+@router.get("/api/city/{name}/market_gaps")
+async def city_market_gaps(name: str, days: int = 30, top_k: int = 6) -> dict:
+    """Recommend business niches inferred from 30d of citizen pain signals.
+
+    Runs topic clustering on a 30-day news window, then maps topics with
+    high negative sentiment to curated niches (кейсов-примеров нет в
+    открытых данных — рекомендации формируются из боли горожан, не из
+    POI-базы, это прокси-сигнал).
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+    days = max(7, min(90, int(days)))
+    hours = days * 24
+
+    topics_payload: Dict[str, Any] = {}
+    if city_id is not None:
+        items = await news_window(city_id, hours=hours)
+        prior = await news_window_range(city_id, hours_from=hours, hours_to=hours * 2)
+
+        def _flatten(lst):
+            out = []
+            for it in lst:
+                enr = it.enrichment or {}
+                raw = it.raw if isinstance(getattr(it, "raw", None), dict) else {}
+                out.append({
+                    "title": it.title, "content": it.content, "url": it.url,
+                    "category": it.category,
+                    "sentiment": enr.get("sentiment") or raw.get("sentiment"),
+                    "severity":  enr.get("severity")  or raw.get("severity"),
+                })
+            return out
+
+        topics_payload = topics_analyze(_flatten(items), _flatten(prior)).to_dict()
+
+    report = analyze_market_gaps(topics_payload, top_k=max(1, min(12, int(top_k))))
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "window_days": days,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        **report.to_dict(),
+    }
+
+
+@router.get("/api/city/{name}/cases")
+async def city_cases(name: str, limit: int = 3) -> dict:
+    """Recommend 3 best-practice cases tailored to this city's weak vectors.
+
+    Signals assembled:
+      - weak_vectors: from latest_metrics — any vector with score < 3.5
+      - crisis_vectors: from the rules-based crisis detector alerts
+
+    When the city has no metrics yet, falls back to top cases by evidence
+    level (the recommender's no-signal branch).
+    """
+    cfg = _resolve_city(name)
+    city_id = await city_id_by_name(cfg["name"])
+
+    weak: List[str] = []
+    crisis: List[str] = []
+
+    if city_id is not None:
+        metric_row = await latest_metrics(city_id)
+        if metric_row is not None:
+            for vkey, col in _VECTOR_METRIC_COLUMN.items():
+                v = metric_row.get(col)
+                if v is not None and float(v) < 3.5:
+                    weak.append(vkey)
+
+    try:
+        rep = await city_crisis(cfg["name"])
+        for alert in rep.get("alerts") or []:
+            if isinstance(alert, dict) and alert.get("vector"):
+                crisis.append(alert["vector"])
+    except Exception:  # noqa: BLE001
+        logger.warning("cases: crisis alerts unavailable", exc_info=False)
+
+    recs = recommend_cases(
+        weak_vectors=weak or None,
+        crisis_vectors=crisis or None,
+        limit=max(1, min(10, int(limit))),
+    )
+    return {
+        "city": cfg["name"],
+        "slug": cfg.get("slug"),
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "weak_vectors": weak,
+        "crisis_vectors": list(dict.fromkeys(crisis)),  # preserve order, dedupe
+        "recommendations": [r.to_dict() for r in recs],
+    }
+
+
+@router.get("/api/benchmark")
+async def cross_city_benchmark() -> dict:
+    """Rank the 6 pilots by SB / ТФ / УБ / ЧВ + composite.
+
+    Pulls the latest metric snapshot for every pilot city and hands the
+    batch to `analytics.benchmark`. Cities without a snapshot yet are
+    still included (with null values) so the dashboard can render them
+    greyed-out instead of hiding them.
+    """
+    snapshots: List[Dict[str, Any]] = []
+    for cfg in CITIES.values():
+        snap: Dict[str, Any] = {
+            "slug": cfg.get("slug"),
+            "name": cfg.get("name"),
+            "emoji": cfg.get("emoji") or "🏙️",
+            "population": cfg.get("population"),
+        }
+        city_id = await city_id_by_name(cfg["name"])
+        if city_id is not None:
+            row = await latest_metrics(city_id)
+            if row is not None:
+                for col in ("sb", "tf", "ub", "chv", "trust_index", "happiness_index"):
+                    if row.get(col) is not None:
+                        snap[col] = row[col]
+        snapshots.append(snap)
+
+    result = benchmark_cities(snapshots).to_dict()
+    result["generated_at"] = datetime.now(tz=timezone.utc).isoformat()
+    return result
+
+
 # ---------------------------------------------------------------------------
-# Live collection + agenda + roadmap (unchanged)
+# Live collection + agenda + roadmap
 # ---------------------------------------------------------------------------
 
 @router.get("/api/city/{name}/news", response_model=schemas.NewsResponse)
@@ -282,11 +1337,13 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
     cfg = _resolve_city(name)
 
     collectors = [
-        TelegramCollector(cfg["name"]),
-        VKCollector(cfg["name"]),
+        # --- re-enable when valid TELEGRAM_API_ID/HASH arrive:
+        # TelegramCollector(cfg["name"]),
         NewsCollector(cfg["name"]),
         AppealsCollector(cfg["name"]),
     ]
+    if settings.vk_api_token:
+        collectors.append(VKCollector(cfg["name"]))
     items: List[CollectedItem] = []
     for coll in collectors:
         try:
@@ -307,6 +1364,14 @@ async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
 async def daily_agenda(name: str) -> schemas.AgendaResponse:
     cfg = _resolve_city(name)
 
+    # TTL cache: subsequent calls from /tasks, /eisenhower — и даже быстрый
+    # refresh дашборда — не перевызывают expensive collect_news (10-15 s).
+    import time as _time
+    now = _time.time()
+    cached = _AGENDA_CACHE.get(cfg["name"])
+    if cached is not None and cached[1] > now:
+        return cached[0]
+
     news_response = await collect_news(cfg["name"], limit=200)
     news_items = [
         CollectedItem(
@@ -325,7 +1390,10 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
     enricher = NewsEnricher()
     if enricher.enabled:
         try:
-            await asyncio.wait_for(enricher.enrich(news_items), timeout=30)
+            await asyncio.wait_for(
+                enricher.enrich(news_items),
+                timeout=_AGENDA_ENRICHMENT_TIMEOUT_S,
+            )
         except asyncio.TimeoutError:
             logger.warning("enricher timed out — proceeding without enrichment")
 
@@ -357,7 +1425,7 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
         agenda.headline = top_severe.enrichment.get("summary") or top_severe.title
         agenda.description = top_severe.content[:400]
 
-    return schemas.AgendaResponse(
+    response = schemas.AgendaResponse(
         city=agenda.city,
         date=agenda.date,
         headline=agenda.headline,
@@ -371,6 +1439,8 @@ async def daily_agenda(name: str) -> schemas.AgendaResponse:
         trust=agenda.trust,
         markdown=agenda.to_markdown(),
     )
+    _AGENDA_CACHE[cfg["name"]] = (response, now + _AGENDA_CACHE_TTL_S)
+    return response
 
 
 @router.post("/api/city/{name}/roadmap", response_model=schemas.RoadmapResponse)
@@ -392,16 +1462,12 @@ async def roadmap(name: str, req: schemas.RoadmapRequest) -> schemas.RoadmapResp
 
 @router.post("/api/city/{name}/scenario", response_model=schemas.ScenarioResponse)
 async def run_scenario(name: str, req: schemas.ScenarioRequest) -> schemas.ScenarioResponse:
-    """Сценарное моделирование (What-If анализ).
-    
-    Позволяет смоделировать влияние бюджетных решений на показатели города.
-    """
-    import asyncio
-    
+    """What-If сценарий: моделирование влияния бюджетных решений на векторы города."""
+    from analytics.scenario_simulator import ScenarioSimulator, Intervention
+
     cfg = _resolve_city(name)
     city_id = await city_id_by_name(cfg["name"])
-    
-    # Получаем текущие метрики
+
     baseline_vectors = {"safety": 0.5, "economy": 0.5, "quality": 0.5, "social": 0.5}
     if city_id is not None:
         metric_row = await latest_metrics(city_id)
@@ -409,23 +1475,17 @@ async def run_scenario(name: str, req: schemas.ScenarioRequest) -> schemas.Scena
             def _to_unit(v):
                 return None if v is None else round(float(v) / 6.0, 3)
             baseline_vectors = {
-                "safety": _to_unit(metric_row.get("sb")) or 0.5,
-                "economy": _to_unit(metric_row.get("tf")) or 0.5,
-                "quality": _to_unit(metric_row.get("ub")) or 0.5,
-                "social": _to_unit(metric_row.get("chv")) or 0.5,
+                "safety":  _to_unit(metric_row.get("sb"))  or 0.5,
+                "economy": _to_unit(metric_row.get("tf"))  or 0.5,
+                "quality": _to_unit(metric_row.get("ub"))  or 0.5,
+                "social":  _to_unit(metric_row.get("chv")) or 0.5,
             }
-    
-    # Конвертируем интервенции
+
     interventions = [
-        Intervention(
-            code=i.code,
-            budget_rub=i.budget_rub,
-            start_month=i.start_month,
-        )
+        Intervention(code=i.code, budget_rub=i.budget_rub, start_month=i.start_month)
         for i in req.interventions
     ]
-    
-    # Запускаем симуляцию
+
     simulator = ScenarioSimulator(cfg["name"])
     result = simulator.simulate(
         baseline_vectors=baseline_vectors,
@@ -433,22 +1493,19 @@ async def run_scenario(name: str, req: schemas.ScenarioRequest) -> schemas.Scena
         horizon_months=req.horizon_months,
         scenario_name=req.scenario_name,
     )
-    
     return schemas.ScenarioResponse(city=cfg["name"], scenario=result.to_dict())
 
 
 @router.post("/api/city/{name}/actions", response_model=schemas.ActionPlanResponse)
 async def generate_actions(name: str, req: schemas.ActionPlanRequest) -> schemas.ActionPlanResponse:
-    """Генератор конкретных действий.
-    
-    Преобразует проблемы и жалобы в структурированные поручения с исполнителями и сроками.
-    """
+    """Генератор поручений: проблемы → структурированные задачи с исполнителями и сроками."""
+    from analytics.action_generator import ActionGenerator
+
     cfg = _resolve_city(name)
     city_id = await city_id_by_name(cfg["name"])
-    
-    # Получаем метрики для превентивных действий
-    metrics = None
-    trends = None
+
+    metrics: Optional[Dict[str, Optional[float]]] = None
+    trends: Optional[Dict[str, Any]] = None
     if req.include_metric_alerts and city_id is not None:
         metric_row = await latest_metrics(city_id)
         trend_row = await metrics_trend_7d(city_id)
@@ -456,21 +1513,15 @@ async def generate_actions(name: str, req: schemas.ActionPlanRequest) -> schemas
             def _to_unit(v):
                 return None if v is None else round(float(v) / 6.0, 3)
             metrics = {
-                "safety": _to_unit(metric_row.get("sb")),
+                "safety":  _to_unit(metric_row.get("sb")),
                 "economy": _to_unit(metric_row.get("tf")),
                 "quality": _to_unit(metric_row.get("ub")),
-                "social": _to_unit(metric_row.get("chv")),
+                "social":  _to_unit(metric_row.get("chv")),
             }
             trends = trend_row or {}
-    
-    # Генерируем план действий
+
     generator = ActionGenerator(cfg["name"])
-    plan = generator.create_daily_plan(
-        problems=req.problems,
-        metrics=metrics,
-        trends=trends,
-    )
-    
+    plan = generator.create_daily_plan(problems=req.problems, metrics=metrics, trends=trends)
     return schemas.ActionPlanResponse(city=cfg["name"], plan=plan.to_dict())
 
 

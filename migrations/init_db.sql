@@ -1,22 +1,31 @@
 -- Городской Разум — initial schema.
--- Targets PostgreSQL 15. TimescaleDB hypertables are *optional*: if the
--- extension is not installed (Render-managed Postgres does not ship it),
--- the affected tables stay regular relational tables and the rest of the
--- schema works without changes.
+-- Targets PostgreSQL 15. Every optional piece (pg_trgm index, TimescaleDB
+-- hypertables) is wrapped in a DO block with `WHEN OTHERS` so a missing
+-- extension or limited privileges never aborts the whole migration.
+--
+-- The file is split into segments by `-- @SEGMENT ...` marker lines.
+-- `db.seed.run_migrations` executes each segment in its own transaction,
+-- so a failure in one segment (e.g. an unsupported TimescaleDB feature
+-- on Apache edition) doesn't roll back the previous ones.
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- @SEGMENT extensions
+-- pg_trgm powers the fuzzy search index on news.content below. If it's
+-- not available we skip that one index but the schema stays valid.
+DO $$
+BEGIN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS pg_trgm';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pg_trgm extension unavailable (%) — trigram search index skipped', SQLERRM;
+END $$;
 
 DO $$
 BEGIN
     EXECUTE 'CREATE EXTENSION IF NOT EXISTS timescaledb';
-EXCEPTION WHEN insufficient_privilege OR feature_not_supported OR undefined_file THEN
-    RAISE NOTICE 'TimescaleDB extension not available — using plain Postgres';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'TimescaleDB extension unavailable (%) — using plain Postgres', SQLERRM;
 END $$;
 
---------------------------------------------------------------------------
--- Core reference tables
---------------------------------------------------------------------------
-
+-- @SEGMENT core_tables
 CREATE TABLE IF NOT EXISTS cities (
     id              SERIAL PRIMARY KEY,
     slug            TEXT UNIQUE,
@@ -32,7 +41,6 @@ CREATE TABLE IF NOT EXISTS cities (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Adopt new columns on existing installations (idempotent).
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug TEXT;
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS emoji TEXT;
 ALTER TABLE cities ADD COLUMN IF NOT EXISTS accent_color TEXT;
@@ -53,12 +61,9 @@ CREATE TABLE IF NOT EXISTS sources (
     UNIQUE (city_id, kind, handle)
 );
 
---------------------------------------------------------------------------
--- Collected content
---------------------------------------------------------------------------
-
+-- @SEGMENT news_table
 CREATE TABLE IF NOT EXISTS news (
-    id              TEXT PRIMARY KEY,    -- hash from collector
+    id              TEXT PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
     source_kind     TEXT NOT NULL,
     source_handle   TEXT NOT NULL,
@@ -82,9 +87,19 @@ ALTER TABLE news ADD COLUMN IF NOT EXISTS enrichment JSONB;
 CREATE INDEX IF NOT EXISTS news_city_published_idx
     ON news (city_id, published_at DESC);
 CREATE INDEX IF NOT EXISTS news_category_idx ON news (category);
-CREATE INDEX IF NOT EXISTS news_content_trgm_idx
-    ON news USING gin (content gin_trgm_ops);
 
+-- @SEGMENT news_trigram_index
+-- Trigram index depends on pg_trgm — isolated segment so a missing
+-- extension doesn't affect anything else.
+DO $$
+BEGIN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS news_content_trgm_idx '
+            'ON news USING gin (content gin_trgm_ops)';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'trigram index on news.content skipped (%): ok without pg_trgm', SQLERRM;
+END $$;
+
+-- @SEGMENT appeals_table
 CREATE TABLE IF NOT EXISTS appeals (
     id              TEXT PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
@@ -99,10 +114,7 @@ CREATE TABLE IF NOT EXISTS appeals (
     collected_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
---------------------------------------------------------------------------
--- Timeseries: metrics + weather. Hypertables are best-effort.
---------------------------------------------------------------------------
-
+-- @SEGMENT metrics_table
 CREATE TABLE IF NOT EXISTS metrics (
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
     ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -117,13 +129,15 @@ CREATE TABLE IF NOT EXISTS metrics (
 
 CREATE INDEX IF NOT EXISTS metrics_city_ts_idx ON metrics (city_id, ts DESC);
 
+-- @SEGMENT metrics_hypertable
 DO $$
 BEGIN
     PERFORM create_hypertable('metrics', 'ts', if_not_exists => TRUE);
-EXCEPTION WHEN undefined_function THEN
-    RAISE NOTICE 'metrics: TimescaleDB missing, staying as a regular table';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'metrics hypertable skipped (%): staying as a regular table', SQLERRM;
 END $$;
 
+-- @SEGMENT weather_table
 CREATE TABLE IF NOT EXISTS weather (
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
     ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -140,17 +154,15 @@ CREATE TABLE IF NOT EXISTS weather (
 
 CREATE INDEX IF NOT EXISTS weather_city_ts_idx ON weather (city_id, ts DESC);
 
+-- @SEGMENT weather_hypertable
 DO $$
 BEGIN
     PERFORM create_hypertable('weather', 'ts', if_not_exists => TRUE);
-EXCEPTION WHEN undefined_function THEN
-    RAISE NOTICE 'weather: TimescaleDB missing, staying as a regular table';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'weather hypertable skipped (%): staying as a regular table', SQLERRM;
 END $$;
 
---------------------------------------------------------------------------
--- Analytics outputs
---------------------------------------------------------------------------
-
+-- @SEGMENT analytics_tables
 CREATE TABLE IF NOT EXISTS loops (
     id              BIGSERIAL PRIMARY KEY,
     city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
@@ -188,10 +200,7 @@ CREATE TABLE IF NOT EXISTS roadmaps (
     payload         JSONB NOT NULL
 );
 
---------------------------------------------------------------------------
--- Users and auth
---------------------------------------------------------------------------
-
+-- @SEGMENT users_table
 CREATE TABLE IF NOT EXISTS users (
     id              SERIAL PRIMARY KEY,
     email           TEXT NOT NULL UNIQUE,
@@ -202,14 +211,112 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at   TIMESTAMPTZ
 );
 
---------------------------------------------------------------------------
--- Retention (no-op on plain Postgres)
---------------------------------------------------------------------------
+-- @SEGMENT user_sessions_table
+CREATE TABLE IF NOT EXISTS user_sessions (
+    token_hash      TEXT PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ NOT NULL
+);
 
-DO $$
-BEGIN
-    PERFORM add_retention_policy('metrics', INTERVAL '365 days', if_not_exists => TRUE);
-    PERFORM add_retention_policy('weather', INTERVAL '365 days', if_not_exists => TRUE);
-EXCEPTION WHEN undefined_function THEN
-    NULL;
-END $$;
+CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id);
+CREATE INDEX IF NOT EXISTS user_sessions_expires_idx ON user_sessions (expires_at);
+
+-- @SEGMENT usage_events_table
+-- Usage analytics — "кто пользовался, что смотрел, сколько времени".
+-- IP is truncated to /24 before store (ФЗ-152), no request body saved.
+-- user_id is nullable: anonymous viewers also count towards endpoint
+-- popularity stats. created_at carries nanosecond precision so burst
+-- requests stay distinguishable.
+CREATE TABLE IF NOT EXISTS usage_events (
+    id                  BIGSERIAL PRIMARY KEY,
+    user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    session_token_hash  TEXT,
+    path                TEXT NOT NULL,
+    method              TEXT NOT NULL,
+    status              SMALLINT NOT NULL,
+    response_time_ms    INTEGER,
+    ip_prefix           TEXT,
+    user_agent          TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS usage_events_user_idx    ON usage_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS usage_events_path_idx    ON usage_events (path, created_at DESC);
+CREATE INDEX IF NOT EXISTS usage_events_created_idx ON usage_events (created_at DESC);
+
+-- Retention policies removed: on TimescaleDB Apache edition
+-- add_retention_policy raises FeatureNotSupportedError (Enterprise-only)
+-- before the DO block's exception handler can see it. We don't need
+-- retention for the MVP — row count is modest for 6 cities × 1h snapshots.
+
+-- @SEGMENT deputies_table
+-- Deputies belong to a city. Никаких "loyalty" / партийных запретов в схеме —
+-- party хранится только как справочный атрибут. Sectors — JSONB-массив строк
+-- ("ЖКХ", "благоустройство"); auto-распределение тем читает оттуда.
+CREATE TABLE IF NOT EXISTS deputies (
+    id              SERIAL PRIMARY KEY,
+    city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+    external_id     TEXT,
+    name            TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'sector_lead',
+    district        TEXT,
+    party           TEXT,
+    sectors         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    followers       INTEGER NOT NULL DEFAULT 0,
+    influence_score REAL NOT NULL DEFAULT 0.5,
+    telegram        TEXT,
+    vk              TEXT,
+    enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (city_id, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS deputies_city_idx ON deputies (city_id) WHERE enabled = TRUE;
+
+-- @SEGMENT deputy_topics_table
+-- Темы для освещения. assignees — массив deputy.id (INTEGER) в JSONB,
+-- хранится денормализованно для скорости чтения дашборда.
+CREATE TABLE IF NOT EXISTS deputy_topics (
+    id              BIGSERIAL PRIMARY KEY,
+    city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    priority        TEXT NOT NULL DEFAULT 'medium',
+    target_tone     TEXT NOT NULL DEFAULT 'neutral',
+    key_messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
+    talking_points  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    target_audience JSONB NOT NULL DEFAULT '["all"]'::jsonb,
+    assignees       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    required_posts  INTEGER NOT NULL DEFAULT 5,
+    completed_posts INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'active',
+    source          TEXT NOT NULL DEFAULT 'manual',
+    deadline        TIMESTAMPTZ NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS deputy_topics_city_status_idx
+    ON deputy_topics (city_id, status, deadline);
+
+-- @SEGMENT deputy_posts_table
+-- Учёт фактических публикаций. Депутат сам публикует, координатор
+-- регистрирует факт публикации со ссылкой и метриками вовлечённости.
+CREATE TABLE IF NOT EXISTS deputy_posts (
+    id              BIGSERIAL PRIMARY KEY,
+    city_id         INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+    deputy_id       INTEGER NOT NULL REFERENCES deputies(id) ON DELETE CASCADE,
+    topic_id        BIGINT REFERENCES deputy_topics(id) ON DELETE SET NULL,
+    platform        TEXT NOT NULL,
+    url             TEXT,
+    content         TEXT,
+    published_at    TIMESTAMPTZ NOT NULL,
+    views           INTEGER NOT NULL DEFAULT 0,
+    likes           INTEGER NOT NULL DEFAULT 0,
+    comments        INTEGER NOT NULL DEFAULT 0,
+    reposts         INTEGER NOT NULL DEFAULT 0,
+    registered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS deputy_posts_topic_idx ON deputy_posts (topic_id, published_at DESC);
+CREATE INDEX IF NOT EXISTS deputy_posts_deputy_idx ON deputy_posts (deputy_id, published_at DESC);

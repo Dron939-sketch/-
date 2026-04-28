@@ -146,6 +146,72 @@ async def news_window(city_id: int, hours: int = 24) -> List[CollectedItem]:
     return out
 
 
+async def news_window_range(
+    city_id: int, hours_from: int, hours_to: int,
+) -> List[CollectedItem]:
+    """News published between [now - hours_from, now - hours_to).
+
+    Used for "prior week" comparisons, e.g. hours_from=7*24 hours_to=14*24
+    gives the 7-14 days ago slice.
+    """
+    pool = get_pool()
+    if pool is None:
+        return []
+    now = datetime.now(tz=timezone.utc)
+    if hours_from > hours_to:
+        hours_from, hours_to = hours_to, hours_from
+    start = now - timedelta(hours=hours_to)
+    end = now - timedelta(hours=hours_from)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT source_kind, source_handle, title, content, url,
+                       author, category, published_at, sentiment, severity,
+                       summary, enrichment
+                FROM news
+                WHERE city_id = $1 AND published_at >= $2 AND published_at < $3
+                ORDER BY published_at DESC
+                LIMIT 500
+                """,
+                city_id, start, end,
+            )
+    except Exception:  # noqa: BLE001
+        return []
+
+    out: List[CollectedItem] = []
+    for r in rows:
+        enrichment = r["enrichment"]
+        if isinstance(enrichment, str):
+            try:
+                enrichment = json.loads(enrichment)
+            except json.JSONDecodeError:
+                enrichment = None
+        if enrichment is None and (
+            r["sentiment"] is not None or r["summary"] is not None
+        ):
+            enrichment = {
+                "sentiment": r["sentiment"],
+                "category": r["category"],
+                "severity": r["severity"],
+                "summary": r["summary"],
+            }
+        out.append(
+            CollectedItem(
+                source_kind=r["source_kind"],
+                source_handle=r["source_handle"],
+                title=r["title"] or "",
+                content=r["content"] or "",
+                published_at=r["published_at"],
+                url=r["url"],
+                author=r["author"],
+                category=r["category"],
+                enrichment=enrichment,
+            )
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Weather
 # ---------------------------------------------------------------------------
@@ -392,6 +458,94 @@ async def news_counts_last_24h(city_id: int) -> Dict[str, int]:
         }
     except Exception:  # noqa: BLE001
         return {"negative": 0, "positive": 0, "total": 0}
+
+
+async def news_negative_count(city_id: int, hours: int) -> int:
+    """Negative-sentiment (< -0.3) news count over the last `hours` hours."""
+    pool = get_pool()
+    if pool is None:
+        return 0
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT COUNT(*) AS n FROM news "
+                "WHERE city_id=$1 AND published_at >= $2 "
+                "AND sentiment IS NOT NULL AND sentiment < -0.3",
+                city_id, since,
+            )
+        return int(row["n"] or 0) if row else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+async def news_category_sentiment_counts(
+    city_id: int, category: str, hours: int,
+) -> Dict[str, int]:
+    """Return {positive, negative, total} for news in a single category."""
+    empty = {"positive": 0, "negative": 0, "total": 0}
+    pool = get_pool()
+    if pool is None:
+        return empty
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE sentiment IS NOT NULL AND sentiment > 0.1) AS positive,
+                    COUNT(*) FILTER (WHERE sentiment IS NOT NULL AND sentiment < -0.1) AS negative,
+                    COUNT(*) AS total
+                FROM news
+                WHERE city_id = $1 AND published_at >= $2 AND category = $3
+                """,
+                city_id, since, category,
+            )
+        if row is None:
+            return empty
+        return {
+            "positive": int(row["positive"] or 0),
+            "negative": int(row["negative"] or 0),
+            "total": int(row["total"] or 0),
+        }
+    except Exception:  # noqa: BLE001
+        return empty
+
+
+async def news_total_count(city_id: int, hours: int) -> int:
+    """Total news count over the last `hours` hours."""
+    pool = get_pool()
+    if pool is None:
+        return 0
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT COUNT(*) AS n FROM news "
+                "WHERE city_id=$1 AND published_at >= $2",
+                city_id, since,
+            )
+        return int(row["n"] or 0) if row else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+async def appeals_count(city_id: int, hours: int) -> int:
+    """Number of citizen appeals collected over the last `hours` hours."""
+    pool = get_pool()
+    if pool is None:
+        return 0
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT COUNT(*) AS n FROM appeals "
+                "WHERE city_id=$1 AND published_at >= $2",
+                city_id, since,
+            )
+        return int(row["n"] or 0) if row else 0
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 async def top_recent_summaries(

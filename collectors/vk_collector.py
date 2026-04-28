@@ -24,6 +24,17 @@ logger = logging.getLogger(__name__)
 _VK_API_VERSION = "5.199"
 _VK_API_URL = "https://api.vk.com/method/wall.get"
 
+# Permanent failures we don't want to retry within a process lifetime:
+#   100 — invalid domain (handle не существует)
+#   15  — wall disabled (стена закрыта для API)
+#   18  — page deleted/banned
+#   30  — page is private
+_PERMANENT_VK_ERROR_CODES = {15, 18, 30, 100}
+
+# Process-wide blacklist of (handle → reason). Reset on restart so admin
+# может починить через rolling deploy.
+_BLACKLIST: Dict[str, str] = {}
+
 
 class VKCollector(BaseCollector):
     def __init__(self, city_name: str, count: int = 50):
@@ -50,6 +61,10 @@ class VKCollector(BaseCollector):
         items: List[CollectedItem] = []
         async with aiohttp.ClientSession() as session:
             for src in sources:
+                if src.handle in _BLACKLIST:
+                    # Молча скипаем permanently-broken handles — никаких
+                    # повторных API-вызовов и log spam'а.
+                    continue
                 try:
                     items.extend(await self._fetch(session, src, token, since_ts))
                 except Exception:  # noqa: BLE001
@@ -64,17 +79,36 @@ class VKCollector(BaseCollector):
         token: str,
         since_ts: int,
     ) -> List[CollectedItem]:
-        params = {
-            "domain": src.handle,
+        params: Dict[str, Any] = {
             "count": self.count,
             "access_token": token,
             "v": _VK_API_VERSION,
         }
+        # Two handle styles co-exist in config/sources.py:
+        #   - screen_name (e.g. "kolomna_gorod") → wall.get?domain=
+        #   - signed numeric id (e.g. "-224019653") → wall.get?owner_id=
+        # The numeric form is what `qwen.ai bot` left after the regression
+        # merge; rather than rewriting the config we just route correctly.
+        handle = src.handle.strip()
+        if handle.lstrip("-").isdigit():
+            params["owner_id"] = handle
+        else:
+            params["domain"] = handle
         async with session.get(_VK_API_URL, params=params, timeout=20) as response:
             response.raise_for_status()
             payload: Dict[str, Any] = await response.json()
         if "error" in payload:
-            logger.warning("VK API error for %s: %s", src.handle, payload["error"])
+            err = payload["error"]
+            code = err.get("error_code")
+            msg = err.get("error_msg", "")
+            if code in _PERMANENT_VK_ERROR_CODES:
+                _BLACKLIST[src.handle] = f"code={code}: {msg}"
+                logger.warning(
+                    "VK %s blacklisted permanently (code=%s, %s) — won't retry until restart",
+                    src.handle, code, msg,
+                )
+            else:
+                logger.warning("VK API error for %s: %s", src.handle, err)
             return []
         posts = payload.get("response", {}).get("items", [])
         out: List[CollectedItem] = []

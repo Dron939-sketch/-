@@ -18,13 +18,18 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from config.settings import settings
 from db import init_pool, close_pool
 from db.seed import run_migrations, seed_cities
 
+from .admin_stats_routes import router as admin_stats_router
+from .auth_routes import router as auth_router
+from .deputy_routes import router as deputy_router
 from .routes import router
+from .usage_middleware import UsageLoggingMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Usage-analytics middleware runs AFTER endpoints so it can capture
+    # response status + elapsed time. Registered here so it wraps every
+    # route the app serves (including auth). Skips /health prefixes inside.
+    app.add_middleware(UsageLoggingMiddleware)
+
+    app.include_router(auth_router)
+    app.include_router(admin_stats_router)
+    app.include_router(deputy_router)
     app.include_router(router)
 
     @app.on_event("startup")
@@ -57,6 +70,14 @@ def create_app() -> FastAPI:
         if pool is not None:
             await run_migrations(str(_MIGRATION_PATH))
             await seed_cities()
+            # Bootstrap default admin if env vars (or hardcoded default)
+            # provided — идемпотентно, не перезаписывает пароль
+            # существующего пользователя.
+            from auth import seed_default_admin
+            await seed_default_admin(
+                settings.default_admin_email,
+                settings.default_admin_password,
+            )
         scheduler.start()
 
     @app.on_event("shutdown")
@@ -67,6 +88,17 @@ def create_app() -> FastAPI:
         await close_pool()
 
     dashboard_dir = Path(__file__).resolve().parent.parent / "dashboard"
+
+    # /favicon.ico → dashboard/favicon.svg (browsers запрашивают .ico по умолчанию).
+    # Mount route explicitly так что static files fallback не перехватит его
+    # с 404 до того, как достигнет ICO-файла (которого у нас нет).
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> Response:
+        svg = dashboard_dir / "favicon.svg"
+        if svg.exists():
+            return FileResponse(str(svg), media_type="image/svg+xml")
+        return Response(status_code=204)
+
     if dashboard_dir.exists():
         app.mount("/", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
     else:

@@ -30,6 +30,9 @@ class CitySources:
     gosuslugi: List[Source] = field(default_factory=list)
 
 
+from urllib.parse import quote_plus
+
+
 def _google_news_rss(city_ru: str, query_encoded: str) -> Source:
     """Google News RSS feed for an arbitrary Russian-language query."""
     url = (
@@ -37,6 +40,46 @@ def _google_news_rss(city_ru: str, query_encoded: str) -> Source:
         "&hl=ru&gl=RU&ceid=RU:ru"
     )
     return Source("news_rss", f"Google News — {city_ru}", url, "news", "P1")
+
+
+def _google_news_query(city_ru: str, query: str, *, category: str = "news",
+                       priority: str = "P1") -> Source:
+    """Helper: quote_plus the query + build a Source entry in one line.
+
+    `query` is a free-form Russian phrase; it's URL-encoded at registration
+    time. Name prefixed with the query so multi-query cities читаются в
+    логах без расшифровки.
+    """
+    url = (
+        f"https://news.google.com/rss/search?q={quote_plus(query)}"
+        "&hl=ru&gl=RU&ceid=RU:ru"
+    )
+    return Source("news_rss", f"Google News — {query}", url, category, priority)
+
+
+# Тематические запросы для любого города — просто подставляем название.
+# 11 тем × N городов → N×11 запросов. Overlap терпимый — коллектор
+# дедуплицирует по URL на уровне upsert_news_batch.
+def _city_news_bundle(city_ru: str, *, priority_bump: bool = False) -> List[Source]:
+    """Return a bundle of ~11 Google News queries covering all 4 Меistеr-vectors.
+
+    Used for every pilot to guarantee minimum news volume. priority_bump
+    nudges them to P0 for pilot city (Коломна), leaves P1 for остальных.
+    """
+    pri = "P0" if priority_bump else "P1"
+    return [
+        _google_news_query(city_ru, city_ru, category="news", priority=pri),
+        _google_news_query(city_ru, f"{city_ru} ДТП", category="incidents", priority=pri),
+        _google_news_query(city_ru, f"{city_ru} происшествие", category="incidents", priority=pri),
+        _google_news_query(city_ru, f"{city_ru} ЖКХ", category="utilities", priority=pri),
+        _google_news_query(city_ru, f"{city_ru} транспорт", category="transport", priority=pri),
+        _google_news_query(city_ru, f"{city_ru} дороги", category="transport", priority="P1"),
+        _google_news_query(city_ru, f"{city_ru} культура", category="culture", priority="P2"),
+        _google_news_query(city_ru, f"{city_ru} школа", category="news", priority="P1"),
+        _google_news_query(city_ru, f"{city_ru} бизнес", category="business", priority="P1"),
+        _google_news_query(city_ru, f"{city_ru} администрация", category="official", priority=pri),
+        _google_news_query(city_ru, f"{city_ru} благоустройство", category="news", priority="P2"),
+    ]
 
 
 KOLOMNA_SOURCES = CitySources(
@@ -51,16 +94,57 @@ KOLOMNA_SOURCES = CitySources(
         Source("telegram", "Культура Коломна", "kolomna_culture", "culture", "P2"),
         Source("telegram", "Спорт Коломна", "kolomna_sport", "sport", "P2"),
         Source("telegram", "Бизнес Коломна", "kolomna_business", "business", "P2"),
+        Source("telegram", "Коломна-Инфо", "kolomna_info", "news", "P1"),
+        Source("telegram", "Коломна Авто", "kolomna_auto", "transport", "P1"),
+        Source("telegram", "Коломна ДТП", "kolomna_dtp", "incidents", "P0"),
+        Source("telegram", "Коломенский кремль", "kolomna_kreml", "culture", "P2"),
     ],
     vk=[
-        Source("vk", "Типичная Коломна", "-224019653", "complaints", "P0"),
-        Source("vk", "Коломна Сегодня", "-184624957", "news", "P0"),
-        Source("vk", "Администрация Коломны", "-54470066", "official", "P0"),
-        Source("vk", "Коломна 360", "-123456789", "city", "P1"),
-        Source("vk", "Коломна Онлайн", "-987654321", "news", "P1"),
+        # Handles, подтверждённые через VK groups.search в /admin.html.
+        # При добавлении нового — открыть https://vk.com/<handle> и
+        # убедиться что страница доступна без авторизации.
+        # ---
+        # Существующие (не верифицированы напрямую, но не падают):
+        Source("vk", "Типичная Коломна", "typical_kolomna", "complaints", "P0"),
+        Source("vk", "Коломна Сегодня", "kolomna_today", "news", "P0"),
+        Source("vk", "Администрация Коломны", "kolomna_adm", "official", "P0"),
+        Source("vk", "Коломна Онлайн", "kolomna_online", "news", "P1"),
+        # ---
+        # Найдены через /admin/vk_discover (подтверждены пользователем):
+        Source("vk", "АВТОМОБИЛИСТЫ КОЛОМНЫ", "KolomnaRuL", "transport", "P0"),
+        Source("vk", "Город Коломна", "kolomna_gorod", "city", "P0"),
+        Source("vk", "Коломна 750", "kolomna_group_750", "city", "P1"),
+        Source("vk", "Коломна ™", "kolomna750", "city", "P1"),
+        Source("vk", "Коломна Best", "kolomnabest", "news", "P1"),
+        Source("vk", "Подслушано Коломна", "kolomna_tut", "complaints", "P0"),
+        Source("vk", "Подслушано Коломна (alt)", "kolomna_podsluh", "complaints", "P1"),
+        Source("vk", "Коломна Новости", "kolomna_spravka", "news", "P1"),
+        Source("vk", "Афиша Коломна", "kolomnaafisha", "culture", "P2"),
+        Source("vk", "Взаимопомощь в Коломне", "kolomnahelp", "social", "P1"),
     ],
     news_rss=[
-        _google_news_rss("Коломна", "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0"),
+        # --- 11 тематических Google News запросов под пилотом (P0) ---
+        *_city_news_bundle("Коломна", priority_bump=True),
+        # --- Прямой RSS городского издания — подтверждён живым. ---
+        Source(
+            kind="news_rss",
+            name="in-kolomna.ru (RSS)",
+            handle="https://in-kolomna.ru/rss.xml",
+            category="news", priority="P0",
+            notes="Главное городское новостное издание.",
+        ),
+        # --- RSS-ленты ниже регистрировались, но возвращают 404/timeout.
+        # --- Оставлены закомментированными как лог для ручного онбординга
+        # --- после того как найдём рабочий endpoint.
+        # Source(kind="news_rss", name="kolomnagrad.ru (RSS)",
+        #        handle="https://kolomnagrad.ru/rss",
+        #        category="news", priority="P1"),
+        # Source(kind="news_rss", name="360tv.ru — Коломна",
+        #        handle="https://360tv.ru/kolomna/rss/",
+        #        category="news", priority="P1"),
+        # Source(kind="news_rss", name="Подмосковье сегодня — Коломна",
+        #        handle="https://mosregtoday.ru/rss/tag/kolomna/",
+        #        category="news", priority="P2"),
     ],
     gosuslugi=[
         Source(
@@ -71,52 +155,35 @@ KOLOMNA_SOURCES = CitySources(
             "P2",
             notes="Нужен ключ API; пока используется stub-коллектор.",
         ),
+        Source(
+            "gosuslugi",
+            "ПОС — Платформа обратной связи",
+            "kolomna_pos",
+            "appeals",
+            "P1",
+            notes="Портал pos.gosuslugi.ru; требует OAuth интеграции.",
+        ),
     ],
 )
 
 LUKHOVITSY_SOURCES = CitySources(
-    news_rss=[
-        _google_news_rss(
-            "Луховицы",
-            "%D0%9B%D1%83%D1%85%D0%BE%D0%B2%D0%B8%D1%86%D1%8B",
-        ),
-    ],
+    news_rss=_city_news_bundle("Луховицы"),
 )
 
 VOSKRESENSK_SOURCES = CitySources(
-    news_rss=[
-        _google_news_rss(
-            "Воскресенск",
-            "%D0%92%D0%BE%D1%81%D0%BA%D1%80%D0%B5%D1%81%D0%B5%D0%BD%D1%81%D0%BA",
-        ),
-    ],
+    news_rss=_city_news_bundle("Воскресенск"),
 )
 
 EGORYEVSK_SOURCES = CitySources(
-    news_rss=[
-        _google_news_rss(
-            "Егорьевск",
-            "%D0%95%D0%B3%D0%BE%D1%80%D1%8C%D0%B5%D0%B2%D1%81%D0%BA",
-        ),
-    ],
+    news_rss=_city_news_bundle("Егорьевск"),
 )
 
 STUPINO_SOURCES = CitySources(
-    news_rss=[
-        _google_news_rss(
-            "Ступино",
-            "%D0%A1%D1%82%D1%83%D0%BF%D0%B8%D0%BD%D0%BE",
-        ),
-    ],
+    news_rss=_city_news_bundle("Ступино"),
 )
 
 OZYORY_SOURCES = CitySources(
-    news_rss=[
-        _google_news_rss(
-            "Озёры",
-            "%D0%9E%D0%B7%D1%91%D1%80%D1%8B",
-        ),
-    ],
+    news_rss=_city_news_bundle("Озёры"),
 )
 
 

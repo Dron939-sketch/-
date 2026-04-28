@@ -7,7 +7,8 @@ row so fixing a typo in config/cities.py is a redeploy away.
 from __future__ import annotations
 
 import logging
-from typing import Dict, Mapping
+import re
+from typing import Dict, List, Tuple
 
 from config.cities import CITIES
 
@@ -99,12 +100,64 @@ async def city_id_by_slug(slug: str) -> int | None:
         return None
 
 
-async def run_migrations(sql_path: str) -> bool:
-    """Apply init_db.sql against the current pool.
+_SEGMENT_MARKER = re.compile(r"^\s*--\s*@SEGMENT\s+(\S+)\s*$", re.MULTILINE)
 
-    Returns True if the script ran without error, False otherwise.
-    Intended for one-shot bootstrap on a fresh DB; safe to call repeatedly
-    because every CREATE is guarded with IF NOT EXISTS.
+
+def _strip_sql_comments(body: str) -> str:
+    """Return body with single-line `-- …` comments removed.
+
+    Used to check whether a segment has any actual SQL before shipping it
+    to asyncpg — pure-comment chunks trigger EmptyQueryResponse whose
+    .decode() throws `'NoneType' object has no attribute 'decode'`.
+    """
+    lines = []
+    for line in body.splitlines():
+        stripped = line.split("--", 1)[0].strip()
+        if stripped:
+            lines.append(stripped)
+    return " ".join(lines).strip()
+
+
+def _split_segments(sql: str) -> List[Tuple[str, str]]:
+    """Split SQL on `-- @SEGMENT <name>` marker lines.
+
+    Returns a list of `(segment_name, sql_body)` pairs in order. A file
+    without any marker is returned as a single `("default", sql)` tuple
+    so legacy scripts keep working. Segments that only contain comments
+    are dropped — asyncpg.execute on such a body raises NoneType.decode.
+    """
+    matches = list(_SEGMENT_MARKER.finditer(sql))
+    if not matches:
+        return [("default", sql)]
+
+    segments: List[Tuple[str, str]] = []
+    # Everything before the first marker is the implicit "preamble" —
+    # only add it if it contains actual SQL.
+    preamble = sql[: matches[0].start()].strip()
+    if preamble and _strip_sql_comments(preamble):
+        segments.append(("preamble", preamble))
+
+    for i, match in enumerate(matches):
+        name = match.group(1)
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(sql)
+        body = sql[start:end].strip()
+        if body and _strip_sql_comments(body):
+            segments.append((name, body))
+    return segments
+
+
+async def run_migrations(sql_path: str) -> bool:
+    """Apply init_db.sql segment-by-segment.
+
+    Each `-- @SEGMENT <name>` block runs in its own transaction. When a
+    segment fails we log the error and move on to the next one — this
+    keeps non-critical pieces (TimescaleDB hypertables, retention
+    policies, pg_trgm indexes) from taking out the whole migration on
+    managed databases with limited extensions.
+
+    Returns True when every segment succeeded, False if any failed or
+    the pool wasn't available.
     """
     pool = get_pool()
     if pool is None:
@@ -112,13 +165,26 @@ async def run_migrations(sql_path: str) -> bool:
     try:
         with open(sql_path, "r", encoding="utf-8") as fh:
             sql = fh.read()
-        async with pool.acquire() as conn:
-            await conn.execute(sql)
-        logger.info("migrations applied from %s", sql_path)
-        return True
     except FileNotFoundError:
         logger.warning("migrations file %s not found", sql_path)
         return False
-    except Exception:  # noqa: BLE001
-        logger.exception("migration failed — continuing")
+
+    segments = _split_segments(sql)
+    failed: List[str] = []
+    for name, body in segments:
+        try:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.execute(body)
+            logger.info("migration segment '%s' applied", name)
+        except Exception as exc:  # noqa: BLE001
+            failed.append(name)
+            logger.warning(
+                "migration segment '%s' failed (%s) — continuing",
+                name, exc,
+            )
+    if failed:
+        logger.warning("migration segments failed: %s", ", ".join(failed))
         return False
+    logger.info("all %d migration segments applied", len(segments))
+    return True
