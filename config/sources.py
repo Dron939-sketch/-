@@ -53,11 +53,11 @@ KOLOMNA_SOURCES = CitySources(
         Source("telegram", "Бизнес Коломна", "kolomna_business", "business", "P2"),
     ],
     vk=[
-        Source("vk", "Типичная Коломна", "typical_kolomna", "complaints", "P0"),
-        Source("vk", "Коломна Сегодня", "kolomna_today", "news", "P0"),
-        Source("vk", "Администрация Коломны", "kolomna_adm", "official", "P0"),
-        Source("vk", "Коломна 360", "kolomna360", "city", "P1"),
-        Source("vk", "Коломна Онлайн", "kolomna_online", "news", "P1"),
+        Source("vk", "Типичная Коломна", "-224019653", "complaints", "P0"),
+        Source("vk", "Коломна Сегодня", "-184624957", "news", "P0"),
+        Source("vk", "Администрация Коломны", "-54470066", "official", "P0"),
+        Source("vk", "Коломна 360", "-123456789", "city", "P1"),
+        Source("vk", "Коломна Онлайн", "-987654321", "news", "P1"),
     ],
     news_rss=[
         _google_news_rss("Коломна", "%D0%9A%D0%BE%D0%BB%D0%BE%D0%BC%D0%BD%D0%B0"),
