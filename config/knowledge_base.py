@@ -142,8 +142,51 @@ DEPUTIES_OF_HEAD: List[Person] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Депутаты Совета (25) — подгружаются из config/deputies.py
+# ---------------------------------------------------------------------------
+
+def _load_council_deputies() -> List[Person]:
+    """Трансформирует KOLOMNA_DEPUTIES в формат Person.
+    Источник: config/deputies.py — 25 действующих депутатов.
+    """
+    out: List[Person] = []
+    try:
+        from config.deputies import KOLOMNA_DEPUTIES
+    except Exception:  # noqa: BLE001
+        return out
+    for d in KOLOMNA_DEPUTIES:
+        full = d.get("name") or ""
+        if not full:
+            continue
+        district = d.get("district") or ""
+        note = d.get("note") or ""
+        role = "Депутат Совета депутатов городского округа Коломна"
+        bio_parts = []
+        if district:
+            bio_parts.append(district)
+        if note:
+            bio_parts.append(note)
+        bio = ". ".join(bio_parts) or "Депутат Совета депутатов."
+        # Aliases — фамилия (первое слово full_name)
+        last_name = full.split(" ", 1)[0]
+        aliases = [last_name]
+        out.append({
+            "full_name": full,
+            "role":      role,
+            "bio":       bio,
+            "aliases":   aliases,
+        })
+    return out
+
+
+COUNCIL_DEPUTIES: List[Person] = _load_council_deputies()
+
+
 # Все люди, кого Джарвис знает «по имени»
-ALL_PEOPLE: List[Person] = [CREATOR, HEAD] + DEPUTIES_OF_HEAD
+ALL_PEOPLE: List[Person] = (
+    [CREATOR, HEAD] + DEPUTIES_OF_HEAD + COUNCIL_DEPUTIES
+)
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +244,12 @@ def kb_prompt_block() -> str:
         f"{d['full_name']}" for d in DEPUTIES_OF_HEAD
     )
     lines.append(f"- Заместители главы: {deputies_short}.")
+    if COUNCIL_DEPUTIES:
+        lines.append(
+            f"- Совет депутатов: {len(COUNCIL_DEPUTIES)} человек, "
+            f"включая председателя и двух заместителей. "
+            f"При запросе по фамилии — отвечай конкретно."
+        )
     return "\n".join(lines)
 
 

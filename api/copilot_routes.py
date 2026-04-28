@@ -250,9 +250,9 @@ async def _execute_action(
     """Pure async «функциональный switch» — каждый action возвращает
     короткий human-readable текст для голоса + список sources.
     Все ошибки заглушаются в honest fallback-сообщение.
-    Все returnable-тексты прогоняются через expand_temperatures, чтобы
-    «+12°C» в любой фразе стал «плюс 12 градусов Цельсия»."""
-    from ai.voice_service import expand_temperatures
+    Returnable-тексты прогоняются через expand_temperatures + expand_units
+    — «+12°C» становится «плюс 12 градусов Цельсия», «25%» → «25 процентов»."""
+    from ai.voice_service import expand_temperatures, expand_units
 
     try:
         if action == "run_pulse":
@@ -273,12 +273,14 @@ async def _execute_action(
             text, src = await _run_search_vk(query or city_name)
         elif action == "run_search_web":
             text, src = await _run_search_web(query or city_name)
+        elif action == "run_daily_brief":
+            text, src = await _run_daily_brief(city_name, city_id)
         else:
             text, src = (
                 f"Расчёт «{action}» у меня не заложен.",
                 [],
             )
-        return (expand_temperatures(text), src)
+        return (expand_units(expand_temperatures(text)), src)
     except Exception:  # noqa: BLE001
         logger.exception("execute action %s failed", action)
 
@@ -287,6 +289,84 @@ async def _execute_action(
         "Попробуй переформулировать или открой соответствующий раздел дашборда.",
         [],
     )
+
+
+async def _run_daily_brief(city_name: str, cid: Optional[int]) -> tuple[str, List[str]]:
+    """Сводка дня — короткая фраза о состоянии города. Собирает:
+    пульс, текущие 4 вектора, кризис-радар (count алертов), активные
+    темы депутатов, новости за сутки. Всё в одну голосовую фразу."""
+    bits: List[str] = []
+
+    # 1. Пульс (если получится)
+    try:
+        from api.routes import city_pulse  # type: ignore
+        p = await city_pulse(city_name)
+        if isinstance(p, dict):
+            score = p.get("score") or p.get("pulse_score")
+            if score is not None:
+                bits.append(f"пульс {round(float(score))} из 100")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 2. Просевшие метрики
+    try:
+        if cid is not None:
+            from db.queries import latest_metrics
+            m = await latest_metrics(cid)
+            if m:
+                low_vec = []
+                for code, label in (("sb", "СБ"), ("tf", "ТФ"),
+                                    ("ub", "УБ"), ("chv", "ЧВ")):
+                    v = m.get(code)
+                    if v is None:
+                        continue
+                    try:
+                        fv = float(v)
+                    except (TypeError, ValueError):
+                        continue
+                    if fv < 3.0:
+                        low_vec.append(f"{label} {fv:.1f}")
+                if low_vec:
+                    bits.append("просели: " + ", ".join(low_vec))
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 3. Кризис-радар
+    try:
+        from api.routes import city_crisis  # type: ignore
+        c = await city_crisis(city_name)
+        if isinstance(c, dict):
+            alerts = c.get("alerts") or []
+            if alerts:
+                bits.append(f"кризис-алертов: {len(alerts)}")
+            else:
+                bits.append("кризис-радар чист")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 4. Темы депутатов
+    try:
+        if cid is not None:
+            from db import deputy_queries as q
+            topics = await q.list_topics(cid, status="active", limit=20)
+            if topics:
+                bits.append(f"у депутатов {len(topics)} активных тем")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 5. Новости за сутки
+    try:
+        if cid is not None:
+            from db.queries import news_window
+            items = await news_window(cid, hours=24)
+            if items:
+                bits.append(f"свежих новостей: {len(items)}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    if not bits:
+        return ("Сегодня по городу пока тихо — данных у меня мало.", ["daily_brief"])
+    return ("Сводка дня: " + "; ".join(bits) + ".", ["daily_brief"])
 
 
 async def _run_search_vk(query: str) -> tuple[str, List[str]]:
