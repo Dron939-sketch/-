@@ -245,6 +245,27 @@ CREATE INDEX IF NOT EXISTS usage_events_user_idx    ON usage_events (user_id, cr
 CREATE INDEX IF NOT EXISTS usage_events_path_idx    ON usage_events (path, created_at DESC);
 CREATE INDEX IF NOT EXISTS usage_events_created_idx ON usage_events (created_at DESC);
 
+-- @SEGMENT deepseek_usage_table
+-- Расход DeepSeek API: один ряд на каждый успешный вызов.
+-- prompt_cache_hit_tokens / prompt_cache_miss_tokens приходят из
+-- свежих ответов (DeepSeek V3+). cost_usd считается по тарифам в
+-- ai/deepseek_pricing.py при инсерте — не пересчитываем при запросе.
+CREATE TABLE IF NOT EXISTS deepseek_usage (
+    id                       BIGSERIAL PRIMARY KEY,
+    model                    TEXT NOT NULL,
+    prompt_tokens            INTEGER NOT NULL DEFAULT 0,
+    completion_tokens        INTEGER NOT NULL DEFAULT 0,
+    total_tokens             INTEGER NOT NULL DEFAULT 0,
+    prompt_cache_hit_tokens  INTEGER NOT NULL DEFAULT 0,
+    prompt_cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd                 NUMERIC(12, 6) NOT NULL DEFAULT 0,
+    cached_from_redis        BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS deepseek_usage_created_idx ON deepseek_usage (created_at DESC);
+CREATE INDEX IF NOT EXISTS deepseek_usage_model_idx   ON deepseek_usage (model, created_at DESC);
+
 -- Retention policies removed: on TimescaleDB Apache edition
 -- add_retention_policy raises FeatureNotSupportedError (Enterprise-only)
 -- before the DO block's exception handler can see it. We don't need
