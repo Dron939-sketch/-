@@ -48,6 +48,8 @@ ALLOWED_ACTIONS = {
     "run_benchmark":      "Сравнение с другими городами",
     "run_topics":         "Топ тематик за окно",
     "run_deputy_topics":  "Сгенерировать темы депутатам",
+    "run_search_vk":      "Поиск в VK (группы / люди / посты)",
+    "run_search_web":     "Поиск в интернете",
 }
 
 OPEN_ACTIONS = {a for a in ALLOWED_ACTIONS if a.startswith("open_") or a == "show_chart"}
