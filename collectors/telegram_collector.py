@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramCollector(BaseCollector):
-    def __init__(self, city_name: str, limit_per_channel: int = 100):
+    def __init__(self, city_name: str, limit_per_channel: int = 25):
         super().__init__(city_name)
         self.limit_per_channel = limit_per_channel
         self._client = None  # lazily initialised Telethon client

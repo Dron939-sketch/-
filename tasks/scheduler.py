@@ -313,13 +313,14 @@ def start() -> None:
     if not settings.openweather_api_key:
         logger.info("scheduler: weather loop disabled (no OPENWEATHER_API_KEY)")
 
-    # Demo-режим: интервалы вдвое чаще боевых default'ов. На проде
-    # хватает выставить COLLECTION_INTERVAL_MIN=30 в env (collection),
-    # для weather/snapshot/deputy_topics — отдельные env'ы ниже.
+    # Demo-режим (бережный): интервалы в 2× длиннее боевых, чтобы не
+    # сжигать DeepSeek-токены при демонстрации. На проде выставляется
+    # COLLECTION_INTERVAL_MIN=30 (collection), WEATHER_INTERVAL_S=3600,
+    # SNAPSHOT_INTERVAL_S=3600, DEPUTY_TOPICS_INTERVAL_S=86400.
     collection_s = max(300, settings.collection_interval_minutes * 60)
-    weather_s = max(300, _env_int("WEATHER_INTERVAL_S", 1800))
-    snapshot_s = max(300, _env_int("SNAPSHOT_INTERVAL_S", 1800))
-    deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 12 * 3600))
+    weather_s = max(300, _env_int("WEATHER_INTERVAL_S", 7200))
+    snapshot_s = max(300, _env_int("SNAPSHOT_INTERVAL_S", 7200))
+    deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 48 * 3600))
 
     _tasks.append(asyncio.create_task(_collection_loop(collection_s), name="collection_loop"))
     if settings.openweather_api_key:
