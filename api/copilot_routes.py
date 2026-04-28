@@ -3,15 +3,17 @@
 Принимает текст + историю + city slug. Собирает богатый контекст
 (метрики, погода, топ жалоб/радостей, активные темы депутатов,
 ключевые слова → выборка из новостей за окно), отдаёт в `ai.copilot.chat`,
-возвращает {text, action, sources}.
+возвращает {text, action, sources, audio?, audio_mime?}.
 
-Без auth — Ко-пилот доступен любому посетителю дашборда. Если в
-будущем понадобится защита (биллинг по DeepSeek-токенам) — добавим
-require_user тут.
+Если есть Fish Audio (FISH_AUDIO_API_KEY + FISH_AUDIO_VOICE_ID) и
+запрос пришёл с `speak: true` — синтезируем MP3 и кладём base64 рядом
+с текстом. Фронтенд предпочитает MP3, при его отсутствии возвращается
+к браузерному speechSynthesis.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -20,6 +22,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ai.copilot import chat as copilot_chat
+from ai.fish_audio_service import is_configured as fish_configured, synthesize as fish_synthesize
 from config.cities import get_city, get_city_by_slug
 
 logger = logging.getLogger(__name__)
@@ -36,6 +39,7 @@ class CopilotIn(BaseModel):
     message: str = Field(..., min_length=1, max_length=1500)
     city: str = Field("Коломна", max_length=120)
     history: List[HistoryTurn] = Field(default_factory=list, max_length=20)
+    speak: bool = Field(True, description="Если есть Fish Audio — вернуть MP3 в base64")
 
 
 def _resolve_city_safe(name_or_slug: str) -> Dict[str, Any]:
@@ -149,9 +153,25 @@ async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
     ctx = await _build_context(cfg["name"], payload.message)
     history = [{"role": t.role, "text": t.text} for t in payload.history]
     result = await copilot_chat(payload.message, ctx, history)
-    return {
+
+    response: Dict[str, Any] = {
         "city":    cfg["name"],
         "text":    result["text"],
         "action":  result.get("action"),
         "sources": result.get("sources") or [],
+        "tts_engine": "browser",          # default fallback на speechSynthesis
+        "audio":      None,
+        "audio_mime": None,
     }
+
+    if payload.speak and fish_configured():
+        try:
+            mp3 = await fish_synthesize(result["text"])
+            if mp3:
+                response["audio"] = base64.b64encode(mp3).decode("ascii")
+                response["audio_mime"] = "audio/mpeg"
+                response["tts_engine"] = "fish"
+        except Exception:  # noqa: BLE001
+            logger.exception("fish_synthesize failed (will fallback to browser TTS)")
+
+    return response
