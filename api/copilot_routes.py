@@ -76,8 +76,11 @@ def _interesting_categories(question: str) -> List[str]:
 async def _build_context(city_name: str, question: str) -> Dict[str, Any]:
     """Готовим context dict для ai.copilot.chat. Все источники fail-safe."""
     ctx: Dict[str, Any] = {"name": city_name}
+    cid: Optional[int] = None
     try:
-        from db.queries import latest_metrics, latest_weather, news_window
+        from db.queries import (
+            latest_metrics, latest_weather, news_window, metrics_trend_7d,
+        )
         from db.seed import city_id_by_name
 
         cid = await city_id_by_name(city_name)
@@ -95,6 +98,18 @@ async def _build_context(city_name: str, question: str) -> Dict[str, Any]:
                     "condition":   w.get("condition"),
                 }
 
+            # Тренды за неделю — Ко-пилот может говорить «на этой неделе УБ
+            # подрос», что делает его «живым».
+            try:
+                t = await metrics_trend_7d(cid)
+                if t:
+                    ctx["trend_7d"] = {
+                        "sb": t.get("sb"), "tf": t.get("tf"),
+                        "ub": t.get("ub"), "chv": t.get("chv"),
+                    }
+            except Exception:  # noqa: BLE001
+                pass
+
             # Если в вопросе упоминается категория — поднимаем top-news
             # из неё за последнюю неделю как источник.
             cats = _interesting_categories(question)
@@ -110,6 +125,46 @@ async def _build_context(city_name: str, question: str) -> Dict[str, Any]:
                         break
                 if top_titles:
                     ctx["top_complaints"] = top_titles
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Активные темы депутатов с прогрессом — Ко-пилот видит, что закрывается.
+    if cid is not None:
+        try:
+            from db import deputy_queries as q
+            topics = await q.list_topics(cid, status="active", limit=5)
+            entries = []
+            for t in (topics or [])[:5]:
+                title = t.get("title")
+                if not title:
+                    continue
+                done = int(t.get("completed_posts") or 0)
+                req  = int(t.get("required_posts") or 0)
+                if req > 0:
+                    entries.append(f"{title} ({done}/{req} постов)")
+                else:
+                    entries.append(title)
+            if entries:
+                ctx["active_topics"] = entries
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Снимок кризис-радара — если есть. Не зависит от cid (ползёт
+    # через city_name и pure-analytics).
+    try:
+        from api.routes import city_crisis  # type: ignore
+        crisis = await city_crisis(city_name)
+        if isinstance(crisis, dict):
+            level = crisis.get("level") or crisis.get("status")
+            alerts = crisis.get("alerts") or []
+            if level or alerts:
+                ctx["crisis"] = {
+                    "level":  level,
+                    "alerts": [
+                        a.get("title") if isinstance(a, dict) else str(a)
+                        for a in alerts[:3]
+                    ],
+                }
     except Exception:  # noqa: BLE001
         pass
 
@@ -145,6 +200,195 @@ async def _build_context(city_name: str, question: str) -> Dict[str, Any]:
         pass
 
     return ctx
+
+
+class ExecuteIn(BaseModel):
+    action: str = Field(..., pattern=r"^run_[a-z_]+$")
+    city: str = Field("Коломна", max_length=120)
+    speak: bool = Field(True)
+
+
+@router.post("/execute")
+async def copilot_execute(payload: ExecuteIn) -> dict:
+    """Прямой запуск аналитической функции по action.
+
+    Возвращает {text, action, sources, audio?} — фронт показывает
+    как обычный ответ ассистента, обернёт в bubble и озвучит.
+    """
+    cfg = _resolve_city_safe(payload.city)
+    cid: Optional[int] = None
+    try:
+        from db.seed import city_id_by_name
+        cid = await city_id_by_name(cfg["name"])
+    except Exception:  # noqa: BLE001
+        pass
+
+    text, sources = await _execute_action(payload.action, cfg["name"], cid)
+
+    response: Dict[str, Any] = {
+        "city": cfg["name"], "text": text,
+        "action": payload.action, "sources": sources,
+        "tts_engine": "browser", "audio": None, "audio_mime": None,
+    }
+    if payload.speak and fish_configured():
+        try:
+            mp3 = await fish_synthesize(text)
+            if mp3:
+                response["audio"] = base64.b64encode(mp3).decode("ascii")
+                response["audio_mime"] = "audio/mpeg"
+                response["tts_engine"] = "fish"
+        except Exception:  # noqa: BLE001
+            logger.exception("fish_synthesize failed in /execute")
+    return response
+
+
+async def _execute_action(action: str, city_name: str, city_id: Optional[int]) -> tuple[str, List[str]]:
+    """Pure async «функциональный switch» — каждый action возвращает
+    короткий human-readable текст для голоса + список sources.
+    Все ошибки заглушаются в honest fallback-сообщение."""
+    try:
+        if action == "run_pulse":
+            return await _run_pulse(city_name, city_id)
+        if action == "run_forecast":
+            return await _run_forecast(city_name, city_id)
+        if action == "run_crisis":
+            return await _run_crisis(city_name)
+        if action == "run_loops":
+            return await _run_loops(city_name, city_id)
+        if action == "run_benchmark":
+            return await _run_benchmark(city_name)
+        if action == "run_topics":
+            return await _run_topics(city_name)
+        if action == "run_deputy_topics":
+            return await _run_deputy_topics(city_name, city_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("execute action %s failed", action)
+
+    return (
+        f"Не получилось выполнить расчёт «{action}» прямо сейчас. "
+        "Попробуй переформулировать или открой соответствующий раздел дашборда.",
+        [],
+    )
+
+
+async def _run_pulse(city_name: str, cid: Optional[int]) -> tuple[str, List[str]]:
+    from api.routes import city_pulse  # type: ignore
+    p = await city_pulse(city_name)
+    if not isinstance(p, dict):
+        return ("Пульс пока не считается.", [])
+    score = p.get("score") or p.get("pulse_score")
+    grade = p.get("grade") or p.get("status")
+    if score is None:
+        return ("Пульс пока не считается — данных мало.", [])
+    msg = f"Пульс города {grade or ''}: {round(float(score))} из 100.".strip()
+    if p.get("breakdown"):
+        bits = []
+        for k, v in (p.get("breakdown") or {}).items():
+            try:
+                bits.append(f"{k}: {round(float(v))}")
+            except Exception:  # noqa: BLE001
+                pass
+        if bits:
+            msg += " Разбивка: " + ", ".join(bits[:4]) + "."
+    return (msg, ["pulse"])
+
+
+async def _run_forecast(city_name: str, cid: Optional[int]) -> tuple[str, List[str]]:
+    from api.routes import city_deep_forecast  # type: ignore
+    df = await city_deep_forecast(city_name)
+    if not isinstance(df, dict):
+        return ("Прогноз пока не готов.", [])
+    texts: List[str] = []
+    for vec_code in ("sb", "tf", "ub", "chv"):
+        v = (df.get(vec_code) or {})
+        delta_30 = v.get("delta_30") or v.get("delta_30d")
+        if delta_30 is None:
+            continue
+        try:
+            d = float(delta_30)
+            label = {"sb": "СБ", "tf": "ТФ", "ub": "УБ", "chv": "ЧВ"}[vec_code]
+            sign = "+" if d > 0 else ""
+            texts.append(f"{label} {sign}{d:.1f} за 30 дней")
+        except Exception:  # noqa: BLE001
+            pass
+    if not texts:
+        return ("Прогноз: всё в зоне неопределённости, цифр пока мало.", [])
+    return ("Прогноз на 30 дней: " + "; ".join(texts) + ".", ["deep_forecast"])
+
+
+async def _run_crisis(city_name: str) -> tuple[str, List[str]]:
+    from api.routes import city_crisis  # type: ignore
+    c = await city_crisis(city_name)
+    if not isinstance(c, dict):
+        return ("Кризис-радар не сработал.", [])
+    alerts = c.get("alerts") or []
+    if not alerts:
+        return ("Кризис-радар: всё в норме, алертов нет.", ["crisis"])
+    titles = [a.get("title") if isinstance(a, dict) else str(a) for a in alerts[:3]]
+    return (
+        f"Кризис-радар: {len(alerts)} алертов. Топ: " + "; ".join(titles) + ".",
+        ["crisis"],
+    )
+
+
+async def _run_loops(city_name: str, cid: Optional[int]) -> tuple[str, List[str]]:
+    from tasks.scheduler import analyze_loops_for_city
+    n = await analyze_loops_for_city(city_name)
+    if not n:
+        return ("Петель Мейстера сейчас не вижу — данных не хватает.", [])
+    return (f"Распознано {n} петель Мейстера. Подробности — в админке.", ["loops"])
+
+
+async def _run_benchmark(city_name: str) -> tuple[str, List[str]]:
+    from api.routes import city_benchmark  # type: ignore
+    try:
+        b = await city_benchmark()
+    except TypeError:
+        b = await city_benchmark(city_name)
+    if not isinstance(b, dict):
+        return ("Сравнение городов не готово.", [])
+    rows = b.get("rows") or b.get("cities") or []
+    me = next((r for r in rows if isinstance(r, dict) and r.get("name") == city_name), None)
+    if not me:
+        return ("В benchmark меня пока нет.", [])
+    rank = me.get("rank") or "—"
+    score = me.get("score") or me.get("pulse")
+    return (
+        f"В сравнении из {len(rows)} городов: место {rank}, балл {score}.",
+        ["benchmark"],
+    )
+
+
+async def _run_topics(city_name: str) -> tuple[str, List[str]]:
+    from api.routes import city_topics  # type: ignore
+    t = await city_topics(city_name)
+    if not isinstance(t, dict):
+        return ("Топ тематик пока не готов.", [])
+    items = t.get("items") or t.get("topics") or []
+    if not items:
+        return ("За окно ничего не выделяется — день спокойный.", [])
+    bits = []
+    for it in items[:3]:
+        if isinstance(it, dict):
+            bits.append(f"{it.get('topic') or it.get('label') or ''} — {it.get('count', '?')}")
+    return ("Топ тематик: " + "; ".join(bits) + ".", ["topics"])
+
+
+async def _run_deputy_topics(city_name: str, cid: Optional[int]) -> tuple[str, List[str]]:
+    from tasks.deputy_jobs import run_auto_generate
+    if cid is None:
+        return ("Город не сидирован в БД.", [])
+    res = await run_auto_generate(
+        city_name=city_name, city_id=cid, hours=24, deadline_days=5, dry_run=True,
+    )
+    cands = res.get("candidates") or []
+    if not cands:
+        return ("Сейчас новых тем для депутатов не предлагаю — сигналов не вижу.", [])
+    titles = [c.get("title") for c in cands[:3] if c.get("title")]
+    return (
+        f"Готов предложить {len(cands)} тем депутатам. Топ: " + "; ".join(titles) + ".",
+        ["deputy_topics"],
+    )
 
 
 @router.post("/chat")

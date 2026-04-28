@@ -177,39 +177,70 @@
 
   function actionLabel(action) {
     return ({
-      open_scenario: "🎯 Открыть сценарии",
-      open_actions:  "✓ Открыть генератор действий",
-      open_topic:    "🗂 Открыть тему",
-      open_admin:    "⚙️ Открыть админку",
-      open_deputies: "🏛 Открыть депутатов",
-      show_chart:    "📊 Показать график",
-    })[action] || "Открыть";
+      open_scenario:     "🎯 Открыть сценарии",
+      open_actions:      "✓ Открыть генератор действий",
+      open_topic:        "🗂 Открыть тему",
+      open_admin:        "⚙️ Открыть админку",
+      open_deputies:     "🏛 Открыть депутатов",
+      show_chart:        "📊 Показать график",
+      run_pulse:         "💓 Посчитать пульс",
+      run_forecast:      "🔮 Прогноз на 30 дней",
+      run_crisis:        "🚨 Кризис-радар",
+      run_loops:         "🧠 Петли Мейстера",
+      run_benchmark:     "📊 Сравнить с другими",
+      run_topics:        "🗂 Топ тематик",
+      run_deputy_topics: "📝 Темы депутатам",
+    })[action] || "Выполнить";
   }
 
-  function handleAction(action) {
-    switch (action) {
-      case "open_scenario":
-        document.getElementById("btn-scenario")?.click();
-        break;
-      case "open_actions":
-        document.getElementById("btn-actions")?.click();
-        break;
-      case "open_admin":
-        window.location.href = "/admin.html";
-        break;
-      case "open_deputies":
-        window.location.href = "/deputies.html";
-        break;
-      case "open_topic":
-        // Нет deeplink'а — переход на координатора депутатов.
-        window.location.href = "/deputies.html";
-        break;
-      case "show_chart":
-        // Скроллим к секции прогнозов / истории если она есть на странице.
-        document.querySelector(".forecast, .deep-forecast, .history")?.scrollIntoView({
-          behavior: "smooth", block: "start",
+  async function handleAction(action) {
+    if (action.startsWith("open_") || action === "show_chart") {
+      switch (action) {
+        case "open_scenario": document.getElementById("btn-scenario")?.click(); break;
+        case "open_actions":  document.getElementById("btn-actions")?.click(); break;
+        case "open_admin":    window.location.href = "/admin.html"; break;
+        case "open_deputies":
+        case "open_topic":    window.location.href = "/deputies.html"; break;
+        case "show_chart":
+          document.querySelector(".forecast, .deep-forecast, .history")?.scrollIntoView({
+            behavior: "smooth", block: "start",
+          });
+          break;
+      }
+      return;
+    }
+    if (action.startsWith("run_")) {
+      // Прямое выполнение через /api/copilot/execute — ответ как обычный bubble.
+      showTyping(true);
+      setHint("Считаю…");
+      try {
+        const res = await fetch("/api/copilot/execute", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, city: currentCityName(), speak: voiceEnabled() }),
         });
-        break;
+        showTyping(false);
+        if (!res.ok) {
+          addBubble("assistant", `Расчёт не удался (${res.status}).`);
+          setHint("Ошибка.");
+          return;
+        }
+        const data = await res.json();
+        const reply = data.text || "Готово.";
+        addBubble("assistant", reply, {
+          action: null, sources: data.sources || [],
+          audio: data.audio || null, audio_mime: data.audio_mime || null,
+        });
+        const updated = loadHistory();
+        updated.push({ role: "assistant", text: reply });
+        saveHistory(updated);
+        if (voiceEnabled()) speak(reply, { audio: data.audio, audio_mime: data.audio_mime });
+        setHint("Готово.");
+      } catch (e) {
+        showTyping(false);
+        addBubble("assistant", "Связь дрогнула при расчёте.");
+        setHint("Сеть недоступна.");
+      }
     }
   }
 
