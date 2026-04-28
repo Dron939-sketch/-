@@ -2839,4 +2839,178 @@ async function init() {
   refreshTimer = setInterval(refresh, REFRESH_MS);
 }
 
+// -------------------------------------------------- Modals & New Features
+
+function openModal(id) {
+  document.getElementById(id).hidden = false;
+}
+
+function closeModal(id) {
+  document.getElementById(id).hidden = true;
+  // Clear results
+  const results = document.getElementById(id.replace("modal-", "") + "-results");
+  if (results) {
+    results.hidden = true;
+    results.innerHTML = "";
+  }
+}
+
+function addInterventionRow() {
+  const container = document.getElementById("interventions-list");
+  const row = document.createElement("div");
+  row.className = "intervention-row";
+  
+  let optionsHtml = '<option value="">Выберите вмешательство</option>';
+  INTERVENTION_OPTIONS.forEach(opt => {
+    optionsHtml += `<option value="${opt.code}" data-cost="${opt.cost}">${opt.name} (~${(opt.cost/1000000).toFixed(1)} млн ₽)</option>`;
+  });
+  
+  row.innerHTML = `
+    <select class="intervention-code" onchange="updateBudgetSuggestion(this)">${optionsHtml}</select>
+    <input type="number" class="intervention-budget" placeholder="Бюджет (₽)" min="0" step="100000" />
+    <input type="number" class="intervention-month" placeholder="Месяц" min="0" max="36" value="0" />
+    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">✕</button>
+  `;
+  
+  container.appendChild(row);
+}
+
+function updateBudgetSuggestion(select) {
+  const option = select.selectedOptions[0];
+  const budgetInput = select.parentElement.querySelector(".intervention-budget");
+  if (option && option.dataset.cost) {
+    budgetInput.value = option.dataset.cost;
+  }
+}
+
+async function runScenario() {
+  const name = document.getElementById("scenario-name").value || "Сценарий";
+  const horizon = parseInt(document.getElementById("scenario-horizon").value) || 12;
+  
+  const interventions = [];
+  document.querySelectorAll(".intervention-row").forEach(row => {
+    const code = row.querySelector(".intervention-code").value;
+    const budget = parseInt(row.querySelector(".intervention-budget").value) || 0;
+    const month = parseInt(row.querySelector(".intervention-month").value) || 0;
+    
+    if (code && budget > 0) {
+      interventions.push({ code, budget_rub: budget, start_month: month });
+    }
+  });
+  
+  if (interventions.length === 0) {
+    alert("Добавьте хотя бы одно вмешательство");
+    return;
+  }
+  
+  const resultsDiv = document.getElementById("scenario-results");
+  resultsDiv.innerHTML = "<p>Запуск симуляции...</p>";
+  resultsDiv.hidden = false;
+  
+  try {
+    const slug = currentCity.slug;
+    const response = await fetch(`/api/city/${slug}/scenario`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenario_name: name,
+        horizon_months: horizon,
+        interventions,
+      }),
+    });
+    
+    if (!response.ok) throw new Error(await response.text());
+    
+    const data = await response.json();
+    displayScenarioResults(data.scenario);
+  } catch (e) {
+    resultsDiv.innerHTML = `<p style="color: var(--danger)">Ошибка: ${e.message}</p>`;
+  }
+}
+
+function displayScenarioResults(scenario) {
+  const resultsDiv = document.getElementById("scenario-results");
+  
+  const deltaText = Object.entries(scenario.delta_vectors)
+    .map(([k, v]) => `${k}: ${v > 0 ? '+' : ''}${(v*100).toFixed(1)}%`)
+    .join(", ");
+  
+  const timelineSummary = scenario.timeline
+    .filter((_, i) => i % 3 === 0 || i === scenario.timeline.length - 1)
+    .map(t => `Месяц ${t.month}: ${Object.entries(t.vectors).map(([k,v]) => `${k}: ${(v*100).toFixed(0)}%`).join(", ")}`)
+    .join("\n");
+  
+  resultsDiv.innerHTML = `
+    <h3>Результаты: ${scenario.scenario_name}</h3>
+    <p><strong>Общий бюджет:</strong> ${(scenario.total_cost_rub / 1000000).toFixed(1)} млн ₽</p>
+    <p><strong>Уверенность:</strong> ${scenario.confidence === 'high' ? 'Высокая ✓' : scenario.confidence === 'medium' ? 'Средняя' : 'Низкая'}</p>
+    <p><strong>Изменения:</strong> ${deltaText}</p>
+    <h4>Динамика по месяцам:</h4>
+    <pre>${timelineSummary}</pre>
+    ${scenario.notes.length > 0 ? `<p><strong>Заметки:</strong> ${scenario.notes.join("; ")}</p>` : ""}
+  `;
+}
+
+async function generateActions() {
+  const problemsText = document.getElementById("problems-text").value;
+  const includeMetrics = document.getElementById("include-metrics").checked;
+  
+  const problems = problemsText.split("\n").map(s => s.trim()).filter(s => s.length > 0);
+  
+  if (problems.length === 0) {
+    alert("Введите хотя бы одну проблему");
+    return;
+  }
+  
+  const resultsDiv = document.getElementById("actions-results");
+  resultsDiv.innerHTML = "<p>Генерация плана действий...</p>";
+  resultsDiv.hidden = false;
+  
+  try {
+    const slug = currentCity.slug;
+    const response = await fetch(`/api/city/${slug}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        problems,
+        include_metric_alerts: includeMetrics,
+      }),
+    });
+    
+    if (!response.ok) throw new Error(await response.text());
+    
+    const data = await response.json();
+    displayActionPlan(data.plan);
+  } catch (e) {
+    resultsDiv.innerHTML = `<p style="color: var(--danger)">Ошибка: ${e.message}</p>`;
+  }
+}
+
+function displayActionPlan(plan) {
+  const resultsDiv = document.getElementById("actions-results");
+  
+  const actionsHtml = plan.actions.map(a => `
+    <div style="padding: 12px; margin: 8px 0; background: rgba(197,160,89,0.05); border-left: 3px solid var(--gold); border-radius: 6px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <strong style="color: var(--gold-light)">${a.title}</strong>
+        <span style="font-size:0.8rem; padding: 2px 8px; border-radius: 4px; background: ${a.priority === 'critical' ? 'rgba(224,91,91,0.2)' : a.priority === 'high' ? 'rgba(232,168,95,0.2)' : 'rgba(139,155,180,0.2)'}">
+          ${a.priority === 'critical' ? '⚡ Критично' : a.priority === 'high' ? '❗ Важно' : '📋 План'}
+        </span>
+      </div>
+      <p style="margin: 4px 0; font-size: 0.9rem; color: var(--muted);">${a.description}</p>
+      <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Ответственный:</strong> ${a.responsible.role}</p>
+      <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Срок:</strong> ${a.deadline_days} дн.</p>
+      <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Результат:</strong> ${a.expected_outcome}</p>
+    </div>
+  `).join("");
+  
+  resultsDiv.innerHTML = `
+    <h3>План действий для ${plan.city}</h3>
+    <p><strong>Резюме:</strong> ${plan.summary}</p>
+    ${plan.total_estimated_cost_rub > 0 ? `<p><strong>Оценка стоимости:</strong> ${(plan.total_estimated_cost_rub / 1000000).toFixed(1)} млн ₽</p>` : ""}
+    <hr style="border: none; border-top: 1px solid rgba(197,160,89,0.15); margin: 16px 0;" />
+    ${actionsHtml}
+  `;
+}
+
 init();
