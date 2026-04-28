@@ -348,6 +348,88 @@ async def insert_post(city_id: int, payload: Dict[str, Any]) -> Optional[int]:
         return None
 
 
+async def list_topics_for_deputy(
+    city_id: int, deputy_id: int, *, status: Optional[str] = None, limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """Темы, где деп. id содержится в JSONB-массиве assignees.
+
+    Используем оператор @> с JSON-массивом из одного элемента —
+    он покрывается стандартным GIN-индексом по jsonb (если будет создан),
+    а на маленьких объёмах работает sequential scan'ом без проблем.
+    """
+    pool = get_pool()
+    if pool is None:
+        return []
+    sql = """
+        SELECT id, title, description, priority, target_tone, key_messages,
+               talking_points, target_audience, assignees, required_posts,
+               completed_posts, status, source, deadline, created_at
+        FROM deputy_topics
+        WHERE city_id = $1 AND assignees @> $2::jsonb
+    """
+    params: List[Any] = [city_id, json.dumps([int(deputy_id)])]
+    if status is not None:
+        sql += " AND status = $3"
+        params.append(status)
+    sql += " ORDER BY deadline ASC LIMIT $%d" % (len(params) + 1,)
+    params.append(int(limit))
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "list_topics_for_deputy failed for city %s dep %s",
+            city_id, deputy_id, exc_info=False,
+        )
+        return []
+    return [_topic_row_to_dict(r) for r in rows]
+
+
+async def list_posts_for_deputy(
+    city_id: int, deputy_id: int, limit: int = 50,
+) -> List[Dict[str, Any]]:
+    pool = get_pool()
+    if pool is None:
+        return []
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT p.id, p.topic_id, p.platform, p.url, p.content,
+                       p.published_at, p.views, p.likes, p.comments, p.reposts,
+                       t.title AS topic_title
+                FROM deputy_posts p
+                LEFT JOIN deputy_topics t ON t.id = p.topic_id
+                WHERE p.city_id = $1 AND p.deputy_id = $2
+                ORDER BY p.published_at DESC
+                LIMIT $3
+                """,
+                city_id, int(deputy_id), int(limit),
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "list_posts_for_deputy failed for city %s dep %s",
+            city_id, deputy_id, exc_info=False,
+        )
+        return []
+    return [
+        {
+            "id": r["id"],
+            "topic_id": r["topic_id"],
+            "topic_title": r["topic_title"],
+            "platform": r["platform"],
+            "url": r["url"],
+            "content": r["content"],
+            "published_at": r["published_at"].isoformat() if r["published_at"] else None,
+            "views": r["views"],
+            "likes": r["likes"],
+            "comments": r["comments"],
+            "reposts": r["reposts"],
+        }
+        for r in rows
+    ]
+
+
 async def list_posts_for_topic(
     city_id: int, topic_id: int, limit: int = 100,
 ) -> List[Dict[str, Any]]:

@@ -117,14 +117,15 @@
       const li = document.createElement("li");
       const sectors = (d.sectors || []).join(", ") || "—";
       li.innerHTML = `
-        <div class="user-row">
+        <button type="button" class="user-row dep-card-btn" data-dep-profile="${d.id}" title="Открыть карточку">
           <strong>${escapeHtml(d.name)}</strong>
           <span class="muted small" style="margin-left:0.5rem;">${escapeHtml(d.role)} · ${escapeHtml(d.district || "—")} · ${escapeHtml(d.party || "—")}</span>
           <span class="muted small" style="display:block;">Сектора: ${escapeHtml(sectors)}</span>
-        </div>
+        </button>
         <button type="button" class="admin-close-user" data-dep-id="${d.id}" title="Удалить">🗑️</button>
       `;
       li.querySelector("button[data-dep-id]").addEventListener("click", () => deleteDeputy(d.id));
+      li.querySelector("button[data-dep-profile]").addEventListener("click", () => openDeputyCard(d.id));
       ul.appendChild(li);
     }
   }
@@ -212,6 +213,137 @@
       renderTopicDetail(data.topic, data.posts || []);
     } catch (e) {
       alert("Не удалось открыть тему: " + e.message);
+    }
+  }
+
+  // -------------------------------------------- Deputy profile card
+
+  async function openDeputyCard(deputyId) {
+    const card = $("dep-card");
+    const errorBox = $("dep-card-error");
+    errorBox.hidden = true;
+    errorBox.textContent = "";
+    // Заполняем заглушками пока грузим
+    $("dep-card-title").textContent = "Загрузка…";
+    $("dep-card-eyebrow").textContent = "";
+    $("dep-card-sub").textContent = "";
+    $("dep-card-stats").innerHTML = "";
+    $("dep-card-topics").innerHTML = "";
+    $("dep-card-posts").innerHTML = "";
+    $("dep-card-topics-empty").hidden = true;
+    $("dep-card-posts-empty").hidden = true;
+    card.hidden = false;
+    document.body.style.overflow = "hidden";
+
+    try {
+      const data = await apiGet(`/deputies/${deputyId}/profile`);
+      renderDeputyCard(data);
+    } catch (e) {
+      errorBox.textContent = `Не удалось загрузить карточку: ${e.message}`;
+      errorBox.hidden = false;
+    }
+  }
+
+  function closeDeputyCard() {
+    $("dep-card").hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  function renderDeputyCard(data) {
+    const dep = data.deputy || {};
+    const stats = data.stats || {};
+    const topics = data.active_topics || [];
+    const posts = data.recent_posts || [];
+
+    const roleLabel = ({
+      speaker: "Спикер Совета",
+      sector_lead: "Ведущий по сектору",
+      district_rep: "Депутат округа",
+      support: "Поддержка",
+      neutral: "Нейтральный",
+    })[dep.role] || dep.role;
+
+    $("dep-card-eyebrow").textContent = `${roleLabel} · ${dep.district || "—"}`;
+    $("dep-card-title").textContent = dep.name || "Депутат";
+    const sectors = (dep.sectors || []).join(", ") || "—";
+    $("dep-card-sub").textContent = `Партия: ${dep.party || "—"} · Секторы: ${sectors}`;
+
+    // Stats grid
+    const statsEl = $("dep-card-stats");
+    const completion = stats.completion_pct == null
+      ? "—"
+      : `${stats.completion_pct.toFixed(0)}%`;
+    const fmtN = (v) => (v == null ? "—" : v.toLocaleString("ru-RU"));
+    statsEl.innerHTML = `
+      <div class="dep-stat"><div class="dep-stat-value">${stats.active_topics_count || 0}</div><div class="dep-stat-label">Активные темы</div></div>
+      <div class="dep-stat"><div class="dep-stat-value">${completion}</div><div class="dep-stat-label">План закрыт</div></div>
+      <div class="dep-stat"><div class="dep-stat-value">${stats.total_posts || 0}</div><div class="dep-stat-label">Постов всего</div></div>
+      <div class="dep-stat"><div class="dep-stat-value">${fmtN(stats.total_views)}</div><div class="dep-stat-label">Просмотры</div></div>
+      <div class="dep-stat"><div class="dep-stat-value">${fmtN(stats.total_likes)}</div><div class="dep-stat-label">Лайки</div></div>
+      <div class="dep-stat"><div class="dep-stat-value">${fmtN(stats.total_comments)}</div><div class="dep-stat-label">Комментарии</div></div>
+    `;
+
+    // Active topics
+    const topicsUl = $("dep-card-topics");
+    topicsUl.innerHTML = "";
+    if (topics.length === 0) {
+      $("dep-card-topics-empty").hidden = false;
+    } else {
+      $("dep-card-topics-empty").hidden = true;
+      for (const t of topics) {
+        const li = document.createElement("li");
+        const req = t.required_posts || 0;
+        const done = t.completed_posts || 0;
+        const pct = req > 0 ? Math.min(100, Math.round((100 * done) / req)) : 0;
+        li.innerHTML = `
+          <div class="dep-topic-row">
+            <span class="autogen-priority autogen-pri-${escapeHtml(t.priority || "medium")}">${escapeHtml(prioLabel(t.priority))}</span>
+            <span class="dep-topic-title">${escapeHtml(t.title)}</span>
+          </div>
+          <div class="dep-topic-progress">
+            <div class="dep-progress-bar"><div class="dep-progress-fill" style="width:${pct}%"></div></div>
+            <span class="muted small">${done} / ${req} постов · до ${formatDate(t.deadline)}</span>
+          </div>
+        `;
+        topicsUl.appendChild(li);
+      }
+    }
+
+    // Recent posts
+    const postsUl = $("dep-card-posts");
+    postsUl.innerHTML = "";
+    if (posts.length === 0) {
+      $("dep-card-posts-empty").hidden = false;
+    } else {
+      $("dep-card-posts-empty").hidden = true;
+      for (const p of posts.slice(0, 10)) {
+        const li = document.createElement("li");
+        const link = p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">${escapeHtml(p.platform || "пост")}</a>` : escapeHtml(p.platform || "пост");
+        li.innerHTML = `
+          <div class="dep-post-row">
+            <span class="dep-post-platform">${link}</span>
+            <span class="muted small">${formatDate(p.published_at)}</span>
+          </div>
+          <div class="dep-post-topic muted small">${escapeHtml(p.topic_title || "")}</div>
+          <div class="dep-post-engagement muted small">
+            👁 ${p.views || 0} · ❤ ${p.likes || 0} · 💬 ${p.comments || 0} · 🔁 ${p.reposts || 0}
+          </div>
+        `;
+        postsUl.appendChild(li);
+      }
+    }
+  }
+
+  function prioLabel(p) {
+    return ({ critical: "⚡ Критично", high: "❗ Важно", medium: "📋 План", low: "🗒 Отложено" })[p] || p || "—";
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
+    } catch (_) {
+      return iso;
     }
   }
 
@@ -531,6 +663,12 @@
     $("autogen-close").addEventListener("click", closeAutogen);
     $("autogen-cancel").addEventListener("click", closeAutogen);
     $("autogen-confirm").addEventListener("click", confirmAutogen);
+    document.querySelectorAll('[data-card-close]').forEach((el) =>
+      el.addEventListener("click", closeDeputyCard)
+    );
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !$("dep-card").hidden) closeDeputyCard();
+    });
     $("dep-new-btn").addEventListener("click", () => { $("dep-form-details").open = true; });
     $("td-close").addEventListener("click", () => { $("topic-detail-card").hidden = true; });
     $("td-auto-assign").addEventListener("click", autoAssign);
