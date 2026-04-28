@@ -215,6 +215,132 @@
     }
   }
 
+  // -------------------------------------------- Auto-generation flow
+
+  state.autogenCandidates = [];
+
+  async function openAutogen() {
+    const panel = $("autogen-panel");
+    const list = $("autogen-list");
+    const meta = $("autogen-meta");
+    const empty = $("autogen-empty");
+    const actions = $("autogen-actions");
+    const errorBox = $("autogen-error");
+    panel.hidden = false;
+    empty.hidden = true;
+    actions.hidden = true;
+    errorBox.hidden = true;
+    list.innerHTML = "";
+    meta.textContent = "Сканируем метрики и жалобы…";
+    state.autogenCandidates = [];
+
+    try {
+      const data = await apiPost("/deputy-topics/auto-generate", {
+        dry_run: true,
+        hours: 24,
+        deadline_days: 5,
+      });
+      const candidates = data.candidates || [];
+      state.autogenCandidates = candidates;
+      const sigs = data.found_signals || {};
+      meta.textContent =
+        `Окно: 24 часа · Жалоб в окне: ${sigs.news_items_in_window ?? 0}` +
+        ` · Метрики: ${sigs.metrics_present ? "есть" : "нет"}`;
+
+      if (candidates.length === 0) {
+        empty.hidden = false;
+        return;
+      }
+      renderAutogenList(candidates);
+      $("autogen-confirm-count").textContent = String(candidates.length);
+      actions.hidden = false;
+    } catch (e) {
+      errorBox.textContent = `Не удалось получить кандидатов: ${e.message}`;
+      errorBox.hidden = false;
+    }
+  }
+
+  function renderAutogenList(candidates) {
+    const list = $("autogen-list");
+    list.innerHTML = "";
+    for (const c of candidates) {
+      const li = document.createElement("li");
+      li.className = "autogen-item";
+      const sectors = (c.target_sectors || []).map(esc).join(", ") || "—";
+      const tps = (c.talking_points || []).slice(0, 3)
+        .map((t) => `<li>${esc(t)}</li>`).join("");
+      li.innerHTML = `
+        <div class="autogen-item-head">
+          <span class="autogen-priority autogen-pri-${esc(c.priority)}">${esc(priorityLabel(c.priority))}</span>
+          <span class="autogen-source">${esc(sourceLabel(c.source))}</span>
+        </div>
+        <div class="autogen-title">${esc(c.title)}</div>
+        <div class="autogen-desc">${esc(c.description || "")}</div>
+        <div class="autogen-sectors muted small">Секторы: ${sectors}</div>
+        ${tps ? `<ul class="autogen-tps muted small">${tps}</ul>` : ""}
+      `;
+      list.appendChild(li);
+    }
+  }
+
+  function priorityLabel(p) {
+    return ({ critical: "⚡ Критично", high: "❗ Важно", medium: "📋 План", low: "🗒 Отложено" })[p] || p;
+  }
+
+  function sourceLabel(s) {
+    if (s === "auto_metrics")    return "Из метрик";
+    if (s === "auto_complaints") return "Из жалоб";
+    return s || "—";
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
+
+  function closeAutogen() {
+    $("autogen-panel").hidden = true;
+    $("autogen-list").innerHTML = "";
+    state.autogenCandidates = [];
+  }
+
+  async function confirmAutogen() {
+    const errorBox = $("autogen-error");
+    const confirmBtn = $("autogen-confirm");
+    errorBox.hidden = true;
+    confirmBtn.disabled = true;
+    try {
+      const data = await apiPost("/deputy-topics/auto-generate", {
+        dry_run: false,
+        hours: 24,
+        deadline_days: 5,
+      });
+      const created = data.created || [];
+      const dup = data.skipped_duplicate || 0;
+      closeAutogen();
+      await loadAll();
+      const msg = `Создано тем: ${created.length}` + (dup ? ` · пропущено дубликатов: ${dup}` : "");
+      // Показываем неблокирующий тост
+      flashStatus(msg);
+    } catch (e) {
+      errorBox.textContent = `Не удалось записать темы: ${e.message}`;
+      errorBox.hidden = false;
+    } finally {
+      confirmBtn.disabled = false;
+    }
+  }
+
+  function flashStatus(msg) {
+    const el = $("dep-meta");
+    if (!el) return;
+    const prev = el.textContent;
+    el.textContent = `✓ ${msg}`;
+    setTimeout(() => { el.textContent = prev; }, 4000);
+  }
+
+  // -------------------------------------------- Manual topic creation
+
   async function createTopic(ev) {
     ev.preventDefault();
     const days = parseInt($("t-deadline-days").value, 10) || 3;
@@ -401,6 +527,10 @@
     $("topic-form").addEventListener("submit", createTopic);
     $("dep-form").addEventListener("submit", createDeputy);
     $("topic-new-btn").addEventListener("click", () => { $("topic-form-details").open = true; });
+    $("topic-autogen-btn").addEventListener("click", openAutogen);
+    $("autogen-close").addEventListener("click", closeAutogen);
+    $("autogen-cancel").addEventListener("click", closeAutogen);
+    $("autogen-confirm").addEventListener("click", confirmAutogen);
     $("dep-new-btn").addEventListener("click", () => { $("dep-form-details").open = true; });
     $("td-close").addEventListener("click", () => { $("topic-detail-card").hidden = true; });
     $("td-auto-assign").addEventListener("click", autoAssign);

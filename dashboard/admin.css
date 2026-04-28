@@ -257,3 +257,118 @@
   .user-timeline .status { text-align: right; }
   .admin-link-back { font-size: 0.8rem; padding: 4px 10px; }
 }
+
+/* ------------------ AUTO-GENERATION OF TOPICS ------------------ */
+.autogen-panel {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem 1.1rem;
+  background: rgba(10, 22, 40, 0.55);
+  border: 1px solid rgba(197, 160, 89, 0.22);
+  border-radius: 12px;
+  animation: fade-in 0.18s ease both;
+}
+.autogen-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.autogen-head h3 {
+  margin: 0;
+  color: var(--gold-light);
+  font-family: "Playfair Display", serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.autogen-close {
+  width: 28px; height: 28px;
+  background: transparent;
+  border: 1px solid rgba(197, 160, 89, 0.22);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+.autogen-close:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+  background: rgba(212, 175, 55, 0.08);
+}
+.autogen-meta { margin-bottom: 0.6rem; }
+.autogen-list {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+.autogen-item {
+  padding: 0.7rem 0.85rem;
+  background: rgba(197, 160, 89, 0.05);
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+}
+.autogen-item-head {
+  display: flex; gap: 0.5rem; align-items: center;
+  margin-bottom: 0.3rem;
+}
+.autogen-priority {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.autogen-pri-critical { background: rgba(224, 91, 91, 0.18); color: #FFB0B0; }
+.autogen-pri-high     { background: rgba(232, 168, 95, 0.18); color: #F2C68A; }
+.autogen-pri-medium   { background: rgba(139, 155, 180, 0.18); color: var(--muted); }
+.autogen-pri-low      { background: rgba(108, 165, 138, 0.15); color: #9FCDB1; }
+.autogen-source {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.autogen-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--gold-light);
+  margin-bottom: 0.25rem;
+}
+.autogen-desc {
+  font-size: 0.86rem;
+  color: rgba(232, 213, 163, 0.78);
+  line-height: 1.45;
+  margin-bottom: 0.35rem;
+}
+.autogen-sectors { margin-top: 0.2rem; }
+.autogen-tps {
+  margin: 0.35rem 0 0 1.1rem;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.autogen-actions {
+  display: flex; gap: 0.6rem; flex-wrap: wrap;
+  margin-top: 0.85rem;
+}
+.autogen-cancel {
+  background: transparent !important;
+  border: 1px solid rgba(197, 160, 89, 0.25) !important;
+  color: var(--muted) !important;
+}
+.autogen-cancel:hover {
+  color: var(--gold-light) !important;
+  border-color: var(--gold) !important;
+}
+.autogen-empty {
+  padding: 1rem;
+  text-align: center;
+  font-style: italic;
+}
+.autogen-error {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(224, 91, 91, 0.12);
+  border: 1px solid rgba(224, 91, 91, 0.4);
+  color: #FFB0B0;
+  font-size: 0.86rem;
+}

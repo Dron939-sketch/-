@@ -76,11 +76,32 @@
 
       <!-- TOPICS panel -->
       <section class="card wide" id="topics-panel">
-        <div class="card-eyebrow">
+        <div class="card-eyebrow" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
           <span>Активные темы</span>
-          <button type="button" class="rm-submit" id="topic-new-btn">+ Новая тема</button>
+          <span style="margin-left:auto;display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button type="button" class="rm-submit" id="topic-autogen-btn" title="Сгенерировать темы из метрик и жалоб">⚡ Из метрик</button>
+            <button type="button" class="rm-submit" id="topic-new-btn">+ Новая тема</button>
+          </span>
         </div>
         <ul class="stats-users-list" id="topics-list"></ul>
+
+        <!-- Auto-generation preview panel -->
+        <section class="autogen-panel" id="autogen-panel" hidden>
+          <header class="autogen-head">
+            <h3>Кандидаты на новые темы</h3>
+            <button type="button" class="autogen-close" id="autogen-close" aria-label="Закрыть">&times;</button>
+          </header>
+          <div class="autogen-meta muted small" id="autogen-meta"></div>
+          <ul class="autogen-list" id="autogen-list"></ul>
+          <div class="autogen-actions" id="autogen-actions" hidden>
+            <button type="button" class="rm-submit" id="autogen-confirm">Создать <span id="autogen-confirm-count">0</span> темы и распределить</button>
+            <button type="button" class="rm-submit autogen-cancel" id="autogen-cancel">Отмена</button>
+          </div>
+          <div class="autogen-empty muted" id="autogen-empty" hidden>
+            На текущий момент сигналов для генерации тем нет — метрики в норме, всплесков жалоб не зафиксировано.
+          </div>
+          <div class="autogen-error" id="autogen-error" hidden></div>
+        </section>
 
         <details id="topic-form-details" style="margin-top:1rem;">
           <summary style="cursor:pointer;">Форма создания темы</summary>
