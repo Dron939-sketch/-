@@ -14,6 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css?v=7" />
   <link rel="stylesheet" href="/copilot.css?v=4" />
+  <link rel="stylesheet" href="/role_picker.css?v=1" />
 </head>
 <body>
   <header class="topbar">
@@ -32,13 +33,18 @@
     </div>
 
     <div class="topbar-right">
-      <a class="admin-link" id="deputies-link" href="/deputies.html" hidden title="Повестка депутатов">🏛️ Депутаты</a>
-      <a class="admin-link" id="admin-link" href="/admin.html" hidden title="Админ-панель">⚙️ Админка</a>
-      <button type="button" class="nav-button" id="btn-scenario" title="Сценарное моделирование бюджетных решений">
+      <button type="button" class="role-chip" id="role-chip" title="Сменить роль">
+        <span class="rc-chip-emoji">👤</span>
+        <span class="rc-chip-label">Гость</span>
+        <span class="rc-chip-arrow">▾</span>
+      </button>
+      <a class="admin-link" id="deputies-link" href="/deputies.html" data-roles="mayor" hidden title="Повестка депутатов">🏛️ Депутаты</a>
+      <a class="admin-link" id="admin-link" href="/admin.html" data-roles="mayor" hidden title="Админ-панель">⚙️ Админка</a>
+      <button type="button" class="nav-button" id="btn-scenario" data-roles="mayor,vice" title="Сценарное моделирование бюджетных решений">
         <span class="nav-icon">🎯</span>
         <span class="nav-label">Сценарии</span>
       </button>
-      <button type="button" class="nav-button" id="btn-actions" title="Генератор конкретных поручений">
+      <button type="button" class="nav-button" id="btn-actions" data-roles="mayor,vice,deputy" title="Генератор конкретных поручений">
         <span class="nav-icon">✓</span>
         <span class="nav-label">Действия</span>
       </button>
@@ -66,7 +72,7 @@
 
   <main class="page">
     <!-- row 0: crisis early-warning strip (status + alert list) -->
-    <section class="card wide crisis-strip" id="crisis-strip" data-status="ok">
+    <section class="card wide crisis-strip" id="crisis-strip" data-status="ok" data-roles="mayor,vice,guest">
       <div class="crisis-head">
         <span class="crisis-status-dot" id="crisis-dot" aria-hidden="true"></span>
         <div class="crisis-heading">
@@ -79,7 +85,7 @@
     </section>
 
     <!-- row 0.5: city pulse — one-number temperature (0..100) -->
-    <section class="card wide city-pulse-card">
+    <section class="card wide city-pulse-card" data-roles="mayor,vice,deputy,guest">
       <div class="card-eyebrow">
         <span>Пульс города — единый индекс 0–100</span>
         <span class="muted small" id="pulse-meta"></span>
@@ -94,13 +100,13 @@
     </section>
 
     <!-- row 1: greeting + weather -->
-    <section class="card greeting">
+    <section class="card greeting" data-roles="mayor,vice,deputy,guest">
       <div class="greeting-eyebrow" id="today-date">—</div>
       <h1 class="greeting-title" id="greeting-title">Доброе утро</h1>
       <div class="greeting-sub" id="greeting-sub">Сводка по городу на сегодня</div>
     </section>
 
-    <section class="card weather">
+    <section class="card weather" data-roles="mayor,vice,deputy,guest">
       <div class="card-eyebrow">Погода в городе</div>
       <div class="weather-row">
         <div class="weather-main">
@@ -117,13 +123,13 @@
     </section>
 
     <!-- row 2: 4 key vectors -->
-    <section class="card wide vectors-card">
+    <section class="card wide vectors-card" data-roles="mayor,vice">
       <div class="card-eyebrow">Ключевые показатели города</div>
       <div class="vectors-grid" id="vectors-grid"></div>
     </section>
 
     <!-- row 3: agenda + loops -->
-    <section class="card agenda">
+    <section class="card agenda" data-roles="mayor,vice,deputy">
       <div class="card-eyebrow">
         <span class="badge badge-critical" id="agenda-badge">⚡ Приоритет дня</span>
       </div>
@@ -133,14 +139,14 @@
       <ul class="check-list" id="agenda-actions"></ul>
     </section>
 
-    <section class="card loops">
+    <section class="card loops" data-roles="mayor,vice">
       <div class="card-eyebrow">Активные петли</div>
       <ul class="loops-list" id="loops-list"></ul>
       <div class="loop-action muted small">Нажмите на петлю, чтобы увидеть точки разрыва.</div>
     </section>
 
     <!-- row 3.5: deputy coverage of social agenda (visible only after auth) -->
-    <section class="card wide deputy-coverage" id="deputy-coverage" hidden>
+    <section class="card wide deputy-coverage" id="deputy-coverage" data-roles="mayor" hidden>
       <div class="card-eyebrow">
         <span>Покрытие соц-повестки депутатами</span>
         <a class="muted small" href="/deputies.html" style="margin-left:auto;">К координатору →</a>
@@ -154,7 +160,7 @@
     </section>
 
     <!-- row 4: 9-element Meister graph -->
-    <section class="card wide model-graph">
+    <section class="card wide model-graph" data-roles="mayor">
       <div class="card-eyebrow">
         <span>Модель Мейстера — 9 элементов</span>
         <span class="muted small" id="graph-meta"></span>
@@ -169,7 +175,7 @@
     </section>
 
     <!-- row 4.5: butterfly simulator -->
-    <section class="card wide simulator">
+    <section class="card wide simulator" data-roles="mayor,vice">
       <div class="card-eyebrow">
         <span>Что если… — симулятор эффекта бабочки</span>
         <span class="muted small">Поверните ручку — увидите каскад по всему графу.</span>
@@ -194,7 +200,7 @@
     </section>
 
     <!-- row 5: trust + happiness -->
-    <section class="card wide trust-happy">
+    <section class="card wide trust-happy" data-roles="mayor,vice">
       <div class="card-eyebrow">Индекс доверия и счастья</div>
       <div class="trust-row">
         <div class="trust-bar">
@@ -222,7 +228,7 @@
     </section>
 
     <!-- row 5.5: media reputation guard -->
-    <section class="card wide reputation">
+    <section class="card wide reputation" data-roles="mayor,vice">
       <div class="card-eyebrow">
         <span>Репутация в медиа — 24 часа</span>
         <span class="muted small" id="reputation-meta"></span>
@@ -259,7 +265,7 @@
     </section>
 
     <!-- row 5.75: investment attractiveness -->
-    <section class="card wide investment">
+    <section class="card wide investment" data-roles="mayor,vice">
       <div class="card-eyebrow">
         <span>Инвестиционный климат</span>
         <span class="muted small" id="investment-meta"></span>
@@ -281,7 +287,7 @@
     </section>
 
     <!-- row 5.75: roadmap planner -->
-    <section class="card wide roadmap">
+    <section class="card wide roadmap" data-roles="mayor,vice">
       <div class="card-eyebrow">
         <span>Дорожная карта — квартальные вехи</span>
         <span class="muted small">Постройте план закрытия разрыва по одному из векторов.</span>
@@ -324,7 +330,7 @@
     </section>
 
     <!-- row 5.8: narrative engineering -->
-    <section class="card wide narratives">
+    <section class="card wide narratives" data-roles="mayor,vice">
       <div class="card-eyebrow">
         <span>Готовые формулировки — 3 варианта заявления</span>
         <span class="muted small">AI подготовит черновики для пресс-релиза, соцсетей и мобилизации.</span>
@@ -346,7 +352,7 @@
     </section>
 
     <!-- row 6: 3-month forecast -->
-    <section class="card wide forecast">
+    <section class="card wide forecast" data-roles="mayor,vice">
       <div class="card-eyebrow">Прогноз на 3 месяца (алгоритм Мейстера)</div>
       <p class="forecast-summary" id="forecast-summary">—</p>
       <div class="forecast-rec">
@@ -356,7 +362,7 @@
     </section>
 
     <!-- row 6.25: budget planner — vector allocation -->
-    <section class="card wide budget">
+    <section class="card wide budget" data-roles="mayor,vice">
       <div class="card-eyebrow">
         <span>Бюджетное планирование — распределение по векторам</span>
         <span class="muted small" id="budget-meta"></span>
@@ -377,7 +383,7 @@
     </section>
 
     <!-- row 6.21: happiness events library — что организовать под сезон -->
-    <section class="card wide happiness-events">
+    <section class="card wide happiness-events" data-roles="mayor,vice,deputy,guest">
       <div class="card-eyebrow">
         <span>События счастья — что организовать</span>
         <span class="muted small" id="events-meta"></span>
@@ -386,7 +392,7 @@
     </section>
 
     <!-- row 6.21b: Eisenhower matrix over tasks -->
-    <section class="card wide eisenhower">
+    <section class="card wide eisenhower" data-roles="mayor,vice,deputy">
       <div class="card-eyebrow">
         <span>Матрица Эйзенхауэра — что лично, что делегировать</span>
         <span class="muted small" id="eisenhower-meta"></span>
@@ -395,7 +401,7 @@
     </section>
 
     <!-- row 6.22: task manager — prioritised to-dos from agenda + crisis -->
-    <section class="card wide task-manager">
+    <section class="card wide task-manager" data-roles="mayor,vice,deputy">
       <div class="card-eyebrow">
         <span>Поручения — что надо сделать сегодня</span>
         <span class="muted small" id="tasks-meta"></span>
@@ -404,7 +410,7 @@
     </section>
 
     <!-- row 6.23: deep forecast — per-vector confidence bands -->
-    <section class="card wide deep-forecast">
+    <section class="card wide deep-forecast" data-roles="mayor">
       <div class="card-eyebrow">
         <span>Прогноз с интервалом уверенности — 7 / 30 / 90 дней</span>
         <span class="muted small" id="deep-forecast-meta"></span>
@@ -414,7 +420,7 @@
     </section>
 
     <!-- row 6.24: decision simulator — action templates with scenarios -->
-    <section class="card wide decisions">
+    <section class="card wide decisions" data-roles="mayor">
       <div class="card-eyebrow">
         <span>Симулятор решений — типовые ходы и их сценарии</span>
         <span class="muted small" id="decisions-meta"></span>
@@ -424,7 +430,7 @@
     </section>
 
     <!-- row 6.25: market gaps — business niches inferred from pain -->
-    <section class="card wide market-gaps">
+    <section class="card wide market-gaps" data-roles="mayor">
       <div class="card-eyebrow">
         <span>Рыночные ниши — куда звать бизнес</span>
         <span class="muted small" id="market-gaps-meta"></span>
@@ -434,7 +440,7 @@
     </section>
 
     <!-- row 6.2: topic intelligence — what people are talking about -->
-    <section class="card wide topics">
+    <section class="card wide topics" data-roles="mayor,vice,deputy">
       <div class="card-eyebrow">
         <span>О чём говорят в городе — топики за 7 дней</span>
         <span class="muted small" id="topics-meta"></span>
@@ -443,7 +449,7 @@
     </section>
 
     <!-- row 6.3: knowledge bank — case recommendations -->
-    <section class="card wide knowledge-bank">
+    <section class="card wide knowledge-bank" data-roles="mayor,vice,deputy,guest">
       <div class="card-eyebrow">
         <span>Кейсы-аналоги — что пробуют другие города</span>
         <span class="muted small" id="cases-meta"></span>
@@ -453,7 +459,7 @@
     </section>
 
     <!-- row 6.5: foresight — 5-year scenarios + megatrends -->
-    <section class="card wide foresight">
+    <section class="card wide foresight" data-roles="mayor">
       <div class="card-eyebrow">
         <span>Форсайт — 5 лет вперёд</span>
         <span class="muted small" id="foresight-meta"></span>
@@ -468,7 +474,7 @@
     </section>
 
     <!-- row 7: cross-city benchmark -->
-    <section class="card wide benchmark">
+    <section class="card wide benchmark" data-roles="mayor,vice">
       <div class="card-eyebrow">
         <span>Юго-восток Подмосковья — бенчмарк 6 городов</span>
         <span class="muted small" id="benchmark-meta"></span>
@@ -755,6 +761,7 @@
   <script
     src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"
     defer></script>
+  <script src="/role_picker.js?v=1" defer></script>
   <script src="/dashboard.js?v=7" defer></script>
   <!-- Голосовой Ко-пилот — universal widget на всех страницах -->
   <script src="/copilot.js?v=6" defer></script>
