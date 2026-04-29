@@ -198,6 +198,110 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Округ сегодня — приоритеты по секторам (на старте — demo-карточки)
+  // ---------------------------------------------------------------------------
+
+  function renderDistrictToday(dt) {
+    const items = (dt && dt.items) || [];
+    if (items.length === 0) return "";
+    const isDemo = dt.data_kind === "demo";
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">
+          🏘 Округ сегодня
+          ${isDemo ? `<span class="dc-fallback-tag">пример</span>` : ""}
+        </div>
+        <div class="dc-today-grid">
+          ${items.map((it) => `
+            <div class="dc-today-card">
+              <div class="dc-today-sector">${esc(it.sector || "")}</div>
+              <div class="dc-today-text">${esc(it.text || "")}</div>
+            </div>
+          `).join("")}
+        </div>
+        ${isDemo && dt.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(dt.hint)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Heatmap времени публикаций
+  // ---------------------------------------------------------------------------
+
+  function renderTimingHeatmap(timing) {
+    const h = timing && timing.heatmap;
+    if (!h || h.state !== "ok") return "";
+    const days  = h.days  || [];
+    const bands = h.bands || [];
+    // matrix — 28 ячеек 7×4. Найдём max avg_likes для нормализации цвета.
+    const matrix = h.matrix || [];
+    const maxAvg = matrix.reduce((m, c) => Math.max(m, c.avg_likes || 0), 0) || 1;
+    const cellAt = (dow, band) => matrix.find((c) => c.dow === dow && c.band === band);
+
+    const headerRow = `<th></th>` + days.map((d) => `<th>${esc(d)}</th>`).join("");
+    const rows = bands.map((band) => {
+      const cells = days.map((_, dow) => {
+        const c = cellAt(dow, band);
+        const intensity = c ? Math.min(1, (c.avg_likes || 0) / maxAvg) : 0;
+        const alpha = 0.08 + intensity * 0.55;
+        const labelTitle = c
+          ? `${days[dow]}, ${band}: ${c.count} постов, в среднем ${c.avg_likes} лайков`
+          : `${days[dow]}, ${band}: нет данных`;
+        return `<td title="${esc(labelTitle)}"
+                  style="background:rgba(94,168,255,${alpha.toFixed(2)})">
+                  ${c && c.count > 0 ? `<span class="dc-hm-likes">${c.avg_likes}</span>` : ""}
+                </td>`;
+      }).join("");
+      return `<tr><th>${esc(band)}</th>${cells}</tr>`;
+    }).join("");
+
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">📊 Когда лучше публиковать</div>
+        <table class="dc-heatmap">
+          <thead><tr>${headerRow}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${timing.tip ? `<div class="dc-heatmap-tip">${esc(timing.tip)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Поводы недели — календарь дат + сезонные идеи
+  // ---------------------------------------------------------------------------
+
+  function renderCalendar(events) {
+    if (!events || events.length === 0) return "";
+    const visible = events.slice(0, 5);
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">🗓 Поводы недели</div>
+        <div class="dc-cal-list">
+          ${visible.map((e) => {
+            const when = e.days_until == null
+              ? "сезонный"
+              : e.days_until === 0 ? "сегодня"
+              : e.days_until === 1 ? "завтра"
+              : `через ${e.days_until} дн`;
+            const dt = e.date_iso
+              ? new Date(e.date_iso).toLocaleDateString("ru-RU",
+                  { day: "numeric", month: "short" })
+              : "";
+            return `
+              <div class="dc-cal-card">
+                <div class="dc-cal-when">${esc(when)}${dt ? ` · ${esc(dt)}` : ""}</div>
+                <div class="dc-cal-title">${esc(e.title || "")}</div>
+                <div class="dc-cal-hint">${esc(e.hint || "")}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
   // Main
   // ---------------------------------------------------------------------------
 
@@ -232,7 +336,10 @@
     hero.innerHTML = `
       ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
+      ${renderDistrictToday(data.district_today || {})}
       ${renderCitizensView(data.audit || {}, data.archetype || {})}
+      ${renderTimingHeatmap(data.timing || {})}
+      ${renderCalendar(data.calendar || [])}
       ${renderRecommendations(data.audit || {})}
       ${renderPlan(data.plan || {}, data.archetype || {})}
     `;

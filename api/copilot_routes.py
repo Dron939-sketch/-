@@ -899,8 +899,12 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     """Тяжёлый расчёт кабинета — выносим из роута для кэширования."""
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.vk_audit import audit_deputy
+    from analytics.vk_timing import build_timing_heatmap, heatmap_advice
     from config.archetypes import suggest_for_deputy
     from config.deputies import deputies_for_city
+    from config.district_calendar import (
+        relevance_for_district, upcoming_for,
+    )
 
     deputy = next(
         (d for d in deputies_for_city(city) if d.get("external_id") == external_id),
@@ -912,6 +916,15 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     archetype = suggest_for_deputy(deputy)
     audit = await audit_deputy(deputy)
     plan = await recommend_weekly_plan(deputy)
+
+    # Heatmap времени публикаций — на основе сырых постов из audit
+    raw_posts = audit.pop("_raw_posts", []) or []
+    timing_heatmap = build_timing_heatmap(raw_posts)
+    timing_tip = heatmap_advice(timing_heatmap)
+
+    # Поводы недели — фиксированные + город + сезонные на 14 дней вперёд
+    events = upcoming_for(days=14)
+    events = relevance_for_district(events, deputy.get("district"))
 
     # Composite rating 0..5: alignment / частота / engagement
     metrics = audit.get("metrics") or {}
@@ -958,6 +971,46 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
                 "engagement": round(rating_engage * 100),
             },
         },
+        "timing": {
+            "heatmap": timing_heatmap,
+            "tip":     timing_tip,
+        },
+        "calendar": events,
+        "district_today": _build_district_today(deputy),
+    }
+
+
+def _build_district_today(deputy: dict) -> dict:
+    """Стартовая раскладка «округ сегодня»: приоритеты по секторам.
+    Шаблонные кейсы — клиенту понятно, что это пример (data_kind="demo").
+    Когда появится реальный pipeline комментариев / жалоб с координатами,
+    заменим на data_kind="live" без изменения формы ответа.
+    """
+    sectors = list(deputy.get("sectors") or [])
+    district = deputy.get("district") or ""
+
+    # Шаблонные жалобы по сектору — конкретика в текстах
+    sector_examples = {
+        "ЖКХ":            "Жители просят проверить теплопункт — слышат стук в трубах с понедельника.",
+        "благоустройство": "Двор у дома 12 — ямы 6 месяцев, фото жителей закрепили в комментариях.",
+        "соцзащита":      "Многодетная семья просит помощь с местом в детском саду.",
+        "здравоохранение": "Запись к участковому — очередь на 3 недели, жалоба в чате округа.",
+        "молодёжь":       "Площадка для подростков заброшена, нужна инициатива.",
+        "образование":    "Школа №5 — родители про охрану на входе.",
+        "транспорт":      "Автобус 47 — расписание не выдерживается утром.",
+        "ТКО":            "Контейнеры переполнены к понедельнику — нужен второй вывоз.",
+    }
+    items = []
+    for s in sectors[:4]:
+        text = sector_examples.get(s)
+        if text:
+            items.append({"sector": s, "text": text})
+    return {
+        "data_kind": "demo",
+        "district":  district,
+        "items":     items,
+        "hint":      "Эти карточки — пример приоритетов по секторам округа. "
+                     "Когда подключим парсер комментариев, заменим на живые жалобы.",
     }
 
 

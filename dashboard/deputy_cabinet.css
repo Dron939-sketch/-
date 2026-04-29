@@ -278,6 +278,120 @@
 }
 .dc-copy:hover { filter: brightness(1.07); transform: translateY(-1px); }
 
+/* --- Округ сегодня --- */
+.dc-today-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.dc-today-card {
+  padding: 12px 14px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 0.35rem;
+}
+.dc-today-sector {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #5EA8FF;
+  font-weight: 800;
+}
+.dc-today-text {
+  font-size: 0.86rem;
+  color: #DBE9FF;
+  line-height: 1.45;
+}
+
+/* --- Heatmap времени публикаций --- */
+.dc-heatmap {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+  font-size: 0.78rem;
+  margin-top: 4px;
+}
+.dc-heatmap th {
+  font-weight: 700;
+  color: rgba(184, 212, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  text-align: center;
+  padding: 4px 0;
+}
+.dc-heatmap thead th { font-size: 0.72rem; }
+.dc-heatmap tbody th {
+  text-align: right;
+  padding-right: 8px;
+  color: #B8D4FF;
+  width: 60px;
+}
+.dc-heatmap td {
+  border-radius: 6px;
+  height: 36px;
+  text-align: center;
+  vertical-align: middle;
+  border: 1px solid rgba(94, 168, 255, 0.1);
+  transition: transform 0.12s, border-color 0.12s;
+}
+.dc-heatmap td:hover {
+  transform: scale(1.05);
+  border-color: rgba(94, 168, 255, 0.6);
+}
+.dc-hm-likes {
+  font-weight: 700;
+  color: #DBE9FF;
+  font-size: 0.78rem;
+}
+.dc-heatmap-tip {
+  margin-top: 8px;
+  font-size: 0.86rem;
+  color: rgba(184, 212, 255, 0.78);
+  background: rgba(94, 168, 255, 0.08);
+  border-left: 3px solid #5EA8FF;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+/* --- Календарь поводов --- */
+.dc-cal-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.dc-cal-card {
+  padding: 12px 14px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 0.3rem;
+  transition: transform 0.18s, border-color 0.18s;
+}
+.dc-cal-card:hover {
+  transform: translateY(-2px);
+  border-color: #5EA8FF;
+}
+.dc-cal-when {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #FFD89B;
+  font-weight: 800;
+}
+.dc-cal-title {
+  font-family: "Playfair Display", serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #DBE9FF;
+}
+.dc-cal-hint {
+  font-size: 0.82rem;
+  color: rgba(184, 212, 255, 0.7);
+  line-height: 1.45;
+}
+
 /* --- Action buttons in hero --- */
 .dc-actions {
   margin-top: 16px;
