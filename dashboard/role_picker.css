@@ -3,6 +3,11 @@
    Префикс .rc-* (Role Chooser).
    ============================================================================= */
 
+/* Глобальный фикс: hidden должен побеждать любые display:flex/inline-flex,
+   которые ставят .nav-button / .admin-link в style.css. Без этого
+   роль-фильтрация в data-roles не действует на кнопки шапки. */
+[hidden] { display: none !important; }
+
 /* --- Чип в topbar --- */
 .role-chip {
   display: inline-flex; align-items: center; gap: 6px;
