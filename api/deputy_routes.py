@@ -284,6 +284,127 @@ async def deputy_profile(
 
 
 # ---------------------------------------------------------------------------
+# Brand audit / Архетип / Контент-рекомендации
+# ---------------------------------------------------------------------------
+
+
+async def _get_deputy_or_404(city_id: int, deputy_id: int) -> Dict[str, Any]:
+    deputies = await q.list_deputies(city_id)
+    d = next((d for d in deputies if int(d["id"]) == int(deputy_id)), None)
+    if d is None:
+        raise HTTPException(status_code=404, detail="Депутат не найден.")
+    return d
+
+
+async def _build_city_context_for_content(city_name: str) -> Dict[str, Any]:
+    """Лёгкий контекст для контент-рекомендаций — top complaints, темы,
+    кризис. Чтобы пост-генератор не выдумывал."""
+    ctx: Dict[str, Any] = {}
+    try:
+        from api.routes import _build_agenda  # type: ignore
+        agenda = await _build_agenda({"name": city_name}, 0.0)
+        if agenda:
+            ctx["top_complaints"] = list(getattr(agenda, "top_complaints", []) or [])[:5]
+            ctx["top_praises"]    = list(getattr(agenda, "top_praises", []) or [])[:5]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from api.routes import city_crisis  # type: ignore
+        c = await city_crisis(city_name)
+        if isinstance(c, dict):
+            alerts = [
+                a.get("title") if isinstance(a, dict) else str(a)
+                for a in (c.get("alerts") or [])[:3]
+            ]
+            if alerts:
+                ctx["crisis"] = {
+                    "level":  c.get("level"),
+                    "alerts": alerts,
+                }
+    except Exception:  # noqa: BLE001
+        pass
+    return ctx
+
+
+@router.get("/deputies/{deputy_id}/audit")
+async def deputy_brand_audit(
+    name: str, deputy_id: int, _u: dict = Depends(require_user),
+) -> dict:
+    """Аудит VK-страницы депутата + сверка с архетипом + рекомендации."""
+    from analytics.vk_audit import audit_deputy
+
+    cfg = _resolve_city(name)
+    _require_pool()
+    cid = await _city_id_or_503(cfg["name"])
+    deputy = await _get_deputy_or_404(cid, deputy_id)
+    return {"city": cfg["name"], **(await audit_deputy(deputy))}
+
+
+@router.get("/deputies/{deputy_id}/archetype")
+async def deputy_archetype(
+    name: str, deputy_id: int, _u: dict = Depends(require_user),
+) -> dict:
+    """Подобрать архетип бренда для депутата без обращения к VK."""
+    from config.archetypes import suggest_for_deputy
+
+    cfg = _resolve_city(name)
+    _require_pool()
+    cid = await _city_id_or_503(cfg["name"])
+    deputy = await _get_deputy_or_404(cid, deputy_id)
+    a = suggest_for_deputy(deputy)
+    return {
+        "city":         cfg["name"],
+        "deputy":       deputy,
+        "archetype":    a.get("code"),
+        "name":         a.get("name"),
+        "short":        a.get("short"),
+        "voice":        a.get("voice"),
+        "do":           a.get("do"),
+        "dont":         a.get("dont"),
+        "sample_post":  a.get("sample_post"),
+    }
+
+
+class ContentPostIn(BaseModel):
+    request: str = Field(..., min_length=3, max_length=1500)
+
+
+@router.post("/deputies/{deputy_id}/content_post")
+async def deputy_content_post(
+    name: str, deputy_id: int,
+    payload: ContentPostIn,
+    _u: dict = Depends(require_role("admin", "editor")),
+) -> dict:
+    """Сгенерировать один пост по запросу (тема, проблема, событие)."""
+    from analytics.deputy_content import recommend_post
+
+    cfg = _resolve_city(name)
+    _require_pool()
+    cid = await _city_id_or_503(cfg["name"])
+    deputy = await _get_deputy_or_404(cid, deputy_id)
+    ctx = await _build_city_context_for_content(cfg["name"])
+    out = await recommend_post(deputy, payload.request, ctx)
+    return {"city": cfg["name"], "deputy_id": deputy_id, **out}
+
+
+@router.get("/deputies/{deputy_id}/content_plan")
+async def deputy_content_plan(
+    name: str, deputy_id: int,
+    _u: dict = Depends(require_role("admin", "editor")),
+) -> dict:
+    """Контент-план на неделю (5 постов в рамках архетипа)."""
+    from analytics.deputy_content import recommend_weekly_plan
+
+    cfg = _resolve_city(name)
+    _require_pool()
+    cid = await _city_id_or_503(cfg["name"])
+    deputy = await _get_deputy_or_404(cid, deputy_id)
+    ctx = await _build_city_context_for_content(cfg["name"])
+    out = await recommend_weekly_plan(deputy, ctx)
+    return {"city": cfg["name"], "deputy_id": deputy_id, **out}
+
+
+# ---------------------------------------------------------------------------
 # Routes — topics
 # ---------------------------------------------------------------------------
 
