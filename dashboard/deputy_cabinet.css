@@ -1437,24 +1437,29 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
   margin-top: 4px;
 }
 .dc-chip {
-  display: grid;
-  grid-template-columns: 28px 1fr;
+  display: grid !important;
+  grid-template-columns: 32px 1fr;
   gap: 10px;
   align-items: center;
-  padding: 10px 12px;
-  background: rgba(7, 20, 42, 0.55);
-  border: 1px solid rgba(94, 168, 255, 0.18);
+  padding: 10px 14px;
+  background: rgba(94, 168, 255, 0.08);
+  border: 1px solid rgba(94, 168, 255, 0.3);
   border-radius: 10px;
   text-align: left;
   color: #DBE9FF;
   font: inherit;
+  font-family: inherit;
   cursor: pointer;
-  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.25);
 }
 .dc-chip:hover {
   transform: translateY(-1px);
-  background: rgba(94, 168, 255, 0.12);
+  background: rgba(94, 168, 255, 0.18);
   border-color: #5EA8FF;
+  box-shadow: 0 6px 16px -4px rgba(94, 168, 255, 0.3);
 }
 .dc-chip-icon {
   width: 28px; height: 28px;
