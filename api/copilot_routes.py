@@ -898,6 +898,7 @@ async def copilot_deputy_cabinet(
 async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     """Тяжёлый расчёт кабинета — выносим из роута для кэширования."""
     from analytics.deputy_content import recommend_weekly_plan
+    from analytics.deputy_missions import build_weekly_missions
     from analytics.vk_audit import audit_deputy
     from analytics.vk_timing import build_timing_heatmap, heatmap_advice
     from config.archetypes import suggest_for_deputy
@@ -905,6 +906,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from config.district_calendar import (
         relevance_for_district, upcoming_for,
     )
+    from config.reply_templates import complaint_examples
 
     deputy = next(
         (d for d in deputies_for_city(city) if d.get("external_id") == external_id),
@@ -937,6 +939,16 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     rating_engage   = min(avg_likes / 50.0, 1.0)       # 50 лайков = max
     rating_value    = round((rating_align * 0.4 + rating_freq * 0.35
                              + rating_engage * 0.25) * 5, 1)
+
+    # Недельные миссии — derived из всего audit + timing
+    missions = build_weekly_missions(
+        audit, archetype,
+        timing={"heatmap": timing_heatmap},
+        rating_value=rating_value,
+    )
+
+    # Категории для шаблонов ответов (тексты ответов рендерятся on-demand)
+    complaint_cats = complaint_examples()
 
     name_parts = (deputy.get("name") or "").split(" ")
     first_name = name_parts[1] if len(name_parts) > 1 else deputy.get("name")
@@ -975,8 +987,10 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
             "heatmap": timing_heatmap,
             "tip":     timing_tip,
         },
-        "calendar": events,
-        "district_today": _build_district_today(deputy),
+        "calendar":         events,
+        "district_today":   _build_district_today(deputy),
+        "missions":         missions,
+        "reply_categories": complaint_cats,
     }
 
 
@@ -1258,6 +1272,37 @@ _FORMAT_BLUEPRINTS = {
         "callto": ["Партнёрская организация", "Местные СМИ — пресс-релиз за 2 дня"],
     },
 }
+
+
+class ReplyRenderIn(BaseModel):
+    deputy_id: str = Field(..., min_length=2, max_length=80)
+    category:  str = Field(..., min_length=2, max_length=40)
+
+
+@router.post("/reply/render")
+async def copilot_reply_render(payload: ReplyRenderIn) -> dict:
+    """Готовый ответ-шаблон в архетипе депутата на типовую жалобу.
+    Категории см. config.reply_templates.complaint_examples().
+    """
+    from config.archetypes import suggest_for_deputy
+    from config.deputies import deputies_for_city
+    from config.reply_templates import render_reply
+
+    deputy = next(
+        (d for d in deputies_for_city("Коломна") if d.get("external_id") == payload.deputy_id),
+        None,
+    )
+    if not deputy:
+        raise HTTPException(status_code=404, detail="Депутат не найден.")
+    archetype = suggest_for_deputy(deputy)
+    text = render_reply(payload.category, archetype)
+    if not text:
+        raise HTTPException(status_code=422, detail="Категория жалобы не распознана.")
+    return {
+        "category":  payload.category,
+        "archetype": archetype.get("name"),
+        "text":      text,
+    }
 
 
 @router.post("/event/scenario")
