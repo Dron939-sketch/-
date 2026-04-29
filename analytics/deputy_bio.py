@@ -65,8 +65,6 @@ def build_bio(
     parts.append(archetype_phrase)
     if profile and profile.get("about"):
         parts.append("О себе: «" + str(profile["about"])[:280] + "»")
-    elif profile and profile.get("status"):
-        parts.append("Статус в VK: «" + str(profile["status"])[:200] + "»")
 
     summary = " ".join(parts)
 
