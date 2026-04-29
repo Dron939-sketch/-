@@ -73,10 +73,11 @@ async def recommend_post(
     city_context: Optional[Dict[str, Any]] = None,
     *,
     client: Optional[DeepSeekClient] = None,
+    archetype_override: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Один пост по запросу. Возвращает {title, body, cta, archetype}.
     На сбой LLM — фолбэк на sample_post архетипа."""
-    archetype = suggest_for_deputy(deputy)
+    archetype = archetype_override or suggest_for_deputy(deputy)
     cli = client or DeepSeekClient()
     if not cli.enabled or not (request_text or "").strip():
         return _fallback_post(archetype, request_text, deputy)
@@ -109,9 +110,10 @@ async def recommend_weekly_plan(
     city_context: Optional[Dict[str, Any]] = None,
     *,
     client: Optional[DeepSeekClient] = None,
+    archetype_override: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Контент-план на неделю. Возвращает {week_of, items[5], archetype}."""
-    archetype = suggest_for_deputy(deputy)
+    archetype = archetype_override or suggest_for_deputy(deputy)
     cli = client or DeepSeekClient()
     week_of = _next_monday().isoformat()
 
