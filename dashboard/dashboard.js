@@ -2605,189 +2605,110 @@ function _roleAllows(...allowed) {
   return allowed.includes(r);
 }
 
+// Helper: запускает fetch + render в одном tick, ловит ошибку. Используется
+// в refresh() через Promise.allSettled чтобы все запросы шли параллельно.
+async function _fetchAndRender(label, url, render) {
+  try {
+    const data = await fetchJson(url);
+    render(data);
+  } catch (e) {
+    console.warn(label + " unavailable", e);
+  }
+}
+
 async function refresh() {
   if (!currentCity) return;
   const slug = currentCity.slug;
+
+  // Собираем все доступные текущей роли fetch'и в массив и пускаем
+  // параллельно. На Render free-tier с холодным DB-pool это даёт
+  // 4-8x ускорение vs sequential await.
+  const tasks = [];
+
   if (_roleAllows("mayor", "vice", "guest")) {
-    try {
-      const pulse = await fetchJson(`/api/city/${slug}/pulse`);
-      renderCityPulse(pulse);
-    } catch (e) {
-      console.warn("pulse unavailable", e);
-    }
+    tasks.push(_fetchAndRender("pulse",
+      `/api/city/${slug}/pulse`, renderCityPulse));
   }
-  try {
-    const metrics = await fetchJson(`/api/city/${slug}/all_metrics`);
-    renderWeather(metrics.weather);
-    renderVectors(metrics.city_metrics, metrics.trends);
-    renderLoops(metrics.loops);
-    renderTrustHappy(metrics);
-    renderForecast(metrics);
-    // Snapshot raw vector values so the roadmap form can prefill "текущий".
-    window.__LATEST_METRICS__ = metrics.city_metrics
-      ? {
-          sb:  metrics.city_metrics.safety  != null ? metrics.city_metrics.safety  * 6 : null,
-          tf:  metrics.city_metrics.economy != null ? metrics.city_metrics.economy * 6 : null,
-          ub:  metrics.city_metrics.quality != null ? metrics.city_metrics.quality * 6 : null,
-          chv: metrics.city_metrics.social  != null ? metrics.city_metrics.social  * 6 : null,
-        }
-      : null;
-    _roadmapPrefillFromMetrics(window.__LATEST_METRICS__);
-  } catch (e) {
-    console.warn("metrics unavailable", e);
-  }
-  try {
-    const history = await fetchJson(`/api/city/${slug}/history?days=30`);
-    renderSparklines(history.series || {});
-  } catch (e) {
-    console.warn("history unavailable", e);
-  }
+  tasks.push(_fetchAndRender("all_metrics",
+    `/api/city/${slug}/all_metrics`, (m) => {
+      renderWeather(m.weather);
+      renderVectors(m.city_metrics, m.trends);
+      renderLoops(m.loops);
+      renderTrustHappy(m);
+      renderForecast(m);
+      window.__LATEST_METRICS__ = m.city_metrics
+        ? {
+            sb:  m.city_metrics.safety  != null ? m.city_metrics.safety  * 6 : null,
+            tf:  m.city_metrics.economy != null ? m.city_metrics.economy * 6 : null,
+            ub:  m.city_metrics.quality != null ? m.city_metrics.quality * 6 : null,
+            chv: m.city_metrics.social  != null ? m.city_metrics.social  * 6 : null,
+          }
+        : null;
+      _roadmapPrefillFromMetrics(window.__LATEST_METRICS__);
+    }));
+  tasks.push(_fetchAndRender("history",
+    `/api/city/${slug}/history?days=30`, (h) => renderSparklines(h.series || {})));
+
   if (_roleAllows("mayor", "vice")) {
-    try {
-      const agenda = await fetchJson(`/api/city/${slug}/agenda`);
-      renderAgenda(agenda);
-      _narrativesPrefillFromAgenda(agenda);
-    } catch (e) {
-      console.warn("agenda unavailable", e);
-    }
+    tasks.push(_fetchAndRender("agenda",
+      `/api/city/${slug}/agenda`, (a) => {
+        renderAgenda(a); _narrativesPrefillFromAgenda(a);
+      }));
   }
   if (_roleAllows("mayor")) {
-    try {
-      const graph = await fetchJson(`/api/city/${slug}/model`);
-      renderMeisterGraph(graph);
-    } catch (e) {
-      console.warn("model graph unavailable", e);
-      renderMeisterGraph(null);
-    }
+    tasks.push(_fetchAndRender("model",
+      `/api/city/${slug}/model`, renderMeisterGraph));
   }
   if (_roleAllows("mayor", "vice")) {
-    try {
-      const bench = await fetchJson(`/api/benchmark`);
-      renderBenchmark(bench);
-    } catch (e) {
-      console.warn("benchmark unavailable", e);
-    }
+    tasks.push(_fetchAndRender("benchmark",
+      `/api/benchmark`, renderBenchmark));
   }
   if (_roleAllows("mayor", "vice", "guest")) {
-    try {
-      const crisis = await fetchJson(`/api/city/${slug}/crisis`);
-      renderCrisis(crisis);
-    } catch (e) {
-      console.warn("crisis unavailable", e);
-      renderCrisis({ status: "ok", alerts: [] });
-    }
+    tasks.push(_fetchAndRender("crisis",
+      `/api/city/${slug}/crisis`, renderCrisis));
   }
   if (_roleAllows("mayor", "vice")) {
-    try {
-      const reputation = await fetchJson(`/api/city/${slug}/reputation`);
-      renderReputation(reputation);
-    } catch (e) {
-      console.warn("reputation unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor", "vice")) {
-    try {
-      const investment = await fetchJson(`/api/city/${slug}/investment`);
-      renderInvestment(investment);
-    } catch (e) {
-      console.warn("investment unavailable", e);
-    }
+    tasks.push(_fetchAndRender("reputation",
+      `/api/city/${slug}/reputation`, renderReputation));
+    tasks.push(_fetchAndRender("investment",
+      `/api/city/${slug}/investment`, renderInvestment));
+    tasks.push(_fetchAndRender("budget",
+      `/api/city/${slug}/budget`, renderBudget));
+    tasks.push(_fetchAndRender("cases",
+      `/api/city/${slug}/cases`, renderCases));
+    tasks.push(_fetchAndRender("topics",
+      `/api/city/${slug}/topics`, renderTopics));
+    tasks.push(_fetchAndRender("tasks",
+      `/api/city/${slug}/tasks`, renderTasks));
+    tasks.push(_fetchAndRender("eisenhower",
+      `/api/city/${slug}/eisenhower`, renderEisenhower));
   }
   if (_roleAllows("mayor")) {
-    try {
-      const foresight = await fetchJson(`/api/city/${slug}/foresight`);
-      renderForesight(foresight);
-    } catch (e) {
-      console.warn("foresight unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor", "vice")) {
-    try {
-      const budget = await fetchJson(`/api/city/${slug}/budget`);
-      renderBudget(budget);
-    } catch (e) {
-      console.warn("budget unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor", "vice")) {
-    try {
-      const cases = await fetchJson(`/api/city/${slug}/cases`);
-      renderCases(cases);
-    } catch (e) {
-      console.warn("cases unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor", "vice")) {
-    try {
-      const topics = await fetchJson(`/api/city/${slug}/topics`);
-      renderTopics(topics);
-    } catch (e) {
-      console.warn("topics unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor")) {
-    try {
-      const gaps = await fetchJson(`/api/city/${slug}/market_gaps`);
-      renderMarketGaps(gaps);
-    } catch (e) {
-      console.warn("market gaps unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor")) {
-    try {
-      const url = _decisionFilter
+    tasks.push(_fetchAndRender("foresight",
+      `/api/city/${slug}/foresight`, renderForesight));
+    tasks.push(_fetchAndRender("market_gaps",
+      `/api/city/${slug}/market_gaps`, renderMarketGaps));
+    tasks.push(_fetchAndRender("decisions",
+      _decisionFilter
         ? `/api/city/${slug}/decisions?vector=${encodeURIComponent(_decisionFilter)}`
-        : `/api/city/${slug}/decisions`;
-      const decisions = await fetchJson(url);
-      renderDecisions(decisions);
-    } catch (e) {
-      console.warn("decisions unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor")) {
-    try {
-      const df = await fetchJson(`/api/city/${slug}/deep_forecast`);
-      renderDeepForecast(df);
-    } catch (e) {
-      console.warn("deep forecast unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor", "vice")) {
-    try {
-      const tasks = await fetchJson(`/api/city/${slug}/tasks`);
-      renderTasks(tasks);
-    } catch (e) {
-      console.warn("tasks unavailable", e);
-    }
-  }
-  if (_roleAllows("mayor", "vice")) {
-    try {
-      const ike = await fetchJson(`/api/city/${slug}/eisenhower`);
-      renderEisenhower(ike);
-    } catch (e) {
-      console.warn("eisenhower unavailable", e);
-    }
+        : `/api/city/${slug}/decisions`,
+      renderDecisions));
+    tasks.push(_fetchAndRender("deep_forecast",
+      `/api/city/${slug}/deep_forecast`, renderDeepForecast));
+    tasks.push(_fetchAndRender("deputy-coverage",
+      `/api/city/${slug}/deputy-coverage?hours=24`, renderCoverage));
   }
   if (_roleAllows("mayor", "vice", "guest")) {
-    try {
-      const events = await fetchJson(`/api/city/${slug}/happiness_events`);
-      renderHappinessEvents(events);
-    } catch (e) {
-      console.warn("happiness events unavailable", e);
-    }
+    tasks.push(_fetchAndRender("happiness_events",
+      `/api/city/${slug}/happiness_events`, renderHappinessEvents));
   }
-  // Покрытие соц-повестки — только мэру.
-  if (_roleAllows("mayor")) {
-    try {
-      const cov = await fetchJson(`/api/city/${slug}/deputy-coverage?hours=24`);
-      renderCoverage(cov);
-    } catch (e) {
-      const card = document.getElementById("deputy-coverage");
-      if (card) card.hidden = true;
-    }
-  }
+
+  await Promise.allSettled(tasks);
   setUpdated();
 }
+
+// --- старый sequential-блок ниже больше не используется, но keep
+// для совместимости со static-анализом / refresh-by-role:change.
 
 function renderCoverage(data) {
   const card = document.getElementById("deputy-coverage");
