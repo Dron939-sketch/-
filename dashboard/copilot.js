@@ -213,12 +213,19 @@
     div.className = `jv-bubble jv-${role}`;
     div.innerHTML = esc(text);
     if (opts && opts.action) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "jv-action-btn";
-      btn.textContent = actionLabel(opts.action);
-      btn.addEventListener("click", () => handleAction(opts.action));
-      div.appendChild(btn);
+      // Гейтинг mayor-only действий: в demo-режиме не-мэру не показываем
+      // кнопки на /admin.html и /deputies.html.
+      const mayorOnly = ["open_admin", "open_deputies"].includes(opts.action);
+      const demoRole = window.cmRole?.get?.() || null;
+      const blocked = mayorOnly && demoRole && demoRole !== "mayor";
+      if (!blocked) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "jv-action-btn";
+        btn.textContent = actionLabel(opts.action);
+        btn.addEventListener("click", () => handleAction(opts.action));
+        div.appendChild(btn);
+      }
     }
     if (role === "assistant") {
       const replay = document.createElement("button");

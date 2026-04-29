@@ -2031,18 +2031,23 @@ async function submitRoadmap(event) {
 
 // -------------------------------------------------- Admin link toggle
 
-// Admin panel и /deputies.html — только для роли «мэр» в demo-режиме.
-// Если у пользователя реальный JWT с ролью admin/editor — тоже разрешаем
-// (старый поток сохраняется как backup для прода).
+// Admin panel и /deputies.html — строго только мэр в demo-режиме.
+// JWT-роль admin/editor — backup только если demo-роль не выбрана
+// (чтобы прод-сценарий с реальным логином ещё работал).
 function updateAdminLinkVisibility() {
   const demoRole = window.cmRole?.get?.() || null;
-  const isMayor = demoRole === "mayor";
   const realRole = currentUser && currentUser.role;
   const link = document.getElementById("admin-link");
-  if (link) link.hidden = !(isMayor || realRole === "admin");
   const deputies = document.getElementById("deputies-link");
-  if (deputies) {
-    deputies.hidden = !(isMayor || realRole === "admin" || realRole === "editor");
+  if (demoRole) {
+    // Demo-режим: только мэр видит обе ссылки, всем остальным скрыты.
+    const isMayor = demoRole === "mayor";
+    if (link)     link.hidden     = !isMayor;
+    if (deputies) deputies.hidden = !isMayor;
+  } else {
+    // Без demo-роли — fallback на JWT-роль (прод).
+    if (link)     link.hidden     = realRole !== "admin";
+    if (deputies) deputies.hidden = !(realRole === "admin" || realRole === "editor");
   }
 }
 document.addEventListener("role:change", updateAdminLinkVisibility);
