@@ -231,6 +231,202 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Алгоритм Мейстера для депутата — 4 вектора + прогноз 4 недели
+  // ---------------------------------------------------------------------------
+
+  function renderMeister(m) {
+    if (!m || !m.current) return "";
+    const cur = m.current;
+    return `
+      <div class="dc-block dc-meister-block">
+        <div class="dc-block-title">
+          🧮 Алгоритм Мейстера · личный
+          <span class="dc-meister-comp">${m.composite_now}/6 → ${m.composite_4w}/6
+            <span class="dc-meister-delta ${m.delta >= 0 ? 'up' : 'down'}">
+              ${m.delta >= 0 ? "+" : ""}${m.delta}
+            </span>
+          </span>
+        </div>
+        <div class="dc-meister-axes">
+          ${cur.map((v) => `
+            <div class="dc-meister-axis" title="${esc(v.what || '')}">
+              <div class="dc-meister-code" style="color:${esc(v.color)}">${esc(v.code)}</div>
+              <div class="dc-meister-bar">
+                <div class="dc-meister-bar-fill"
+                     style="width:${(v.value / 6 * 100).toFixed(1)}%; background:${esc(v.color)}"></div>
+              </div>
+              <div class="dc-meister-name">${esc(v.name)}</div>
+              <div class="dc-meister-value">${v.value}/6 <span class="muted">(${v.raw}${esc(v.unit || '')})</span></div>
+            </div>
+          `).join("")}
+        </div>
+        ${m.summary ? `<div class="dc-meister-summary">${esc(m.summary)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Виджет «Действия по проблеме» — карточки ситуаций + on-demand план
+  // ---------------------------------------------------------------------------
+
+  function renderActionsWidget(situations, deputyId) {
+    if (!situations || situations.length === 0) return "";
+    return `
+      <div class="dc-block dc-actions-block" data-deputy-id="${esc(deputyId || "")}">
+        <div class="dc-block-title">🧭 Действия — что делать в типовой ситуации</div>
+        <p class="dc-empty-sub">
+          Это для тебя лично, не для замов. Выбери ситуацию — получишь пошаговый план + контакты + жанры постов.
+        </p>
+        <div class="dc-act-grid">
+          ${situations.map((s) => `
+            <button type="button" class="dc-act-card" data-sit="${esc(s.code)}">
+              <div class="dc-act-emoji">${esc(s.emoji || "")}</div>
+              <div class="dc-act-label">${esc(s.label || "")}</div>
+              <div class="dc-act-hint">${esc(s.hint || "")}</div>
+            </button>
+          `).join("")}
+        </div>
+        <div class="dc-act-result" id="dc-act-result"></div>
+      </div>
+    `;
+  }
+
+  async function onActionClick(ev) {
+    const card = ev.target.closest(".dc-act-card");
+    if (!card) return;
+    const block = card.closest(".dc-actions-block");
+    const deputyId = block?.dataset.deputyId;
+    const situation = card.getAttribute("data-sit");
+    const result = document.getElementById("dc-act-result");
+    if (!deputyId || !situation || !result) return;
+    result.innerHTML = `<div class="dc-mod-loading">Собираю план…</div>`;
+    try {
+      const res = await fetch("/api/copilot/deputy/action-plan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deputy_id: deputyId, situation }),
+      });
+      if (!res.ok) {
+        result.innerHTML = `<div class="dc-empty-sub">Не получилось (${res.status}).</div>`;
+        return;
+      }
+      const data = await res.json();
+      result.innerHTML = `
+        <div class="dc-act-plan">
+          <div class="dc-act-plan-head">
+            <span class="dc-act-emoji">${esc(data.emoji || "")}</span>
+            <span class="dc-act-plan-label">${esc(data.label || "")}</span>
+          </div>
+          <ol class="dc-act-steps">
+            ${(data.steps || []).map((s) => `
+              <li>
+                <div class="dc-act-when">${esc(s.when || "")}</div>
+                <div class="dc-act-do">${esc(s.do || "")}</div>
+              </li>
+            `).join("")}
+          </ol>
+          <div class="dc-act-twocol">
+            ${data.media ? `
+              <div class="dc-act-block">
+                <div class="dc-act-blk-title">📷 Что снять</div>
+                <div>${esc(data.media)}</div>
+              </div>` : ""}
+            ${(data.contacts && data.contacts.length) ? `
+              <div class="dc-act-block">
+                <div class="dc-act-blk-title">📞 С кем связаться</div>
+                <ul class="dc-mod-list">
+                  ${data.contacts.map((c) => `<li>${esc(c)}</li>`).join("")}
+                </ul>
+              </div>` : ""}
+          </div>
+        </div>
+      `;
+    } catch (_) {
+      result.innerHTML = `<div class="dc-empty-sub">Сеть недоступна.</div>`;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Виджет «Сценарии» — what-if симулятор
+  // ---------------------------------------------------------------------------
+
+  function renderScenarioWidget(meta, initial) {
+    const params = (meta && meta.params) || {};
+    if (Object.keys(params).length === 0) return "";
+    const sliderRow = (key) => {
+      const p = params[key];
+      const val = (initial && initial[key] != null) ? initial[key] : p.default;
+      return `
+        <div class="dc-scn-row">
+          <label class="dc-scn-label">
+            <span>${esc(p.label)}</span>
+            <span class="dc-scn-val" id="dc-scn-val-${key}">${val}${esc(p.unit || "")}</span>
+          </label>
+          <input type="range" min="${p.min}" max="${p.max}" step="${p.step}"
+                 value="${val}" class="dc-scn-slider" data-key="${esc(key)}"
+                 data-unit="${esc(p.unit || "")}" />
+        </div>
+      `;
+    };
+    return `
+      <div class="dc-block dc-scn-block">
+        <div class="dc-block-title">📊 Сценарии — что если…</div>
+        <p class="dc-empty-sub">Крути ползунки — увидишь, как изменится твой рейтинг и 4 вектора.</p>
+        <div class="dc-scn-controls">
+          ${Object.keys(params).map(sliderRow).join("")}
+        </div>
+        <div class="dc-scn-output" id="dc-scn-output">
+          <div class="dc-scn-rating">
+            <span class="dc-scn-rating-num" id="dc-scn-rating">—</span>
+            <span class="dc-scn-rating-lbl">прогнозный рейтинг (0-5)</span>
+          </div>
+          <div class="dc-scn-vectors" id="dc-scn-vectors"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  let scenarioDebounce = null;
+  function onScenarioInput(ev) {
+    const sl = ev.target.closest(".dc-scn-slider");
+    if (!sl) return;
+    const key = sl.getAttribute("data-key");
+    const unit = sl.getAttribute("data-unit") || "";
+    const lbl = document.getElementById(`dc-scn-val-${key}`);
+    if (lbl) lbl.textContent = sl.value + unit;
+    // Debounce — крутят быстро, дёргаем после паузы
+    if (scenarioDebounce) clearTimeout(scenarioDebounce);
+    scenarioDebounce = setTimeout(runScenario, 180);
+  }
+
+  async function runScenario() {
+    const block = document.querySelector(".dc-scn-block");
+    if (!block) return;
+    const sliders = block.querySelectorAll(".dc-scn-slider");
+    const payload = {};
+    sliders.forEach((s) => { payload[s.getAttribute("data-key")] = parseFloat(s.value); });
+    try {
+      const res = await fetch("/api/copilot/deputy/scenario", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const ratingEl = document.getElementById("dc-scn-rating");
+      if (ratingEl) ratingEl.textContent = data.rating;
+      const vectorsEl = document.getElementById("dc-scn-vectors");
+      if (vectorsEl) {
+        vectorsEl.innerHTML = (data.vectors || []).map((v) => `
+          <div class="dc-scn-vec">
+            <div class="dc-scn-vec-code">${esc(v.code)}</div>
+            <div class="dc-scn-vec-name">${esc(v.name)}</div>
+            <div class="dc-scn-vec-val">${v.value}/6</div>
+          </div>
+        `).join("");
+      }
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
   // Идеи и пиар — top-3 на эту неделю
   // ---------------------------------------------------------------------------
 
@@ -596,8 +792,11 @@
       ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {})}
       ${renderPersona(data.persona || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
+      ${renderMeister(data.meister || {})}
       ${renderMissions(data.missions || [])}
       ${renderPrIdeas(data.pr_ideas || [])}
+      ${renderActionsWidget(data.action_situations || [], (data.deputy || {}).external_id)}
+      ${renderScenarioWidget(data.scenario_meta || {}, data.scenario_initial || {})}
       ${renderPersonalTasks(data.personal_tasks || [])}
       ${renderExpectations(data.expectations || [])}
       ${renderDistrictToday(data.district_today || {})}
@@ -613,6 +812,9 @@
     hero.addEventListener("click", onCopyClick);
     hero.addEventListener("click", onReplyClick);
     hero.addEventListener("click", onIdeaClick);
+    hero.addEventListener("click", onActionClick);
+    hero.addEventListener("input", onScenarioInput);
+    runScenario();
     document.getElementById("dc-create-content")?.addEventListener("click",
       () => openContentWizard(data.deputy?.external_id, data.archetype?.name));
     document.getElementById("dc-create-event")?.addEventListener("click",

@@ -278,6 +278,275 @@
 }
 .dc-copy:hover { filter: brightness(1.07); transform: translateY(-1px); }
 
+/* --- Алгоритм Мейстера --- */
+.dc-meister-block { margin-top: 18px; }
+.dc-meister-comp {
+  margin-left: auto;
+  font-family: "Manrope", sans-serif;
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: #B8D4FF;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.dc-meister-delta {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.dc-meister-delta.up   { background: rgba(79, 204, 117, 0.15); color: #B0F0C0; }
+.dc-meister-delta.down { background: rgba(255, 159, 74, 0.15); color: #FF9F4A; }
+.dc-meister-axes {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 6px;
+}
+.dc-meister-axis {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+}
+.dc-meister-code {
+  font-family: "Playfair Display", serif;
+  font-weight: 800;
+  font-size: 1rem;
+  text-align: center;
+}
+.dc-meister-bar {
+  position: relative;
+  height: 8px;
+  background: rgba(94, 168, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.dc-meister-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.dc-meister-name {
+  grid-column: 2 / 3;
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.78);
+  margin-top: 2px;
+}
+.dc-meister-value {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #DBE9FF;
+  white-space: nowrap;
+}
+.dc-meister-summary {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(94, 168, 255, 0.08);
+  border-left: 3px solid #5EA8FF;
+  border-radius: 4px;
+  font-size: 0.86rem;
+  color: rgba(219, 233, 255, 0.85);
+}
+
+/* --- Виджет «Действия» --- */
+.dc-actions-block {
+  background: linear-gradient(180deg, rgba(255, 159, 74, 0.06), transparent);
+  border-left: 3px solid #FF9F4A;
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-top: 18px;
+}
+.dc-act-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.dc-act-card {
+  text-align: left;
+  padding: 12px 14px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+  color: #DBE9FF;
+  font: inherit;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 0.3rem;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+}
+.dc-act-card:hover {
+  transform: translateY(-2px);
+  background: rgba(94, 168, 255, 0.12);
+  border-color: #5EA8FF;
+}
+.dc-act-emoji { font-size: 1.4rem; line-height: 1; }
+.dc-act-label {
+  font-family: "Playfair Display", serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #B8D4FF;
+}
+.dc-act-hint { font-size: 0.78rem; color: rgba(184, 212, 255, 0.65); }
+.dc-act-result:empty { display: none; }
+.dc-act-plan {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(94, 168, 255, 0.06);
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  border-radius: 10px;
+}
+.dc-act-plan-head {
+  display: flex; align-items: center; gap: 8px;
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #DBE9FF;
+}
+.dc-act-steps {
+  margin: 12px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dc-act-steps li {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 8px;
+}
+.dc-act-when {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #FFD89B;
+  font-weight: 800;
+}
+.dc-act-do {
+  font-size: 0.86rem;
+  color: #DBE9FF;
+  line-height: 1.45;
+}
+.dc-act-twocol {
+  margin-top: 10px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.dc-act-block {
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 8px;
+  font-size: 0.84rem;
+  color: rgba(184, 212, 255, 0.85);
+}
+.dc-act-blk-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #5EA8FF;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+/* --- Виджет «Сценарии» --- */
+.dc-scn-block {
+  background: linear-gradient(180deg, rgba(140, 86, 224, 0.08), transparent);
+  border-left: 3px solid #8956E0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-top: 18px;
+}
+.dc-scn-controls {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 8px;
+}
+.dc-scn-row {
+  padding: 8px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 8px;
+}
+.dc-scn-label {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.84rem;
+  color: #DBE9FF;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.dc-scn-val {
+  font-family: "Playfair Display", serif;
+  color: #5EA8FF;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+.dc-scn-slider {
+  width: 100%;
+  accent-color: #5EA8FF;
+  cursor: pointer;
+}
+.dc-scn-output {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  border-radius: 10px;
+}
+.dc-scn-rating {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.dc-scn-rating-num {
+  font-family: "Playfair Display", serif;
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #B0F0C0;
+  line-height: 1;
+}
+.dc-scn-rating-lbl {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  color: rgba(184, 212, 255, 0.65);
+  text-align: center;
+}
+.dc-scn-vectors {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.dc-scn-vec {
+  padding: 8px 10px;
+  background: rgba(94, 168, 255, 0.08);
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 8px;
+  text-align: center;
+}
+.dc-scn-vec-code {
+  font-family: "Playfair Display", serif;
+  font-weight: 800;
+  font-size: 0.86rem;
+  color: #5EA8FF;
+}
+.dc-scn-vec-name { font-size: 0.7rem; color: rgba(184, 212, 255, 0.7); }
+.dc-scn-vec-val {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #DBE9FF;
+  margin-top: 2px;
+}
+
+@media (max-width: 700px) {
+  .dc-scn-output { grid-template-columns: 1fr; }
+  .dc-scn-vectors { grid-template-columns: repeat(2, 1fr); }
+  .dc-act-twocol { grid-template-columns: 1fr; }
+  .dc-act-steps li { grid-template-columns: 1fr; }
+}
+
 /* --- Образ депутата --- */
 .dc-persona {
   margin-top: 18px;

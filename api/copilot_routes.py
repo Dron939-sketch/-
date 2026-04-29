@@ -897,12 +897,16 @@ async def copilot_deputy_cabinet(
 
 async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     """Тяжёлый расчёт кабинета — выносим из роута для кэширования."""
+    from analytics.deputy_actions import situations_list
     from analytics.deputy_content import recommend_weekly_plan
+    from analytics.deputy_meister import build_meister
     from analytics.deputy_missions import build_weekly_missions
     from analytics.deputy_persona import (
         build_expectations, build_persona, build_personal_tasks,
         build_pr_ideas,
     )
+    from analytics.deputy_scenario import from_audit as scenario_from_audit
+    from analytics.deputy_scenario import params_meta as scenario_params
     from analytics.vk_audit import audit_deputy
     from analytics.vk_timing import build_timing_heatmap, heatmap_advice
     from config.archetypes import suggest_for_deputy
@@ -975,6 +979,25 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     # Личные задачи (упрощённый Эйзенхауэр для депутата)
     personal_tasks = build_personal_tasks(missions, plan, audit)
 
+    # Алгоритм Мейстера для депутата (4 вектора + прогноз)
+    meister = build_meister(
+        audit,
+        rating_factors={
+            "alignment":  rating_align * 100,
+            "frequency":  rating_freq * 100,
+            "engagement": rating_engage * 100,
+            "responsiveness": 35,  # demo-константа; real-режим — из VK API
+        },
+        missions=missions,
+    )
+
+    # Карточки ситуаций для виджета «Действия»
+    action_situations = situations_list()
+
+    # Стартовые значения ползунков для виджета «Сценарии»
+    scenario_meta = scenario_params()
+    scenario_initial = scenario_from_audit(audit)
+
     name_parts = (deputy.get("name") or "").split(" ")
     first_name = name_parts[1] if len(name_parts) > 1 else deputy.get("name")
 
@@ -1022,6 +1045,10 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "coalition":        coalition,
         "pr_ideas":         pr_ideas,
         "personal_tasks":   personal_tasks,
+        "meister":          meister,
+        "action_situations": action_situations,
+        "scenario_meta":    scenario_meta,
+        "scenario_initial": scenario_initial,
     }
 
 
@@ -1303,6 +1330,51 @@ _FORMAT_BLUEPRINTS = {
         "callto": ["Партнёрская организация", "Местные СМИ — пресс-релиз за 2 дня"],
     },
 }
+
+
+class ActionPlanIn(BaseModel):
+    deputy_id: str = Field(..., min_length=2, max_length=80)
+    situation: str = Field(..., min_length=2, max_length=40)
+
+
+@router.post("/deputy/action-plan")
+async def copilot_deputy_action_plan(payload: ActionPlanIn) -> dict:
+    """Личный план действий депутата при типовой ситуации (жалоба,
+    негатив, инфо-вакуум и т.п.). Без поручений профильным замам — это
+    действия самой ВЫ: что сделать, с кем поговорить, что опубликовать.
+    """
+    from analytics.deputy_actions import build_action_plan
+    from config.deputies import deputies_for_city
+
+    deputy = next(
+        (d for d in deputies_for_city("Коломна") if d.get("external_id") == payload.deputy_id),
+        None,
+    )
+    if not deputy:
+        raise HTTPException(status_code=404, detail="Депутат не найден.")
+    plan = build_action_plan(payload.situation)
+    if not plan:
+        raise HTTPException(status_code=422, detail="Ситуация не распознана.")
+    return plan
+
+
+class ScenarioSimulateIn(BaseModel):
+    posts_per_week: float = Field(1, ge=0, le=7)
+    alignment_pct:  float = Field(50, ge=0, le=100)
+    avg_likes:      float = Field(10, ge=0, le=200)
+    reply_rate:     float = Field(35, ge=0, le=100)
+
+
+@router.post("/deputy/scenario")
+async def copilot_deputy_scenario(payload: ScenarioSimulateIn) -> dict:
+    """What-if симулятор: ползунки → прогноз 4 векторов и рейтинга."""
+    from analytics.deputy_scenario import simulate
+    return simulate(
+        posts_per_week=payload.posts_per_week,
+        alignment_pct=payload.alignment_pct,
+        avg_likes=payload.avg_likes,
+        reply_rate=payload.reply_rate,
+    )
 
 
 class ReplyRenderIn(BaseModel):
