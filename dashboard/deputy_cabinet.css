@@ -1911,12 +1911,14 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
   border-radius: 10px;
   color: #DBE9FF;
   font: inherit;
-  font-size: 0.9rem;
+  /* 16px чтобы iOS Safari не зумил при фокусе на textarea/input */
+  font-size: 16px;
   resize: vertical;
   min-height: 70px;
   outline: none;
   box-sizing: border-box;
   transition: border-color 0.18s;
+  -webkit-appearance: none;
 }
 .dc-mod-input:focus { border-color: #5EA8FF; }
 .dc-mod-radios {
@@ -2043,14 +2045,63 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
 
 /* --- Mobile --- */
 @media (max-width: 900px) {
-  .dc-hero { grid-template-columns: 1fr; }
+  .dc-hero { grid-template-columns: 1fr; text-align: left; }
   .dc-archetype-badge { justify-self: start; min-width: auto; }
   .dc-stats { grid-template-columns: repeat(2, 1fr); }
   .dc-two-col { grid-template-columns: 1fr; }
+  /* Heatmap широкий — на узком экране горизонтальный скролл вместо схлопывания */
+  .dc-heatmap { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dc-heatmap thead, .dc-heatmap tbody { display: table; width: max-content; }
+  .dc-heatmap td { min-width: 44px; }
 }
 @media (max-width: 540px) {
-  .deputy-cabinet { padding: 20px 18px 22px; }
-  .dc-hero-greet { font-size: 1.55rem; }
-  .dc-stats { grid-template-columns: 1fr 1fr; }
-  .dc-stat-value { font-size: 1.5rem; }
+  .deputy-cabinet { padding: 18px 14px 20px; border-radius: 14px; }
+  .dc-hero-greet { font-size: 1.45rem; line-height: 1.15; }
+  .dc-hero-photo { width: 72px; height: 72px; }
+  .dc-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dc-stat-value { font-size: 1.35rem; }
+  .dc-action-btn { width: 100%; justify-content: center; }
+  .dc-actions { flex-direction: column; }
+  .dc-block-title { font-size: 1rem; }
+  .dc-brief-grid, .dc-ideas-grid, .dc-cal-list,
+  .dc-coalition-grid, .dc-today-grid, .dc-comments-list,
+  .dc-mentions-list { grid-template-columns: 1fr; }
+  /* Личный кабинет с notch на iPhone — учитываем safe-area */
+  .deputy-cabinet {
+    margin-left: max(0px, env(safe-area-inset-left));
+    margin-right: max(0px, env(safe-area-inset-right));
+  }
+  /* Все кликабельные элементы — minimum 44×44 для touch (Apple HIG) */
+  .dc-chip, .dc-mod-option, .dc-act-card, .dc-reply-card,
+  .dc-goal-chip, .dc-mod-btn, .dc-action-btn, .dc-brief-voice,
+  .dc-idea-go, .dc-comment-go, .dc-trends-source { min-height: 40px; }
+}
+
+/* --- iOS / тач-устройства universal --- */
+.deputy-cabinet, .deputy-cabinet * {
+  -webkit-tap-highlight-color: transparent;
+}
+/* Range slider — крупный thumb для пальцев */
+.dc-scn-slider { -webkit-appearance: none; height: 24px; background: transparent; }
+.dc-scn-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  background: rgba(94, 168, 255, 0.2);
+  border-radius: 3px;
+}
+.dc-scn-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #5EA8FF, #2C70D9);
+  border: 2px solid #DBE9FF;
+  margin-top: -8px;
+  cursor: pointer;
+}
+.dc-scn-slider::-moz-range-thumb {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #5EA8FF, #2C70D9);
+  border: 2px solid #DBE9FF;
+  cursor: pointer;
 }
