@@ -1436,6 +1436,45 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
   gap: 8px;
   margin-top: 4px;
 }
+/* --- Реактивный трекер комментариев --- */
+.dc-comments-queue { border-left: 3px solid #FF9F4A; }
+.dc-cmt-actions {
+  display: flex; gap: 6px; margin-top: 8px;
+}
+
+/* --- Прогресс рейтинга (sparkline) --- */
+.dc-history-block {
+  padding: 14px 16px;
+}
+.dc-history-meta {
+  margin-left: auto;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.84rem;
+  color: rgba(184, 212, 255, 0.7);
+  font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.dc-history-delta {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+.dc-history-delta.up   { background: rgba(79, 204, 117, 0.15); color: #B0F0C0; }
+.dc-history-delta.down { background: rgba(255, 159, 74, 0.15); color: #FF9F4A; }
+.dc-history-chart {
+  width: 100%;
+  height: 140px;
+  margin-top: 8px;
+}
+.dc-history-axis {
+  display: flex; justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  color: rgba(184, 212, 255, 0.55);
+  letter-spacing: 0.04em;
+}
+
 /* --- Info-cards (общий стиль для Ожидания / Коалиция / Округ / Упоминания) --- */
 .dc-info-grid {
   display: grid;

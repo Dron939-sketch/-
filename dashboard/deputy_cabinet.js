@@ -253,6 +253,164 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Реактивный трекер: комментарии под её постами требующие ответа
+  // ---------------------------------------------------------------------------
+
+  const TONE_LABEL = {
+    critical: { icon: "⚠", label: "негатив",   accent: "bad" },
+    question: { icon: "❓", label: "вопрос",    accent: "high" },
+    neutral:  { icon: "·",  label: "нейтрал",   accent: "neutral" },
+    positive: { icon: "💚", label: "позитив",   accent: "good" },
+  };
+
+  function renderCommentsQueue(q, deputyId) {
+    if (!q) return "";
+    const items = q.queue || [];
+    if (q.state === "no_token" || q.state === "no_settings") {
+      return `
+        <details class="dc-block dc-collapsible" open>
+          <summary class="dc-block-title">🚨 Комментарии под постами</summary>
+          <div class="dc-empty-sub">Подключи VK API token — здесь появится очередь
+          комментариев требующих твоего ответа.</div>
+        </details>`;
+    }
+    if (items.length === 0) {
+      return `
+        <details class="dc-block dc-collapsible" open>
+          <summary class="dc-block-title">🚨 Комментарии под постами</summary>
+          <div class="dc-empty-sub">Все комментарии отвечены ✓</div>
+        </details>`;
+    }
+    return `
+      <details class="dc-block dc-collapsible dc-comments-queue" open
+               data-deputy-id="${esc(deputyId || "")}">
+        <summary class="dc-block-title">
+          🚨 Комментарии под постами — ${items.length}
+        </summary>
+        ${q.summary ? `<p class="dc-empty-sub">${esc(q.summary)}</p>` : ""}
+        <div class="dc-info-grid">
+          ${items.map((c) => {
+            const t = TONE_LABEL[c.tone] || TONE_LABEL.neutral;
+            const age = c.age_hours < 1
+              ? "только что"
+              : c.age_hours < 24
+              ? `${Math.round(c.age_hours)}ч назад`
+              : `${Math.round(c.age_hours / 24)}дн назад`;
+            return `
+              <div class="dc-info-card dc-info-${esc(t.accent)}" data-cid="${esc(c.id)}">
+                <div class="dc-info-head">
+                  <span class="dc-info-emoji">${esc(t.icon)}</span>
+                  <span class="dc-info-tag">${esc(t.label)} · ${esc(age)}</span>
+                </div>
+                <div class="dc-info-body" style="font-style:italic">«${esc(c.text)}»</div>
+                <div class="dc-info-foot">
+                  Под постом: «${esc(c.post_text)}…»
+                  ${c.post_url ? ` · <a href="${esc(c.post_url)}" target="_blank" rel="noopener">открыть ↗</a>` : ""}
+                </div>
+                <div class="dc-cmt-actions">
+                  <button type="button" class="dc-mod-btn primary dc-cmt-reply"
+                          data-text="${esc(c.text)}">Ответить</button>
+                  <button type="button" class="dc-mod-btn ghost dc-cmt-skip">Пропустить</button>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </details>
+    `;
+  }
+
+  async function onCommentsActionClick(ev) {
+    const card = ev.target.closest(".dc-info-card[data-cid]");
+    const block = card?.closest(".dc-comments-queue");
+    if (!card || !block) return;
+    const deputyId = block.dataset.deputyId;
+    const cid = card.getAttribute("data-cid");
+    if (ev.target.closest(".dc-cmt-reply")) {
+      // Открываем wizard контента, через 200мс кликаем «обращение в админ.» —
+      // самый универсальный жанр под комментарий-ответ
+      document.getElementById("dc-create-content")?.click();
+      // Помечаем сразу — потом всё равно ответит и UI обновится при refresh
+      try {
+        await fetch("/api/copilot/deputy/comments/seen", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deputy_id: deputyId, comment_ids: [cid], state: "replied" }),
+        });
+      } catch (_) {}
+      card.style.opacity = "0.5";
+    } else if (ev.target.closest(".dc-cmt-skip")) {
+      try {
+        await fetch("/api/copilot/deputy/comments/seen", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deputy_id: deputyId, comment_ids: [cid], state: "ignored" }),
+        });
+      } catch (_) {}
+      card.remove();
+      // Перерисуем счётчик в summary
+      const remaining = block.querySelectorAll(".dc-info-card[data-cid]").length;
+      const sum = block.querySelector("summary");
+      if (sum) sum.innerHTML = `🚨 Комментарии под постами — ${remaining}`;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Прогресс рейтинга — недельные snapshot'ы (line chart)
+  // ---------------------------------------------------------------------------
+
+  function renderRatingHistory(history) {
+    if (!history || history.length === 0) {
+      return `
+        <details class="dc-block dc-collapsible" open>
+          <summary class="dc-block-title">📈 Прогресс рейтинга</summary>
+          <div class="dc-empty-sub">История накапливается с каждой неделей. Вернись через неделю — увидишь динамику.</div>
+        </details>`;
+    }
+    const points = history.map((h) => h.composite_rating || 0);
+    const maxV = Math.max(5, ...points);
+    const minV = Math.min(0, ...points);
+    const w = 600, h = 140, pad = 24;
+    const xStep = (w - pad * 2) / Math.max(1, points.length - 1);
+    const yScale = (v) => h - pad - ((v - minV) / Math.max(0.01, maxV - minV)) * (h - pad * 2);
+    const path = points.map((v, i) =>
+      `${i === 0 ? "M" : "L"} ${pad + i * xStep} ${yScale(v)}`,
+    ).join(" ");
+    const last = history[history.length - 1] || {};
+    const prev = history[history.length - 2] || {};
+    const delta = (last.composite_rating || 0) - (prev.composite_rating || 0);
+    const deltaSign = delta > 0 ? "+" : delta < 0 ? "" : "·";
+    return `
+      <div class="dc-block dc-history-block">
+        <div class="dc-block-title">
+          📈 Прогресс рейтинга
+          <span class="dc-history-meta">
+            сейчас ${(last.composite_rating || 0).toFixed(1)}/5
+            ${prev.composite_rating != null ? `· неделю назад ${(prev.composite_rating || 0).toFixed(1)}` : ""}
+            ${delta !== 0 ? `<span class="dc-history-delta ${delta > 0 ? 'up' : 'down'}">${deltaSign}${delta.toFixed(1)}</span>` : ""}
+          </span>
+        </div>
+        <svg class="dc-history-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="dc-history-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#5EA8FF" stop-opacity="0.4"/>
+              <stop offset="100%" stop-color="#5EA8FF" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="${path} L ${pad + (points.length - 1) * xStep} ${h - pad} L ${pad} ${h - pad} Z" fill="url(#dc-history-grad)"/>
+          <path d="${path}" fill="none" stroke="#5EA8FF" stroke-width="2.5" stroke-linejoin="round"/>
+          ${points.map((v, i) => `
+            <circle cx="${pad + i * xStep}" cy="${yScale(v)}" r="4" fill="#5EA8FF" stroke="#07142A" stroke-width="2">
+              <title>${esc(history[i].week)}: ${v.toFixed(1)}</title>
+            </circle>
+          `).join("")}
+        </svg>
+        <div class="dc-history-axis">
+          ${history.map((h) => `<span>${esc(h.week.slice(-3))}</span>`).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
   // Цели на квартал — пользователь выбирает 1-3 направления, под них
   // подсвечиваются миссии и идеи. Хранится в localStorage по deputyId.
   // ---------------------------------------------------------------------------
@@ -1315,6 +1473,7 @@
       <div class="dc-tab-pane" data-tab="today" ${activeTab === "today" ? "" : "hidden"}>
         ${renderGoals(eid)}
         ${renderBriefing(data.briefing || {}, eid)}
+        ${renderCommentsQueue(data.comments_queue || {}, eid)}
         ${renderMissions(data.missions || [])}
         ${renderPrIdeas(data.pr_ideas || [])}
         ${renderActionsWidget(data.action_situations || [], eid)}
@@ -1322,6 +1481,7 @@
       </div>
       <div class="dc-tab-pane" data-tab="metrics" ${activeTab === "metrics" ? "" : "hidden"}>
         ${renderRatings(data.rating || {}, data.audit || null)}
+        ${renderRatingHistory(data.rating_history || [])}
         ${renderMeister(data.meister || {})}
         ${renderRecommendations(data.audit || {})}
         ${renderPlan(data.plan || {}, data.archetype || {})}
@@ -1356,6 +1516,7 @@
     hero.addEventListener("click", onCommentCopyClick);
     hero.addEventListener("click", onRunAuditClick);
     hero.addEventListener("click", onTabClick);
+    hero.addEventListener("click", onCommentsActionClick);
     hero.addEventListener("input", onScenarioInput);
     runScenario();
     document.getElementById("dc-create-content")?.addEventListener("click",

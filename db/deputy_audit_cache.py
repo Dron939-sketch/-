@@ -26,7 +26,7 @@ _TTL_HOURS = 12
 # поля в _build_deputy_cabinet (briefing / meister / trends_now / …)
 # инкрементить — это инвалидирует все старые записи в БД и заставляет
 # пересчитать кабинет с актуальной структурой.
-_CACHE_VERSION = 6
+_CACHE_VERSION = 7
 
 
 async def get_cached(external_id: str) -> Optional[Dict[str, Any]]:

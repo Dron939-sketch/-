@@ -439,3 +439,35 @@ CREATE TABLE IF NOT EXISTS deputy_audit_cache (
 );
 CREATE INDEX IF NOT EXISTS deputy_audit_cache_computed_idx
     ON deputy_audit_cache (computed_at DESC);
+
+-- @SEGMENT deputy_comments_seen_table
+-- Отметки прочитанных / отвеченных комментариев под постами депутата.
+-- Comment_id — VK comment_id. Пока комментарий не «seen» — он в очереди
+-- реактивного трекера.
+CREATE TABLE IF NOT EXISTS deputy_comments_seen (
+    external_id   TEXT NOT NULL,
+    comment_id    TEXT NOT NULL,
+    state         TEXT NOT NULL,    -- "seen" | "replied" | "ignored"
+    seen_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (external_id, comment_id)
+);
+CREATE INDEX IF NOT EXISTS deputy_comments_seen_at_idx
+    ON deputy_comments_seen (external_id, seen_at DESC);
+
+-- @SEGMENT deputy_rating_history_table
+-- Snapshot рейтинга и метрик депутата раз в неделю — для графика
+-- прогресса «было/стало». Уникальность по (external_id, week_iso) —
+-- два snapshot'а в одну неделю не нужны, идемпотентный UPSERT.
+CREATE TABLE IF NOT EXISTS deputy_rating_history (
+    external_id      TEXT NOT NULL,
+    week_iso         TEXT NOT NULL,    -- "2026-W17" — год + ISO неделя
+    composite_rating NUMERIC(3, 1),    -- 0..5
+    alignment_pct    NUMERIC(5, 1),    -- 0..100
+    posts_per_week   NUMERIC(4, 1),
+    avg_likes        NUMERIC(6, 1),
+    posts_count      INTEGER,
+    taken_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (external_id, week_iso)
+);
+CREATE INDEX IF NOT EXISTS deputy_rating_history_taken_idx
+    ON deputy_rating_history (external_id, taken_at DESC);
