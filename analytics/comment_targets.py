@@ -90,6 +90,26 @@ _COMMENT_TEMPLATES = {
 }
 
 
+def _city_pattern(city: str) -> str:
+    """Регексп под все падежи названия города. Простая морфология:
+    отбрасываем последние 1-2 буквы и ищем все склонения с любыми
+    концовками 1-3 символа.
+    """
+    base = (city or "").strip().lower()
+    if not base:
+        return r"коломн"
+    if base.endswith("а"):
+        stem = base[:-1]
+    else:
+        stem = base
+    # Латиница для VK-постов от англоязычной аудитории
+    lat = {"коломн": "kolomn"}.get(stem, "")
+    pat = re.escape(stem) + r"\w{0,4}"
+    if lat:
+        pat = f"(?:{pat}|{re.escape(lat)}\\w{{0,4}})"
+    return pat
+
+
 async def build_comment_targets(
     deputy: Dict[str, Any], archetype: Dict[str, Any], city: str = "Коломна",
 ) -> Dict[str, Any]:
@@ -129,6 +149,10 @@ async def _vk_targets(
 
     cutoff = (datetime.now(tz=timezone.utc) - timedelta(hours=72)).timestamp()
     candidates: List[Dict[str, Any]] = []
+    # Регексп для проверки, что пост действительно про этот город:
+    # «коломна», «коломне», «коломенск», и склонения. VK newsfeed.search
+    # часто возвращает посты по соседним темам без географической привязки.
+    city_re = re.compile(_city_pattern(city), re.IGNORECASE)
 
     async with aiohttp.ClientSession() as session:
         for kw in keywords:
@@ -156,6 +180,11 @@ async def _vk_targets(
                     continue
                 text = (it.get("text") or "").strip()
                 if not text or len(text) < 60:
+                    continue
+                # Жёстко фильтруем по упоминанию города — VK возвращает посты
+                # по ключевику «двор», «школа» вообще откуда угодно (часто
+                # из Зеленограда / Москвы)
+                if not city_re.search(text):
                     continue
                 likes    = int((it.get("likes") or {}).get("count") or 0)
                 views    = int((it.get("views") or {}).get("count") or 0)

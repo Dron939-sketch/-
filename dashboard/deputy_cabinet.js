@@ -604,12 +604,15 @@
         <div class="dc-meister-axes">
           ${cur.map((v) => `
             <div class="dc-meister-axis" title="${esc(v.what || '')}">
-              <div class="dc-meister-code" style="color:${esc(v.color)}">${esc(v.code)}</div>
+              <div class="dc-meister-emoji" style="background:${esc(v.color)}33; border-color:${esc(v.color)}">${esc(v.emoji || v.code)}</div>
+              <div class="dc-meister-name-row">
+                <div class="dc-meister-name">${esc(v.name)}</div>
+                <div class="dc-meister-what">${esc(v.what || "")}</div>
+              </div>
               <div class="dc-meister-bar">
                 <div class="dc-meister-bar-fill"
                      style="width:${(v.value / 6 * 100).toFixed(1)}%; background:${esc(v.color)}"></div>
               </div>
-              <div class="dc-meister-name">${esc(v.name)}</div>
               <div class="dc-meister-value">${v.value}/6 <span class="muted">(${v.raw}${esc(v.unit || '')})</span></div>
             </div>
           `).join("")}

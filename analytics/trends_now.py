@@ -85,6 +85,18 @@ async def build_trends(
 # VK newsfeed.search
 # ---------------------------------------------------------------------------
 
+def _city_pattern(city: str) -> str:
+    base = (city or "").strip().lower()
+    if not base:
+        return r"коломн"
+    stem = base[:-1] if base.endswith("а") else base
+    lat = {"коломн": "kolomn"}.get(stem, "")
+    pat = re.escape(stem) + r"\w{0,4}"
+    if lat:
+        pat = f"(?:{pat}|{re.escape(lat)}\\w{{0,4}})"
+    return pat
+
+
 async def _vk_trends(sectors: List[str], city: str) -> List[Dict[str, Any]]:
     try:
         import aiohttp
@@ -105,6 +117,7 @@ async def _vk_trends(sectors: List[str], city: str) -> List[Dict[str, Any]]:
 
     cutoff = (datetime.now(tz=timezone.utc) - timedelta(hours=48)).timestamp()
     aggregated: Dict[str, Dict[str, Any]] = {}
+    city_re = re.compile(_city_pattern(city), re.IGNORECASE)
 
     async with aiohttp.ClientSession() as session:
         for kw in keywords:
@@ -133,6 +146,10 @@ async def _vk_trends(sectors: List[str], city: str) -> List[Dict[str, Any]]:
                     continue
                 text = (it.get("text") or "").strip()
                 if not text:
+                    continue
+                # Жёсткий фильтр на упоминание Коломны — VK по ключевику
+                # «двор» / «школа» возвращает посты из любых городов
+                if not city_re.search(text):
                     continue
                 eng = (
                     int((it.get("likes") or {}).get("count") or 0)

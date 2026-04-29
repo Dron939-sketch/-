@@ -754,43 +754,57 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
 }
 .dc-meister-axis {
   display: grid;
-  grid-template-columns: 36px 1fr auto;
-  gap: 10px;
+  grid-template-columns: 40px 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 4px;
   align-items: center;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: rgba(7, 20, 42, 0.55);
   border: 1px solid rgba(94, 168, 255, 0.18);
   border-radius: 10px;
 }
-.dc-meister-code {
+.dc-meister-emoji {
+  grid-row: 1 / 3;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(94, 168, 255, 0.12);
+  border: 1px solid rgba(94, 168, 255, 0.4);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; line-height: 1;
+}
+.dc-meister-name-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dc-meister-name {
   font-family: "Playfair Display", serif;
-  font-weight: 800;
-  font-size: 1rem;
-  text-align: center;
+  font-weight: 700;
+  font-size: 0.96rem;
+  color: #DBE9FF;
+}
+.dc-meister-what {
+  font-size: 0.74rem;
+  color: rgba(184, 212, 255, 0.7);
+  line-height: 1.35;
 }
 .dc-meister-bar {
+  grid-column: 2 / 3;
   position: relative;
-  height: 8px;
+  height: 6px;
   background: rgba(94, 168, 255, 0.08);
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
 }
 .dc-meister-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 3px;
   transition: width 0.4s ease;
 }
-.dc-meister-name {
-  grid-column: 2 / 3;
-  font-size: 0.78rem;
-  color: rgba(184, 212, 255, 0.78);
-  margin-top: 2px;
-}
 .dc-meister-value {
+  grid-row: 1 / 3;
   font-size: 0.86rem;
   font-weight: 700;
   color: #DBE9FF;
   white-space: nowrap;
+  text-align: right;
 }
 .dc-meister-summary {
   margin-top: 10px;
