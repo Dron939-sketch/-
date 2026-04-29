@@ -198,6 +198,178 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Образ депутата — расширенный портрет
+  // ---------------------------------------------------------------------------
+
+  function renderPersona(p) {
+    if (!p || !p.headline) return "";
+    return `
+      <div class="dc-persona">
+        <div class="dc-persona-eyebrow">Образ глазами горожан</div>
+        <div class="dc-persona-headline">${esc(p.headline)}</div>
+        <div class="dc-persona-traits">
+          ${(p.traits || []).map((t) => `<span class="dc-persona-tag">${esc(t)}</span>`).join("")}
+        </div>
+        <div class="dc-persona-twocol">
+          <div class="dc-persona-col">
+            <div class="dc-persona-lbl">Как читается</div>
+            <div class="dc-persona-text">${esc(p.reads_as || "")}</div>
+          </div>
+          <div class="dc-persona-col dc-persona-warn">
+            <div class="dc-persona-lbl">Зона риска</div>
+            <div class="dc-persona-text">${esc(p.danger || "")}</div>
+          </div>
+        </div>
+        ${(p.style_hints || []).length ? `
+          <div class="dc-persona-hints">
+            ${p.style_hints.map((h) => `<div class="dc-persona-hint">· ${esc(h)}</div>`).join("")}
+          </div>` : ""}
+        ${p.epigraph ? `
+          <div class="dc-persona-epi">«${esc(p.epigraph)}»</div>` : ""}
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Идеи и пиар — top-3 на эту неделю
+  // ---------------------------------------------------------------------------
+
+  function renderPrIdeas(ideas) {
+    if (!ideas || ideas.length === 0) return "";
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">💡 Идеи и пиар на неделе</div>
+        <div class="dc-ideas-grid">
+          ${ideas.map((it) => `
+            <div class="dc-idea-card">
+              <div class="dc-idea-head">
+                <span class="dc-idea-icon">${esc(it.icon || "")}</span>
+                <span class="dc-idea-when">${esc(it.when || "")}</span>
+              </div>
+              <div class="dc-idea-title">${esc(it.title || "")}</div>
+              <div class="dc-idea-action">${esc(it.action || "")}</div>
+              <button type="button" class="dc-idea-go" data-wizard="${esc(it.wizard || 'content')}">
+                Запустить →
+              </button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Личные задачи — упрощённый Эйзенхауэр для депутата
+  // ---------------------------------------------------------------------------
+
+  const QUADRANT_LABEL = {
+    do_now:   { label: "Сегодня", color: "urgent" },
+    schedule: { label: "Запланировать", color: "important" },
+    delegate: { label: "Регулярно", color: "routine" },
+  };
+
+  function renderPersonalTasks(tasks) {
+    if (!tasks || tasks.length === 0) return "";
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">🗂 Мои задачи на неделю</div>
+        <div class="dc-tasks">
+          ${tasks.map((t) => {
+            const q = QUADRANT_LABEL[t.quadrant] || QUADRANT_LABEL.schedule;
+            return `
+              <div class="dc-task dc-task-${esc(q.color)}">
+                <div class="dc-task-q">${esc(q.label)}</div>
+                <div class="dc-task-body">
+                  <div class="dc-task-title">${esc(t.title || "")}</div>
+                  ${t.subtitle ? `<div class="dc-task-sub">${esc(t.subtitle)}</div>` : ""}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Чего ждут избиратели — derived из секторов
+  // ---------------------------------------------------------------------------
+
+  function renderExpectations(items) {
+    if (!items || items.length === 0) return "";
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">🎯 Чего ждут от меня избиратели</div>
+        <div class="dc-exp-list">
+          ${items.map((it) => `
+            <div class="dc-exp-row dc-exp-${esc(it.priority || 'medium')}">
+              <div class="dc-exp-prio">${it.priority === "high" ? "★" : "○"}</div>
+              <div class="dc-exp-body">
+                <div class="dc-exp-title">${esc(it.title || "")}</div>
+                <div class="dc-exp-why">${esc(it.why || "")}</div>
+              </div>
+              <div class="dc-exp-sector">${esc(it.sector || "")}</div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Упоминания обо мне — VK-search proxy (на старте demo)
+  // ---------------------------------------------------------------------------
+
+  function renderMentions(m) {
+    if (!m || !m.items || m.items.length === 0) return "";
+    const icon = (k) => k === "positive" ? "💚" : k === "critical" ? "⚠" : "·";
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">
+          🔔 Упоминания обо мне
+          ${m.data_kind === "demo" ? `<span class="dc-fallback-tag">пример</span>` : ""}
+        </div>
+        ${m.summary ? `<p class="dc-empty-sub">${esc(m.summary)}</p>` : ""}
+        <div class="dc-mentions-list">
+          ${m.items.map((it) => `
+            <div class="dc-mention dc-mention-${esc(it.weight || 'neutral')}">
+              <span class="dc-mention-icon">${icon(it.kind)}</span>
+              <div class="dc-mention-body">
+                <div class="dc-mention-meta">${esc(it.source || "")} · ${esc(it.context || "")}</div>
+                <div class="dc-mention-text">«${esc(it.text || "")}»</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+        ${m.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(m.hint)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Коалиция — соседи по округу + руководство Совета
+  // ---------------------------------------------------------------------------
+
+  function renderCoalition(c) {
+    if (!c || !c.items || c.items.length === 0) return "";
+    return `
+      <div class="dc-block">
+        <div class="dc-block-title">🤝 Коалиция</div>
+        <div class="dc-coalition-grid">
+          ${c.items.map((it) => `
+            <div class="dc-coalition-card dc-coalition-${esc(it.scope || 'neighbour')}">
+              <div class="dc-coalition-name">${esc(it.name || "")}</div>
+              <div class="dc-coalition-role">${esc(it.role || "")}</div>
+              <div class="dc-coalition-strength">сильна в: <b>${esc(it.strength || "")}</b></div>
+            </div>
+          `).join("")}
+        </div>
+        ${c.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(c.hint)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
   // Миссии недели — gamification: рейтинг → action-list
   // ---------------------------------------------------------------------------
 
@@ -422,9 +594,15 @@
     }
     hero.innerHTML = `
       ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {})}
+      ${renderPersona(data.persona || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
       ${renderMissions(data.missions || [])}
+      ${renderPrIdeas(data.pr_ideas || [])}
+      ${renderPersonalTasks(data.personal_tasks || [])}
+      ${renderExpectations(data.expectations || [])}
       ${renderDistrictToday(data.district_today || {})}
+      ${renderMentions(data.mentions || {})}
+      ${renderCoalition(data.coalition || {})}
       ${renderCitizensView(data.audit || {}, data.archetype || {})}
       ${renderTimingHeatmap(data.timing || {})}
       ${renderCalendar(data.calendar || [])}
@@ -434,6 +612,7 @@
     `;
     hero.addEventListener("click", onCopyClick);
     hero.addEventListener("click", onReplyClick);
+    hero.addEventListener("click", onIdeaClick);
     document.getElementById("dc-create-content")?.addEventListener("click",
       () => openContentWizard(data.deputy?.external_id, data.archetype?.name));
     document.getElementById("dc-create-event")?.addEventListener("click",
@@ -760,6 +939,23 @@
   }
   function unmountModal(wrap) {
     if (wrap?.parentNode) wrap.parentNode.removeChild(wrap);
+  }
+
+  function onIdeaClick(ev) {
+    const btn = ev.target.closest(".dc-idea-go");
+    if (!btn) return;
+    const card = btn.closest(".dc-idea-card");
+    const wizard = btn.getAttribute("data-wizard") || "content";
+    // Берём deputyId / archetypeName с триггера действий в hero
+    const contentBtn = document.getElementById("dc-create-content");
+    const eventBtn = document.getElementById("dc-create-event");
+    const deputyId = window.cmRole?.deputyId?.() || null;
+    if (!deputyId) return;
+    if (wizard === "event") {
+      eventBtn?.click();
+    } else {
+      contentBtn?.click();
+    }
   }
 
   function onCopyClick(ev) {

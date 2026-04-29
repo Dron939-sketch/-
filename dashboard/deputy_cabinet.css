@@ -278,6 +278,263 @@
 }
 .dc-copy:hover { filter: brightness(1.07); transform: translateY(-1px); }
 
+/* --- Образ депутата --- */
+.dc-persona {
+  margin-top: 18px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(94, 168, 255, 0.08), rgba(140, 86, 224, 0.05));
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  border-radius: 14px;
+  position: relative; z-index: 1;
+}
+.dc-persona-eyebrow {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #5EA8FF;
+  font-weight: 700;
+}
+.dc-persona-headline {
+  margin-top: 4px;
+  font-family: "Playfair Display", serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #DBE9FF;
+}
+.dc-persona-traits {
+  margin-top: 10px;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.dc-persona-tag {
+  padding: 4px 10px;
+  background: rgba(94, 168, 255, 0.12);
+  border: 1px solid rgba(94, 168, 255, 0.3);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: #B8D4FF;
+  font-weight: 600;
+}
+.dc-persona-twocol {
+  margin-top: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.dc-persona-col {
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+}
+.dc-persona-warn { border-color: rgba(255, 159, 74, 0.3); }
+.dc-persona-lbl {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(184, 212, 255, 0.6);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.dc-persona-warn .dc-persona-lbl { color: #FFD89B; }
+.dc-persona-text { font-size: 0.86rem; color: #DBE9FF; line-height: 1.45; }
+.dc-persona-hints {
+  margin-top: 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.dc-persona-hint {
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.7);
+}
+.dc-persona-epi {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-left: 3px solid #5EA8FF;
+  background: rgba(94, 168, 255, 0.05);
+  border-radius: 4px;
+  font-style: italic;
+  color: rgba(219, 233, 255, 0.85);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+/* --- Идеи и пиар --- */
+.dc-ideas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.dc-idea-card {
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(94, 168, 255, 0.08), rgba(7, 20, 42, 0.55));
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 0.35rem;
+}
+.dc-idea-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.74rem;
+  color: rgba(184, 212, 255, 0.65);
+}
+.dc-idea-icon { font-size: 1.2rem; }
+.dc-idea-when {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #FFD89B;
+  font-weight: 700;
+}
+.dc-idea-title {
+  font-family: "Playfair Display", serif;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #DBE9FF;
+}
+.dc-idea-action {
+  font-size: 0.82rem;
+  color: rgba(184, 212, 255, 0.78);
+  line-height: 1.45;
+}
+.dc-idea-go {
+  margin-top: 4px;
+  align-self: flex-start;
+  background: linear-gradient(180deg, #5EA8FF, #2C70D9);
+  color: #07142A;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.15s;
+}
+.dc-idea-go:hover { transform: translateY(-1px); filter: brightness(1.07); }
+
+/* --- Личные задачи --- */
+.dc-tasks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+}
+.dc-task {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+  align-items: center;
+}
+.dc-task-q {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  text-align: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.dc-task-urgent .dc-task-q     { background: rgba(255, 159, 74, 0.15); color: #FF9F4A; }
+.dc-task-important .dc-task-q  { background: rgba(94, 168, 255, 0.15); color: #5EA8FF; }
+.dc-task-routine .dc-task-q    { background: rgba(184, 212, 255, 0.1); color: rgba(184, 212, 255, 0.7); }
+.dc-task-title { font-size: 0.88rem; font-weight: 600; color: #DBE9FF; line-height: 1.35; }
+.dc-task-sub { font-size: 0.78rem; color: rgba(184, 212, 255, 0.7); margin-top: 2px; line-height: 1.4; }
+
+/* --- Чего ждут избиратели --- */
+.dc-exp-list { display: flex; flex-direction: column; gap: 6px; }
+.dc-exp-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 8px;
+  align-items: center;
+}
+.dc-exp-high   { border-left: 3px solid #FF9F4A; }
+.dc-exp-medium { border-left: 3px solid rgba(94, 168, 255, 0.35); }
+.dc-exp-prio { font-size: 1rem; color: #FFD89B; text-align: center; }
+.dc-exp-medium .dc-exp-prio { color: rgba(184, 212, 255, 0.55); }
+.dc-exp-title { font-size: 0.88rem; font-weight: 600; color: #DBE9FF; }
+.dc-exp-why { font-size: 0.78rem; color: rgba(184, 212, 255, 0.65); }
+.dc-exp-sector {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #5EA8FF;
+  font-weight: 700;
+  padding: 2px 8px;
+  background: rgba(94, 168, 255, 0.08);
+  border-radius: 999px;
+}
+
+/* --- Упоминания --- */
+.dc-mentions-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.dc-mention {
+  display: grid; grid-template-columns: 32px 1fr; gap: 10px;
+  padding: 8px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 8px;
+  align-items: start;
+}
+.dc-mention-good { border-left: 3px solid rgba(79, 204, 117, 0.5); }
+.dc-mention-bad  { border-left: 3px solid rgba(255, 159, 74, 0.5); }
+.dc-mention-icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: rgba(94, 168, 255, 0.1);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.94rem;
+}
+.dc-mention-meta {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #5EA8FF;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.dc-mention-text {
+  font-size: 0.86rem;
+  color: rgba(219, 233, 255, 0.85);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+/* --- Коалиция --- */
+.dc-coalition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+.dc-coalition-card {
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 0.25rem;
+}
+.dc-coalition-leadership { border-color: rgba(255, 217, 155, 0.4); }
+.dc-coalition-name { font-size: 0.92rem; font-weight: 700; color: #DBE9FF; }
+.dc-coalition-role {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #5EA8FF;
+  font-weight: 700;
+}
+.dc-coalition-leadership .dc-coalition-role { color: #FFD89B; }
+.dc-coalition-strength {
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.7);
+}
+.dc-coalition-strength b { color: #B8D4FF; }
+
+@media (max-width: 700px) {
+  .dc-persona-twocol { grid-template-columns: 1fr; }
+  .dc-task { grid-template-columns: 84px 1fr; }
+}
+
 /* --- Миссии недели --- */
 .dc-missions-block {
   background: linear-gradient(180deg, rgba(255, 159, 74, 0.08), transparent);
