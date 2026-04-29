@@ -904,6 +904,9 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from analytics.deputy_briefing import build_briefing
     from analytics.deputy_city_brief import build_city_brief
     from analytics.trends_now import build_trends
+    from analytics.vk_comments_tracker import build_comments_queue
+    from db.deputy_comments_seen import get_seen_ids
+    from db.deputy_rating_history import fetch_history, upsert_snapshot
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.deputy_meister import build_meister
     from analytics.deputy_missions import build_weekly_missions
@@ -1027,6 +1030,23 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     # Где комментировать — посты с high engagement / low comments
     comment_targets = await build_comment_targets(deputy, archetype, city=city)
 
+    # Реактивный трекер: очередь комментариев требующих ответа
+    seen_ids = await get_seen_ids(external_id)
+    comments_queue = await build_comments_queue(deputy, seen_ids=seen_ids)
+
+    # Snapshot истории рейтинга (раз в неделю автоматом, идемпотентный
+    # UPSERT — можно вызывать каждый раз без дедупликации)
+    metrics = audit.get("metrics") or {}
+    await upsert_snapshot(
+        external_id,
+        composite_rating=rating_value,
+        alignment_pct=audit.get("alignment_score"),
+        posts_per_week=float(metrics.get("posts_per_week") or 0),
+        avg_likes=float(metrics.get("avg_likes") or 0),
+        posts_count=int(metrics.get("posts_count") or 0),
+    )
+    rating_history = await fetch_history(external_id, weeks=12)
+
     # Утренний брифинг — собираем из всего что уже посчитано выше
     briefing = build_briefing(
         deputy, archetype,
@@ -1098,6 +1118,8 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "city_brief":       city_brief,
         "trends_now":       trends_now,
         "comment_targets":  comment_targets,
+        "comments_queue":   comments_queue,
+        "rating_history":   rating_history,
         "briefing":         briefing,
     }
 
@@ -1458,6 +1480,20 @@ async def copilot_deputy_scenario(payload: ScenarioSimulateIn) -> dict:
         avg_likes=payload.avg_likes,
         reply_rate=payload.reply_rate,
     )
+
+
+class CommentsSeenIn(BaseModel):
+    deputy_id:   str = Field(..., min_length=2, max_length=80)
+    comment_ids: List[str] = Field(default_factory=list)
+    state:       str = Field("seen", pattern="^(seen|replied|ignored)$")
+
+
+@router.post("/deputy/comments/seen")
+async def copilot_deputy_comments_seen(payload: CommentsSeenIn) -> dict:
+    """Отметить комментарии как просмотренные / отвеченные / игнор."""
+    from db.deputy_comments_seen import mark_seen
+    ok = await mark_seen(payload.deputy_id, payload.comment_ids, state=payload.state)
+    return {"ok": bool(ok), "count": len(payload.comment_ids)}
 
 
 class ReplyRenderIn(BaseModel):
