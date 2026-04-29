@@ -152,13 +152,19 @@ async def audit_deputy(deputy: Dict[str, Any]) -> Dict[str, Any]:
 
     # Рекомендации
     base["recommendations"] = _build_recommendations(metrics, avg_align, archetype)
-    # Сырые посты — для downstream-анализа (timing heatmap и т.п.).
-    # Поля только нужные, чтобы JSON не разбухал.
+    # Сырые посты — для downstream-анализа (timing heatmap, affinity
+    # 12 архетипов, голос-портрет). Поля только нужные.
     base["_raw_posts"] = [
         {"published_at": p.get("published_at"),
          "likes":        p.get("likes", 0),
          "views":        p.get("views", 0)}
         for p in posts
+    ]
+    # Тексты постов (без _raw_posts, они метаданные) — для affinity и
+    # voice portrait. Длинные тексты режем для безопасности.
+    base["_posts_text"] = [
+        {"text": (p.get("text") or "")[:3000]}
+        for p in posts if (p.get("text") or "").strip()
     ]
     base["state"] = "ok"
     return base

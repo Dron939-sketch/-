@@ -897,7 +897,9 @@ async def copilot_deputy_cabinet(
 
 async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     """Тяжёлый расчёт кабинета — выносим из роута для кэширования."""
+    from analytics.archetype_affinity import compute_affinity
     from analytics.deputy_actions import situations_list
+    from analytics.deputy_bio import build_bio
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.deputy_meister import build_meister
     from analytics.deputy_missions import build_weekly_missions
@@ -908,7 +910,9 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from analytics.deputy_scenario import from_audit as scenario_from_audit
     from analytics.deputy_scenario import params_meta as scenario_params
     from analytics.vk_audit import audit_deputy
+    from analytics.vk_profile import fetch_profile
     from analytics.vk_timing import build_timing_heatmap, heatmap_advice
+    from analytics.voice_portrait import build_voice_portrait
     from config.archetypes import suggest_for_deputy
     from config.deputies import deputies_for_city
     from config.deputy_demo_data import coalition_for, mentions_for
@@ -998,6 +1002,22 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     scenario_meta = scenario_params()
     scenario_initial = scenario_from_audit(audit)
 
+    # VK profile (photo, bio, followers) — best-effort
+    profile = await fetch_profile(deputy.get("vk") or "") if deputy.get("vk") else None
+
+    # Авто-сгенерированное описание депутата
+    bio = build_bio(deputy, archetype, profile)
+
+    # Affinity 12 архетипов: насколько посты близки к каждому
+    affinity = compute_affinity(audit)
+
+    # Голос-портрет: маркеры стиля
+    voice_portrait = build_voice_portrait(audit)
+
+    # Очищаем audit от тяжёлых сырых текстов перед кэшем — affinity и
+    # voice уже посчитаны, в payload они не нужны.
+    audit.pop("_posts_text", None)
+
     name_parts = (deputy.get("name") or "").split(" ")
     first_name = name_parts[1] if len(name_parts) > 1 else deputy.get("name")
 
@@ -1049,6 +1069,10 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "action_situations": action_situations,
         "scenario_meta":    scenario_meta,
         "scenario_initial": scenario_initial,
+        "profile":          profile,
+        "bio":              bio,
+        "affinity":         affinity,
+        "voice_portrait":   voice_portrait,
     }
 
 

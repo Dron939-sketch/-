@@ -43,17 +43,33 @@
   // Sub-blocks
   // ---------------------------------------------------------------------------
 
-  function renderHeader(d, a, rating) {
+  function renderHeader(d, a, rating, profile, bio) {
     const greeting = d.first_name ? `Здравствуйте, ${esc(d.first_name)}!` : "Добро пожаловать!";
+    const photo = profile && profile.photo
+      ? `<img class="dc-hero-photo" src="${esc(profile.photo)}" alt="${esc(d.name || '')}" />`
+      : `<div class="dc-hero-photo dc-hero-photo-stub">${esc((d.first_name || "Д")[0])}</div>`;
+    const followers = profile && profile.followers
+      ? `<span class="dc-hero-fact">👥 ${profile.followers} подписчиков</span>` : "";
+    const verified = profile && profile.verified
+      ? `<span class="dc-hero-verified">✓ верифицирована</span>` : "";
     return `
       <div class="dc-hero">
+        ${photo}
         <div class="dc-hero-text">
           <div class="dc-hero-eyebrow">Личный кабинет депутата</div>
           <h1 class="dc-hero-greet">${greeting}</h1>
           <div class="dc-hero-meta">
             ${esc(d.name || "")} · ${esc(d.district || "")}
             ${d.vk_url ? `· <a href="${esc(d.vk_url)}" target="_blank" rel="noopener">VK ↗</a>` : ""}
+            ${followers}${verified}
           </div>
+          ${bio && bio.summary ? `<p class="dc-hero-sub">${esc(bio.summary)}</p>` : ""}
+          ${bio && bio.facts ? `
+            <div class="dc-hero-facts">
+              ${bio.facts.map((f) =>
+                `<span class="dc-hero-fact">${esc(f.icon || "")} ${esc(f.label || "")}</span>`
+              ).join("")}
+            </div>` : ""}
           <div class="dc-actions">
             <button type="button" class="dc-action-btn dc-action-primary" id="dc-create-content">
               <span class="dc-action-emoji">🎬</span>
@@ -70,10 +86,6 @@
               </span>
             </button>
           </div>
-          <p class="dc-hero-sub">
-            Я проанализировал вашу страницу глазами горожан и архетип бренда.
-            Вот что увидел и как поднять рейтинг.
-          </p>
         </div>
         <div class="dc-archetype-badge">
           <div class="dc-arch-emoji">${archetypeEmoji(a.code)}</div>
@@ -201,8 +213,10 @@
   // Образ депутата — расширенный портрет
   // ---------------------------------------------------------------------------
 
-  function renderPersona(p) {
+  function renderPersona(p, affinity, voice) {
     if (!p || !p.headline) return "";
+    const top3 = (affinity || []).slice(0, 3);
+    const main = top3[0];
     return `
       <div class="dc-persona">
         <div class="dc-persona-eyebrow">Образ глазами горожан</div>
@@ -210,6 +224,30 @@
         <div class="dc-persona-traits">
           ${(p.traits || []).map((t) => `<span class="dc-persona-tag">${esc(t)}</span>`).join("")}
         </div>
+        ${main ? `
+          <div class="dc-affinity-main">
+            <div class="dc-affinity-eyebrow">Образ, к которому очень близка</div>
+            <div class="dc-affinity-headline">
+              ${archetypeEmoji(main.code)} «${esc(main.name)}» —
+              <span class="dc-affinity-pct">${main.affinity}%</span>
+            </div>
+            <div class="dc-affinity-short">${esc(main.short || "")}</div>
+          </div>` : ""}
+        ${top3.length > 1 ? `
+          <div class="dc-affinity-rest">
+            <div class="dc-persona-lbl">Также читается как</div>
+            <div class="dc-affinity-bars">
+              ${top3.slice(1).map((a) => `
+                <div class="dc-affinity-row">
+                  <div class="dc-affinity-name">${archetypeEmoji(a.code)} ${esc(a.name)}</div>
+                  <div class="dc-affinity-bar">
+                    <div class="dc-affinity-bar-fill" style="width:${a.affinity}%"></div>
+                  </div>
+                  <div class="dc-affinity-val">${a.affinity}%</div>
+                </div>
+              `).join("")}
+            </div>
+          </div>` : ""}
         <div class="dc-persona-twocol">
           <div class="dc-persona-col">
             <div class="dc-persona-lbl">Как читается</div>
@@ -220,6 +258,28 @@
             <div class="dc-persona-text">${esc(p.danger || "")}</div>
           </div>
         </div>
+        ${voice && voice.state === "ok" ? `
+          <div class="dc-voice">
+            <div class="dc-persona-lbl">🎙 Голос-портрет — что я услышал в твоих постах</div>
+            <div class="dc-voice-headline">${esc(voice.headline || "")}</div>
+            <div class="dc-voice-body">
+              ${(voice.top_words || []).length ? `
+                <div class="dc-voice-words">
+                  ${voice.top_words.slice(0, 6).map((w) =>
+                    `<span class="dc-voice-word">${esc(w.word)} <small>×${w.count}</small></span>`
+                  ).join("")}
+                </div>` : ""}
+              <div class="dc-voice-stats">
+                <span>📏 ср. предложение ~${voice.avg_sentence || 0} симв</span>
+                ${voice.shares ? `
+                  <span>💬 эмодзи в ${voice.shares.emoji}% постов</span>
+                  <span>❗ восклицания ${voice.shares.excl}%</span>
+                  <span>❓ вопросы ${voice.shares.question}%</span>
+                ` : ""}
+                <span>🌡 тон <b>${esc(voice.tone || "")}</b> (${voice.tone_score}%)</span>
+              </div>
+            </div>
+          </div>` : ""}
         ${(p.style_hints || []).length ? `
           <div class="dc-persona-hints">
             ${p.style_hints.map((h) => `<div class="dc-persona-hint">· ${esc(h)}</div>`).join("")}
@@ -789,8 +849,9 @@
       return;
     }
     hero.innerHTML = `
-      ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {})}
-      ${renderPersona(data.persona || {})}
+      ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {},
+                     data.profile || null, data.bio || null)}
+      ${renderPersona(data.persona || {}, data.affinity || [], data.voice_portrait || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
       ${renderMeister(data.meister || {})}
       ${renderMissions(data.missions || [])}
