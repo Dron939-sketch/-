@@ -322,6 +322,130 @@
 }
 .dc-copy:hover { filter: brightness(1.07); transform: translateY(-1px); }
 
+/* --- Цели на квартал ---------------------------------------------------- */
+.dc-goals {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(140, 86, 224, 0.12), rgba(94, 168, 255, 0.06));
+  border: 1px solid rgba(140, 86, 224, 0.4);
+  border-radius: 14px;
+}
+.dc-goals-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.dc-goals-eyebrow {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #C9A0FF;
+  font-weight: 800;
+}
+.dc-goals-greet {
+  margin-top: 2px;
+  font-size: 0.86rem;
+  color: rgba(184, 212, 255, 0.78);
+}
+.dc-goals-count {
+  font-family: "Playfair Display", serif;
+  font-weight: 800;
+  font-size: 1rem;
+  padding: 4px 12px;
+  background: rgba(140, 86, 224, 0.18);
+  border: 1px solid rgba(140, 86, 224, 0.5);
+  border-radius: 999px;
+  color: #C9A0FF;
+  transition: background 0.2s;
+}
+.dc-goals-count.is-max {
+  animation: dc-goals-pulse 0.8s ease;
+  background: rgba(255, 159, 74, 0.25);
+  border-color: #FF9F4A;
+  color: #FFD89B;
+}
+@keyframes dc-goals-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+.dc-goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+.dc-goal-chip {
+  display: grid;
+  grid-template-columns: 28px 1fr 22px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+  text-align: left;
+  color: #DBE9FF;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+}
+.dc-goal-chip:hover {
+  transform: translateY(-1px);
+  border-color: #5EA8FF;
+}
+.dc-goal-chip.is-active {
+  background: linear-gradient(180deg, rgba(140, 86, 224, 0.25), rgba(7, 20, 42, 0.55));
+  border-color: #C9A0FF;
+  box-shadow: 0 4px 14px -4px rgba(140, 86, 224, 0.4);
+}
+.dc-goal-icon { font-size: 1.4rem; line-height: 1; text-align: center; }
+.dc-goal-text { display: flex; flex-direction: column; gap: 2px; }
+.dc-goal-label {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #DBE9FF;
+}
+.dc-goal-hint {
+  font-size: 0.74rem;
+  color: rgba(184, 212, 255, 0.65);
+}
+.dc-goal-check {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(94, 168, 255, 0.08);
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #B0F0C0;
+}
+.dc-goal-chip.is-active .dc-goal-check {
+  background: linear-gradient(180deg, #B0F0C0, #4FCC75);
+  border: none;
+  color: #07142A;
+}
+
+/* --- Collapsible <details> блоки ---------------------------------------- */
+details.dc-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  display: flex; align-items: center; gap: 0.5rem;
+  position: relative;
+  padding-right: 28px;
+}
+details.dc-collapsible > summary::-webkit-details-marker { display: none; }
+details.dc-collapsible > summary::after {
+  content: "▾";
+  position: absolute;
+  right: 8px; top: 50%;
+  transform: translateY(-50%) rotate(0deg);
+  color: rgba(184, 212, 255, 0.7);
+  font-size: 0.86rem;
+  transition: transform 0.2s ease;
+}
+details.dc-collapsible[open] > summary::after { transform: translateY(-50%) rotate(180deg); }
+details.dc-collapsible > summary:hover { color: #B8D4FF; }
+
 /* --- Утренний брифинг ---------------------------------------------------- */
 .dc-briefing {
   margin-top: 18px;
