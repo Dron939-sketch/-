@@ -74,6 +74,14 @@
           </button>
           <div class="jv-hint" id="jv-hint">Нажмите и говорите.</div>
         </div>
+
+        <!-- Уведомления через Max -->
+        <details class="jv-notify" id="jv-notify">
+          <summary>📨 Уведомления</summary>
+          <div class="jv-notify-body" id="jv-notify-body">
+            <div class="jv-notify-status" id="jv-notify-status">Загружаю…</div>
+          </div>
+        </details>
       </aside>
 
       <!-- Невидимый toast c приветствием при первом заходе -->
@@ -466,6 +474,99 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Уведомления через Max
+  // ---------------------------------------------------------------------------
+
+  const PREF_LABELS = {
+    critical:    "Критичные алерты по городу",
+    daily_brief: "Утренняя сводка дня",
+    topics:      "Новые темы для депутатов",
+  };
+
+  async function loadMaxStatus() {
+    const id = getIdentity();
+    if (!id) return null;
+    try {
+      const r = await fetch(`/api/max/status?identity=${encodeURIComponent(id)}`);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function renderMaxStatus(s) {
+    const body = el("jv-notify-body");
+    if (!body) return;
+    if (!s || !s.configured) {
+      body.innerHTML = `<div class="jv-notify-status muted">Канал Max не настроен на сервере.</div>`;
+      return;
+    }
+    if (!s.linked) {
+      const link = s.deeplink;
+      body.innerHTML = `
+        <div class="jv-notify-status">Привяжите Max — и я буду писать о критичных событиях.</div>
+        ${link ? `<a class="jv-notify-link" href="${link}" target="_blank" rel="noopener">Открыть бота в Max</a>` : ""}
+        <button type="button" class="jv-notify-recheck" id="jv-notify-recheck">Я нажал «Старт»</button>
+      `;
+      el("jv-notify-recheck")?.addEventListener("click", refreshMaxSection);
+      return;
+    }
+    const prefs = s.prefs || {};
+    const checks = Object.keys(PREF_LABELS).map((k) => `
+      <label class="jv-notify-check">
+        <input type="checkbox" data-pref="${k}" ${prefs[k] ? "checked" : ""} />
+        <span>${esc(PREF_LABELS[k])}</span>
+      </label>
+    `).join("");
+    body.innerHTML = `
+      <div class="jv-notify-status">Привязано${s.user_name ? `: ${esc(s.user_name)}` : ""}.</div>
+      <div class="jv-notify-prefs">${checks}</div>
+      <button type="button" class="jv-notify-unlink" id="jv-notify-unlink">Отвязать</button>
+    `;
+    body.querySelectorAll('input[data-pref]').forEach((inp) => {
+      inp.addEventListener("change", onPrefChange);
+    });
+    el("jv-notify-unlink")?.addEventListener("click", onUnlink);
+  }
+
+  async function onPrefChange(ev) {
+    const id = getIdentity();
+    if (!id) return;
+    const inp = ev.currentTarget;
+    const prefs = {};
+    document.querySelectorAll('#jv-notify-body input[data-pref]').forEach((c) => {
+      prefs[c.dataset.pref] = !!c.checked;
+    });
+    try {
+      await fetch("/api/max/prefs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity: id, prefs }),
+      });
+    } catch (_) {
+      // Откатываем чекбокс при ошибке
+      inp.checked = !inp.checked;
+    }
+  }
+
+  async function onUnlink() {
+    const id = getIdentity();
+    if (!id) return;
+    try {
+      await fetch("/api/max/unlink", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity: id }),
+      });
+    } catch (_) {}
+    refreshMaxSection();
+  }
+
+  async function refreshMaxSection() {
+    const status = await loadMaxStatus();
+    renderMaxStatus(status);
+  }
+
+  // ---------------------------------------------------------------------------
   // Greeting (через 10 секунд после первой загрузки за сессию)
   // ---------------------------------------------------------------------------
 
@@ -512,6 +613,8 @@
     refreshVoiceToggle();
     setStatus("Готов слушать.");
     setOrbState("idle");
+    // Подгрузка состояния Max-подписки — асинхронно, не блокирует UI
+    refreshMaxSection();
   }
 
   function closePanel() {

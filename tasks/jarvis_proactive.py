@@ -29,9 +29,32 @@ _VECTOR_LABELS = {
 }
 
 
+async def _broadcast_critical(
+    title: str, summary: Optional[str], city_name: str,
+) -> None:
+    """Если в подписчиках Max есть кто-то с prefs.critical=true —
+    разослать им сообщение. Полностью fail-safe, не блокирует основной
+    поток (запускается через asyncio.create_task)."""
+    try:
+        from db.jarvis_max_queries import list_chat_ids_for_pref
+        from notify import max_client
+        if not max_client.is_configured():
+            return
+        chat_ids = await list_chat_ids_for_pref("critical")
+        if not chat_ids:
+            return
+        text = f"⚠ {city_name}: {title}"
+        if summary:
+            text += f"\n\n{summary}"
+        await max_client.broadcast(chat_ids, text)
+    except Exception:  # noqa: BLE001
+        logger.debug("max broadcast failed", exc_info=False)
+
+
 async def check_city(city_name: str) -> List[Dict[str, Any]]:
     """Прогнать все проверки для одного города. Возвращает список
     upsert'нутых alert id (для логов)."""
+    import asyncio as _asyncio
     from db.jarvis_alerts_queries import upsert_alert
     from db.queries import latest_metrics, metrics_trend_7d
     from db.seed import city_id_by_name
@@ -52,9 +75,10 @@ async def check_city(city_name: str) -> List[Dict[str, Any]]:
             top_titles = [
                 (a.get("title") if isinstance(a, dict) else str(a)) for a in alerts[:3]
             ]
+            alert_level = "critical" if level == "critical" else "warning"
             row_id = await upsert_alert(
                 city_id=cid, key="crisis_high",
-                level="critical" if level == "critical" else "warning",
+                level=alert_level,
                 title=f"Кризис-радар: {len(alerts)} алертов",
                 summary="Топ: " + "; ".join(top_titles),
                 payload={"city": city_name, "level": level, "top": top_titles},
@@ -62,6 +86,12 @@ async def check_city(city_name: str) -> List[Dict[str, Any]]:
             )
             if row_id:
                 upserts.append({"id": row_id, "key": "crisis_high"})
+                if alert_level == "critical":
+                    _asyncio.create_task(_broadcast_critical(
+                        f"Кризис-радар: {len(alerts)} алертов",
+                        "Топ: " + "; ".join(top_titles),
+                        city_name,
+                    ))
     except Exception:  # noqa: BLE001
         logger.debug("crisis check failed for %s", city_name, exc_info=False)
 
@@ -80,10 +110,11 @@ async def check_city(city_name: str) -> List[Dict[str, Any]]:
                 if fv >= _METRIC_LOW:
                     continue
                 is_critical = fv < _METRIC_CRITICAL
+                alert_level = "critical" if is_critical else "warning"
                 row_id = await upsert_alert(
                     city_id=cid,
                     key=f"metric_{code}_low",
-                    level="critical" if is_critical else "warning",
+                    level=alert_level,
                     title=f"Просел вектор «{label}»",
                     summary=f"Текущее значение {fv:.1f} из 6 ({'критически' if is_critical else 'ниже'} нормы)",
                     payload={"vector": code, "value": fv, "threshold": _METRIC_LOW},
@@ -91,6 +122,12 @@ async def check_city(city_name: str) -> List[Dict[str, Any]]:
                 )
                 if row_id:
                     upserts.append({"id": row_id, "key": f"metric_{code}_low"})
+                    if alert_level == "critical":
+                        _asyncio.create_task(_broadcast_critical(
+                            f"Просел вектор «{label}»",
+                            f"Текущее значение {fv:.1f} из 6 (критически ниже нормы)",
+                            city_name,
+                        ))
     except Exception:  # noqa: BLE001
         logger.debug("metric check failed for %s", city_name, exc_info=False)
 

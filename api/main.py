@@ -29,6 +29,7 @@ from .admin_stats_routes import router as admin_stats_router
 from .auth_routes import router as auth_router
 from .copilot_routes import router as copilot_router
 from .deputy_routes import router as deputy_router
+from .max_routes import router as max_router
 from .routes import router
 from .usage_middleware import UsageLoggingMiddleware
 from .voice_routes import router as voice_router
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(deputy_router)
     app.include_router(voice_router)
     app.include_router(copilot_router)
+    app.include_router(max_router)
     app.include_router(router)
 
     @app.on_event("startup")
