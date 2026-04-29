@@ -1436,25 +1436,102 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
   gap: 8px;
   margin-top: 4px;
 }
-.dc-chip {
+/* --- Info-cards (общий стиль для Ожидания / Коалиция / Округ / Упоминания) --- */
+.dc-info-grid {
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.dc-info-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(94, 168, 255, 0.06), rgba(7, 20, 42, 0.55));
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 12px;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.dc-info-card:hover {
+  transform: translateY(-2px);
+  border-color: #5EA8FF;
+  box-shadow: 0 8px 22px -8px rgba(94, 168, 255, 0.4);
+}
+.dc-info-head {
+  display: flex; align-items: center; gap: 8px;
+}
+.dc-info-emoji {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.dc-info-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #5EA8FF;
+  font-weight: 800;
+  padding: 3px 10px;
+  background: rgba(94, 168, 255, 0.12);
+  border-radius: 999px;
+}
+.dc-info-title {
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #DBE9FF;
+  line-height: 1.3;
+}
+.dc-info-body {
+  font-size: 0.86rem;
+  color: rgba(184, 212, 255, 0.85);
+  line-height: 1.45;
+}
+.dc-info-foot {
+  margin-top: auto;
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.65);
+  padding-top: 4px;
+  border-top: 1px solid rgba(94, 168, 255, 0.12);
+}
+.dc-info-foot b { color: #B8D4FF; font-weight: 700; }
+/* Приоритетные акценты */
+.dc-info-high       { border-left: 3px solid #FF9F4A; }
+.dc-info-good       { border-left: 3px solid #4FCC75; }
+.dc-info-bad        { border-left: 3px solid #FF9F4A; }
+.dc-info-leadership { border-left: 3px solid #FFD89B; }
+.dc-info-neighbour  { border-left: 3px solid #5EA8FF; }
+.dc-info-high .dc-info-tag { background: rgba(255,159,74,0.15); color: #FFD89B; }
+.dc-info-good .dc-info-tag { background: rgba(79,204,117,0.15); color: #B0F0C0; }
+.dc-info-bad  .dc-info-tag { background: rgba(255,159,74,0.15); color: #FF9F4A; }
+.dc-info-leadership .dc-info-tag { background: rgba(255,217,155,0.15); color: #FFD89B; }
+
+@media (max-width: 540px) {
+  .dc-info-grid { grid-template-columns: 1fr; }
+}
+
+.dc-chip {
+  display: grid !important;
+  grid-template-columns: 32px 1fr;
   gap: 10px;
   align-items: center;
-  padding: 10px 12px;
-  background: rgba(7, 20, 42, 0.55);
-  border: 1px solid rgba(94, 168, 255, 0.18);
+  padding: 10px 14px;
+  background: rgba(94, 168, 255, 0.08);
+  border: 1px solid rgba(94, 168, 255, 0.3);
   border-radius: 10px;
   text-align: left;
   color: #DBE9FF;
   font: inherit;
+  font-family: inherit;
   cursor: pointer;
-  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.25);
 }
 .dc-chip:hover {
   transform: translateY(-1px);
-  background: rgba(94, 168, 255, 0.12);
+  background: rgba(94, 168, 255, 0.18);
   border-color: #5EA8FF;
+  box-shadow: 0 6px 16px -4px rgba(94, 168, 255, 0.3);
 }
 .dc-chip-icon {
   width: 28px; height: 28px;
