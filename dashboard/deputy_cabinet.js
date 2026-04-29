@@ -128,48 +128,36 @@
 
   function renderCitizensView(audit, archetype) {
     if (!audit) return "";
-    const works = (audit.what_works || []).slice(0, 3);
-    const hurts = (audit.what_hurts || []).slice(0, 3);
     const dos   = (archetype.do || []).slice(0, 3);
     const donts = (archetype.dont || []).slice(0, 2);
-
     if (audit.state === "no_posts") {
       return `
-        <div class="dc-block">
-          <div class="dc-block-title">👀 Глазами горожан</div>
+        <details class="dc-block dc-collapsible">
+          <summary class="dc-block-title">👀 Голос архетипа</summary>
           <div class="dc-empty">
-            Стена пустая или закрытая. Откройте её и опубликуйте первый
-            пост — я смогу показать, что именно работает на вашу репутацию.
+            Стена пустая или закрытая. Откройте её и опубликуйте первый пост.
           </div>
-        </div>
+        </details>
       `;
     }
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">👀 Глазами горожан</div>
+      <details class="dc-block dc-collapsible">
+        <summary class="dc-block-title">👀 Голос «${esc(archetype.name)}» — что делать и чего избегать</summary>
         <div class="dc-two-col">
           <div class="dc-col dc-col-good">
-            <div class="dc-col-title">Это работает на вашу репутацию</div>
-            ${works.length ? `<ul class="dc-quotes">
-              ${works.map((q) => `<li>«${esc(q)}…»</li>`).join("")}
-            </ul>` : `<div class="dc-empty-sub">Пока нет постов в голосе архетипа.</div>`}
-            <div class="dc-col-tip">Чего ждут от «${esc(archetype.name)}»:</div>
+            <div class="dc-col-title">Чего ждут</div>
             <ul class="dc-list">
               ${dos.map((s) => `<li>${esc(s)}</li>`).join("")}
             </ul>
           </div>
           <div class="dc-col dc-col-bad">
-            <div class="dc-col-title">Это размывает голос</div>
-            ${hurts.length ? `<ul class="dc-quotes">
-              ${hurts.map((q) => `<li>«${esc(q)}…»</li>`).join("")}
-            </ul>` : `<div class="dc-empty-sub">Размытых сообщений почти нет — хорошо.</div>`}
-            <div class="dc-col-tip">Что лучше не делать:</div>
+            <div class="dc-col-title">Чего лучше не делать</div>
             <ul class="dc-list">
               ${donts.map((s) => `<li>${esc(s)}</li>`).join("")}
             </ul>
           </div>
         </div>
-      </div>
+      </details>
     `;
   }
 
@@ -207,6 +195,96 @@
         </div>
       </div>
     `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Цели на квартал — пользователь выбирает 1-3 направления, под них
+  // подсвечиваются миссии и идеи. Хранится в localStorage по deputyId.
+  // ---------------------------------------------------------------------------
+
+  const GOALS = [
+    { code: "followers",   icon: "📈", label: "Увеличить подписчиков",
+      hint: "+50% за квартал" },
+    { code: "rating",      icon: "⭐", label: "Поднять рейтинг бренда",
+      hint: "до 4.5 из 5 ⭐" },
+    { code: "reach",       icon: "🚀", label: "Расширить охват",
+      hint: "+30% к среднему" },
+    { code: "complaints",  icon: "💬", label: "Закрыть жалобы",
+      hint: "≥80% ответов в срок" },
+    { code: "coalition",   icon: "🤝", label: "Расширить коалицию",
+      hint: "3 совместных проекта" },
+    { code: "voice",       icon: "🎭", label: "Усилить голос архетипа",
+      hint: "соответствие 70%+" },
+  ];
+
+  function _goalsKey(deputyId) {
+    return `cm.deputy.goals.${deputyId || "default"}`;
+  }
+  function loadGoals(deputyId) {
+    try {
+      const raw = localStorage.getItem(_goalsKey(deputyId));
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
+  }
+  function saveGoals(deputyId, goals) {
+    try { localStorage.setItem(_goalsKey(deputyId), JSON.stringify(goals)); } catch (_) {}
+  }
+
+  function renderGoals(deputyId) {
+    const active = new Set(loadGoals(deputyId));
+    return `
+      <div class="dc-goals" data-deputy-id="${esc(deputyId || "")}">
+        <div class="dc-goals-head">
+          <div>
+            <div class="dc-goals-eyebrow">🎯 Цели на квартал</div>
+            <div class="dc-goals-greet">Выбери до 3 направлений — под них настрою миссии и идеи</div>
+          </div>
+          <span class="dc-goals-count" id="dc-goals-count">${active.size}/3</span>
+        </div>
+        <div class="dc-goals-grid">
+          ${GOALS.map((g) => `
+            <button type="button" class="dc-goal-chip ${active.has(g.code) ? 'is-active' : ''}"
+                    data-goal="${esc(g.code)}">
+              <span class="dc-goal-icon">${esc(g.icon)}</span>
+              <span class="dc-goal-text">
+                <span class="dc-goal-label">${esc(g.label)}</span>
+                <span class="dc-goal-hint">${esc(g.hint)}</span>
+              </span>
+              <span class="dc-goal-check">${active.has(g.code) ? "✓" : ""}</span>
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function onGoalClick(ev) {
+    const chip = ev.target.closest(".dc-goal-chip");
+    if (!chip) return;
+    const block = chip.closest(".dc-goals");
+    const deputyId = block?.dataset.deputyId;
+    const code = chip.getAttribute("data-goal");
+    const active = new Set(loadGoals(deputyId));
+    if (active.has(code)) {
+      active.delete(code);
+    } else if (active.size < 3) {
+      active.add(code);
+    } else {
+      // Уже 3 — мигаем счётчиком как warning
+      const cnt = document.getElementById("dc-goals-count");
+      if (cnt) {
+        cnt.classList.add("is-max");
+        setTimeout(() => cnt.classList.remove("is-max"), 800);
+      }
+      return;
+    }
+    saveGoals(deputyId, [...active]);
+    chip.classList.toggle("is-active");
+    const check = chip.querySelector(".dc-goal-check");
+    if (check) check.textContent = active.has(code) ? "✓" : "";
+    const cnt = document.getElementById("dc-goals-count");
+    if (cnt) cnt.textContent = `${active.size}/3`;
   }
 
   // ---------------------------------------------------------------------------
@@ -403,8 +481,6 @@
           <div class="dc-persona-hints">
             ${p.style_hints.map((h) => `<div class="dc-persona-hint">· ${esc(h)}</div>`).join("")}
           </div>` : ""}
-        ${p.epigraph ? `
-          <div class="dc-persona-epi">«${esc(p.epigraph)}»</div>` : ""}
       </div>
     `;
   }
@@ -429,11 +505,11 @@
       ? `<span class="dc-trends-source">live VK</span>`
       : `<span class="dc-trends-source dc-trends-fallback">из новостей</span>`;
     return `
-      <div class="dc-block dc-trends-block">
-        <div class="dc-block-title">
+      <details class="dc-block dc-collapsible dc-trends-block">
+        <summary class="dc-block-title">
           🌐 Карта внимания — что обсуждают сейчас
           ${sourceTag}
-        </div>
+        </summary>
         <p class="dc-empty-sub">Топ горячих тем за 48ч в твоих секторах. Тот, кто заходит в тему первым — собирает охват.</p>
         <div class="dc-trends-list">
           ${t.trends.map((tr, i) => `
@@ -445,19 +521,11 @@
                   📝 ${tr.posts || 0} постов
                   ${tr.engagement ? `· 👍 ${tr.engagement} реакций` : ""}
                 </div>
-                ${(tr.samples || []).length ? `
-                  <ul class="dc-trend-samples">
-                    ${tr.samples.slice(0, 2).map((s) => `
-                      <li>
-                        ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">↗</a> ` : ""}«${esc(s.text || "")}…»
-                      </li>
-                    `).join("")}
-                  </ul>` : ""}
               </div>
             </div>
           `).join("")}
         </div>
-      </div>
+      </details>
     `;
   }
 
@@ -646,8 +714,8 @@
       `;
     };
     return `
-      <div class="dc-block dc-scn-block">
-        <div class="dc-block-title">📊 Сценарии — что если…</div>
+      <details class="dc-block dc-collapsible dc-scn-block">
+        <summary class="dc-block-title">📊 Сценарии — что если…</summary>
         <p class="dc-empty-sub">Крути ползунки — увидишь, как изменится твой рейтинг и 4 вектора.</p>
         <div class="dc-scn-controls">
           ${Object.keys(params).map(sliderRow).join("")}
@@ -659,7 +727,7 @@
           </div>
           <div class="dc-scn-vectors" id="dc-scn-vectors"></div>
         </div>
-      </div>
+      </details>
     `;
   }
 
@@ -772,8 +840,8 @@
   function renderExpectations(items) {
     if (!items || items.length === 0) return "";
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">🎯 Чего ждут от меня избиратели</div>
+      <details class="dc-block dc-collapsible">
+        <summary class="dc-block-title">🎯 Чего ждут от меня избиратели</summary>
         <div class="dc-exp-list">
           ${items.map((it) => `
             <div class="dc-exp-row dc-exp-${esc(it.priority || 'medium')}">
@@ -786,7 +854,7 @@
             </div>
           `).join("")}
         </div>
-      </div>
+      </details>
     `;
   }
 
@@ -798,11 +866,11 @@
     if (!m || !m.items || m.items.length === 0) return "";
     const icon = (k) => k === "positive" ? "💚" : k === "critical" ? "⚠" : "·";
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">
+      <details class="dc-block dc-collapsible">
+        <summary class="dc-block-title">
           🔔 Упоминания обо мне
           ${m.data_kind === "demo" ? `<span class="dc-fallback-tag">пример</span>` : ""}
-        </div>
+        </summary>
         ${m.summary ? `<p class="dc-empty-sub">${esc(m.summary)}</p>` : ""}
         <div class="dc-mentions-list">
           ${m.items.map((it) => `
@@ -816,7 +884,7 @@
           `).join("")}
         </div>
         ${m.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(m.hint)}</div>` : ""}
-      </div>
+      </details>
     `;
   }
 
@@ -827,8 +895,8 @@
   function renderCoalition(c) {
     if (!c || !c.items || c.items.length === 0) return "";
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">🤝 Коалиция</div>
+      <details class="dc-block dc-collapsible">
+        <summary class="dc-block-title">🤝 Коалиция</summary>
         <div class="dc-coalition-grid">
           ${c.items.map((it) => `
             <div class="dc-coalition-card dc-coalition-${esc(it.scope || 'neighbour')}">
@@ -839,7 +907,7 @@
           `).join("")}
         </div>
         ${c.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(c.hint)}</div>` : ""}
-      </div>
+      </details>
     `;
   }
 
@@ -876,8 +944,8 @@
   function renderReplyTemplates(categories, deputyId) {
     if (!categories || categories.length === 0) return "";
     return `
-      <div class="dc-block dc-replies-block" data-deputy-id="${esc(deputyId || "")}">
-        <div class="dc-block-title">💬 Готовые ответы на жалобы</div>
+      <details class="dc-block dc-collapsible dc-replies-block" data-deputy-id="${esc(deputyId || "")}">
+        <summary class="dc-block-title">💬 Готовые ответы на жалобы</summary>
         <p class="dc-empty-sub">Кликни — Джарвис соберёт ответ в твоём голосе. Можно копировать сразу.</p>
         <div class="dc-replies-grid">
           ${categories.map((c) => `
@@ -889,7 +957,7 @@
           `).join("")}
         </div>
         <div class="dc-reply-result" id="dc-reply-result"></div>
-      </div>
+      </details>
     `;
   }
 
@@ -939,11 +1007,11 @@
     if (items.length === 0) return "";
     const isDemo = dt.data_kind === "demo";
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">
+      <details class="dc-block dc-collapsible">
+        <summary class="dc-block-title">
           🏘 Округ сегодня
           ${isDemo ? `<span class="dc-fallback-tag">пример</span>` : ""}
-        </div>
+        </summary>
         <div class="dc-today-grid">
           ${items.map((it) => `
             <div class="dc-today-card">
@@ -953,7 +1021,7 @@
           `).join("")}
         </div>
         ${isDemo && dt.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(dt.hint)}</div>` : ""}
-      </div>
+      </details>
     `;
   }
 
@@ -989,14 +1057,14 @@
     }).join("");
 
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">📊 Когда лучше публиковать</div>
+      <details class="dc-block dc-collapsible">
+        <summary class="dc-block-title">📊 Когда лучше публиковать</summary>
         <table class="dc-heatmap">
           <thead><tr>${headerRow}</tr></thead>
           <tbody>${rows}</tbody>
         </table>
         ${timing.tip ? `<div class="dc-heatmap-tip">${esc(timing.tip)}</div>` : ""}
-      </div>
+      </details>
     `;
   }
 
@@ -1008,8 +1076,8 @@
     if (!events || events.length === 0) return "";
     const visible = events.slice(0, 5);
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">🗓 Поводы недели</div>
+      <details class="dc-block dc-collapsible">
+        <summary class="dc-block-title">🗓 Поводы недели</summary>
         <div class="dc-cal-list">
           ${visible.map((e) => {
             const when = e.days_until == null
@@ -1030,7 +1098,7 @@
             `;
           }).join("")}
         </div>
-      </div>
+      </details>
     `;
   }
 
@@ -1069,6 +1137,7 @@
     hero.innerHTML = `
       ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {},
                      data.profile || null, data.bio || null)}
+      ${renderGoals((data.deputy || {}).external_id)}
       ${renderBriefing(data.briefing || {}, (data.deputy || {}).external_id)}
       ${renderPersona(data.persona || {}, data.affinity || [], data.voice_portrait || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
@@ -1097,6 +1166,7 @@
     hero.addEventListener("click", onActionClick);
     hero.addEventListener("click", onBriefingVoiceClick);
     hero.addEventListener("click", onBriefingCardClick);
+    hero.addEventListener("click", onGoalClick);
     hero.addEventListener("input", onScenarioInput);
     runScenario();
     document.getElementById("dc-create-content")?.addEventListener("click",
