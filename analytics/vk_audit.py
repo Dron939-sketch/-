@@ -29,6 +29,41 @@ _WALL_LOOKBACK_DAYS = 60
 # Public API
 # ---------------------------------------------------------------------------
 
+async def audit_vk_page(
+    vk_handle: str, *,
+    name: Optional[str] = None,
+    sectors: Optional[List[str]] = None,
+    archetype_code: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Аудит произвольной VK-страницы для рядового пользователя.
+
+    Это thin-wrapper над audit_deputy: строит pseudo-deputy dict с
+    минимальным набором полей. Если archetype_code передан — он
+    используется напрямую (пользователь сам выбрал свой архетип),
+    иначе подбираем по sectors через suggest_for_deputy.
+    """
+    pseudo = {
+        "name":     name or "Страница",
+        "id":       0,
+        "vk":       vk_handle,
+        "sectors":  list(sectors or ["общая_повестка"]),
+        "role":     "district_rep",
+        "district": "",
+    }
+    out = await audit_deputy(pseudo)
+    # Перезатереть архетип если пользователь явно выбрал
+    if archetype_code:
+        from config.archetypes import get as get_arch
+        a = get_arch(archetype_code)
+        if a:
+            out["archetype_code"]  = a.get("code")
+            out["archetype_name"]  = a.get("name")
+            out["archetype_voice"] = a.get("voice")
+            out["archetype_do"]    = a.get("do") or []
+            out["archetype_dont"]  = a.get("dont") or []
+    return out
+
+
 async def audit_deputy(deputy: Dict[str, Any]) -> Dict[str, Any]:
     """Главная точка. Принимает dict депутата (как из db.list_deputies),
     возвращает словарь с метриками и рекомендациями."""

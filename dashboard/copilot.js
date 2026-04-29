@@ -82,6 +82,14 @@
             <div class="jv-notify-status" id="jv-notify-status">Загружаю…</div>
           </div>
         </details>
+
+        <!-- SMM-аудит личной VK-страницы -->
+        <details class="jv-notify jv-smm" id="jv-smm">
+          <summary>📊 Мой SMM-аудит</summary>
+          <div class="jv-notify-body" id="jv-smm-body">
+            <div class="jv-notify-status">Загружаю…</div>
+          </div>
+        </details>
       </aside>
 
       <!-- Невидимый toast c приветствием при первом заходе -->
@@ -567,6 +575,207 @@
   }
 
   // ---------------------------------------------------------------------------
+  // SMM-аудит — личная VK-страница пользователя
+  // ---------------------------------------------------------------------------
+
+  let smmArchetypesCache = null;
+  let smmLastAudit = null;
+
+  async function loadSmmStatus() {
+    const id = getIdentity();
+    if (!id) return null;
+    try {
+      const r = await fetch(`/api/copilot/vk/status?identity=${encodeURIComponent(id)}`);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) { return null; }
+  }
+
+  async function loadArchetypes() {
+    if (smmArchetypesCache) return smmArchetypesCache;
+    try {
+      const r = await fetch("/api/copilot/vk/archetypes");
+      if (!r.ok) return [];
+      const data = await r.json();
+      smmArchetypesCache = data.archetypes || [];
+      return smmArchetypesCache;
+    } catch (_) { return []; }
+  }
+
+  function renderSmmUnlinked(archetypes) {
+    const opts = ['<option value="">— подбери автоматически —</option>']
+      .concat(archetypes.map((a) =>
+        `<option value="${esc(a.code)}">${esc(a.name)} — ${esc(a.short)}</option>`
+      )).join("");
+    return `
+      <div class="jv-notify-status">Привяжи свою VK-страницу — оценю стиль и подскажу, что улучшить.</div>
+      <input type="text" class="jv-smm-input" id="jv-smm-handle"
+             placeholder="vk.com/ivanov или ivanov" autocomplete="off" />
+      <select class="jv-smm-select" id="jv-smm-archetype">${opts}</select>
+      <button type="button" class="jv-smm-btn primary" id="jv-smm-link">Привязать</button>
+    `;
+  }
+
+  function renderSmmLinked(s) {
+    const last = s.last_audit_at
+      ? new Date(s.last_audit_at).toLocaleDateString("ru-RU",
+          { day: "numeric", month: "short" })
+      : null;
+    return `
+      <div class="jv-notify-status">
+        Привязано: <a class="jv-smm-link" href="${esc(s.vk_url)}"
+          target="_blank" rel="noopener">${esc(s.vk_handle)}</a>
+        ${last ? `<span class="muted"> · аудит ${esc(last)}</span>` : ""}
+      </div>
+      <button type="button" class="jv-smm-btn primary" id="jv-smm-audit">Запустить аудит</button>
+      <button type="button" class="jv-notify-unlink" id="jv-smm-unlink">Отвязать</button>
+      <div class="jv-smm-result" id="jv-smm-result"></div>
+    `;
+  }
+
+  function renderSmmAudit(out) {
+    if (!out) return "";
+    if (out.state === "no_posts") {
+      return `
+        <div class="jv-smm-section">
+          <div class="jv-smm-status">Стена пустая или закрытая.</div>
+          <ul class="jv-smm-recs">
+            ${(out.recommendations || []).map((r) => `<li>${esc(r)}</li>`).join("")}
+          </ul>
+        </div>
+      `;
+    }
+    const m = out.metrics || {};
+    const score = out.alignment_score;
+    const label = out.alignment_label || "—";
+    const arch = out.archetype_name || "—";
+    return `
+      <div class="jv-smm-section">
+        <div class="jv-smm-score">
+          <span class="jv-smm-score-num">${score == null ? "—" : score}</span>
+          <span class="jv-smm-score-lbl">${esc(label)}</span>
+          <span class="jv-smm-score-arch">голос «${esc(arch)}»</span>
+        </div>
+        <div class="jv-smm-metrics">
+          <span>📝 ${m.posts_count ?? 0} постов</span>
+          <span>📅 ${m.posts_per_week ?? 0}/нед</span>
+          <span>📏 ~${m.avg_length ?? 0} симв</span>
+          <span>👍 ${m.avg_likes ?? 0}</span>
+        </div>
+        <div class="jv-smm-recs-title">Что улучшить</div>
+        <ul class="jv-smm-recs">
+          ${(out.recommendations || []).map((r) => `<li>${esc(r)}</li>`).join("")}
+        </ul>
+        ${(out.what_works && out.what_works.length) ? `
+          <div class="jv-smm-recs-title">В голосе</div>
+          <ul class="jv-smm-quotes">
+            ${out.what_works.map((q) => `<li>«${esc(q)}…»</li>`).join("")}
+          </ul>` : ""}
+        ${(out.what_hurts && out.what_hurts.length) ? `
+          <div class="jv-smm-recs-title">Размывает голос</div>
+          <ul class="jv-smm-quotes">
+            ${out.what_hurts.map((q) => `<li>«${esc(q)}…»</li>`).join("")}
+          </ul>` : ""}
+      </div>
+    `;
+  }
+
+  async function refreshSmmSection() {
+    const body = el("jv-smm-body");
+    if (!body) return;
+    body.innerHTML = `<div class="jv-notify-status">Загружаю…</div>`;
+    const [status, archetypes] = await Promise.all([
+      loadSmmStatus(), loadArchetypes(),
+    ]);
+    if (!status || !status.linked) {
+      body.innerHTML = renderSmmUnlinked(archetypes);
+      el("jv-smm-link")?.addEventListener("click", onSmmLink);
+      return;
+    }
+    body.innerHTML = renderSmmLinked(status);
+    el("jv-smm-audit")?.addEventListener("click", onSmmAudit);
+    el("jv-smm-unlink")?.addEventListener("click", onSmmUnlink);
+    // Если уже делали аудит в этой сессии — показываем результат сразу
+    if (smmLastAudit) {
+      const r = el("jv-smm-result");
+      if (r) r.innerHTML = renderSmmAudit(smmLastAudit);
+    }
+  }
+
+  async function onSmmLink() {
+    const id = getIdentity();
+    if (!id) return;
+    const inp = el("jv-smm-handle");
+    const sel = el("jv-smm-archetype");
+    const handle = (inp?.value || "").trim();
+    if (!handle) {
+      setStatus("Введи VK-ссылку или screen_name.");
+      return;
+    }
+    const btn = el("jv-smm-link");
+    if (btn) { btn.disabled = true; btn.textContent = "Привязываю…"; }
+    try {
+      const res = await fetch("/api/copilot/vk/link", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identity: id, vk_handle: handle,
+          archetype: sel?.value || null,
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        setStatus(detail.detail || "Не получилось привязать.");
+        if (btn) { btn.disabled = false; btn.textContent = "Привязать"; }
+        return;
+      }
+      smmLastAudit = null;
+      refreshSmmSection();
+    } catch (_) {
+      setStatus("Сеть недоступна.");
+      if (btn) { btn.disabled = false; btn.textContent = "Привязать"; }
+    }
+  }
+
+  async function onSmmUnlink() {
+    const id = getIdentity();
+    if (!id) return;
+    try {
+      await fetch("/api/copilot/vk/unlink", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity: id }),
+      });
+    } catch (_) {}
+    smmLastAudit = null;
+    refreshSmmSection();
+  }
+
+  async function onSmmAudit() {
+    const id = getIdentity();
+    if (!id) return;
+    const btn = el("jv-smm-audit");
+    const result = el("jv-smm-result");
+    if (btn) { btn.disabled = true; btn.textContent = "Анализирую…"; }
+    if (result) result.innerHTML = `<div class="jv-notify-status">Читаю стену, считаю метрики…</div>`;
+    try {
+      const res = await fetch("/api/copilot/vk/audit", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity: id }),
+      });
+      if (!res.ok) {
+        if (result) result.innerHTML = `<div class="jv-notify-status">Аудит не удался (${res.status}).</div>`;
+        return;
+      }
+      const data = await res.json();
+      smmLastAudit = data;
+      if (result) result.innerHTML = renderSmmAudit(data);
+    } catch (_) {
+      if (result) result.innerHTML = `<div class="jv-notify-status">Сеть недоступна.</div>`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Перезапустить аудит"; }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Greeting (через 10 секунд после первой загрузки за сессию)
   // ---------------------------------------------------------------------------
 
@@ -615,6 +824,7 @@
     setOrbState("idle");
     // Подгрузка состояния Max-подписки — асинхронно, не блокирует UI
     refreshMaxSection();
+    refreshSmmSection();
   }
 
   function closePanel() {
