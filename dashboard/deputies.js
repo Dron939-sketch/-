@@ -238,6 +238,11 @@
     try {
       const data = await apiGet(`/deputies/${deputyId}/profile`);
       renderDeputyCard(data);
+      // SMM-секция: запоминаем deputy_id для последующих fetch'ей,
+      // сразу показываем «Архетип» (детерминированный, мгновенный).
+      state.smmDeputyId = deputyId;
+      state.smmCache = {};
+      activateSmmTab("archetype");
     } catch (e) {
       errorBox.textContent = `Не удалось загрузить карточку: ${e.message}`;
       errorBox.hidden = false;
@@ -344,6 +349,154 @@
       return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
     } catch (_) {
       return iso;
+    }
+  }
+
+  // -------------------------------------------- SMM-блок (архетип / аудит / контент)
+
+  state.smmDeputyId = null;
+  state.smmCache = {};
+
+  function activateSmmTab(name) {
+    // Активный таб
+    document.querySelectorAll(".dep-smm-tab").forEach((b) => {
+      b.dataset.active = (b.dataset.smmTab === name) ? "1" : "0";
+    });
+    // Видимая панель
+    ["archetype", "audit", "post", "plan"].forEach((k) => {
+      const pane = $("dep-smm-" + k);
+      if (pane) pane.hidden = (k !== name);
+    });
+    // По первому открытию — лениво загружаем
+    if (name !== "post" && !state.smmCache[name]) {
+      loadSmmTab(name);
+    }
+  }
+
+  async function loadSmmTab(name) {
+    const id = state.smmDeputyId;
+    if (!id) return;
+    const pane = $("dep-smm-" + name);
+    if (!pane) return;
+    pane.innerHTML = '<div class="muted small">Загружаю…</div>';
+    try {
+      let data;
+      if (name === "archetype") {
+        data = await apiGet(`/deputies/${id}/archetype`);
+        pane.innerHTML = renderArchetype(data);
+      } else if (name === "audit") {
+        data = await apiGet(`/deputies/${id}/audit`);
+        pane.innerHTML = renderAudit(data);
+      } else if (name === "plan") {
+        data = await apiGet(`/deputies/${id}/content_plan`);
+        pane.innerHTML = renderPlan(data);
+      }
+      state.smmCache[name] = data;
+    } catch (e) {
+      pane.innerHTML = `<div class="auth-error">Ошибка: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  function renderArchetype(d) {
+    if (!d) return '<div class="muted small">Нет данных.</div>';
+    const doList = (d.do || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    const dontList = (d.dont || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    return `
+      <div class="dep-smm-arch">
+        <div class="dep-smm-arch-name">${escapeHtml(d.name || "")}</div>
+        <div class="muted small">${escapeHtml(d.short || "")}</div>
+        <div class="dep-smm-arch-voice">${escapeHtml(d.voice || "")}</div>
+        <div class="dep-smm-arch-cols">
+          <div>
+            <div class="dep-smm-h">Делать</div>
+            <ul>${doList}</ul>
+          </div>
+          <div>
+            <div class="dep-smm-h">Не делать</div>
+            <ul>${dontList}</ul>
+          </div>
+        </div>
+        ${d.sample_post ? `<div class="dep-smm-sample"><div class="dep-smm-h">Образец поста</div>${escapeHtml(d.sample_post)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function renderAudit(d) {
+    if (!d) return '<div class="muted small">Нет данных.</div>';
+    if (d.state === "no_vk_handle") {
+      return `
+        <div class="dep-smm-empty">У депутата не указан VK handle. Привяжите страницу через «Изменение депутата».</div>
+        ${(d.recommendations || []).map((r) => `<div class="dep-smm-rec">— ${escapeHtml(r)}</div>`).join("")}
+      `;
+    }
+    if (d.state === "no_posts") {
+      return `
+        <div class="dep-smm-empty">Стена пуста или закрыта.</div>
+        ${(d.recommendations || []).map((r) => `<div class="dep-smm-rec">— ${escapeHtml(r)}</div>`).join("")}
+      `;
+    }
+    const m = d.metrics || {};
+    const works = (d.what_works || []).map((q) => `<li>${escapeHtml(q)}</li>`).join("");
+    const hurts = (d.what_hurts || []).map((q) => `<li>${escapeHtml(q)}</li>`).join("");
+    const recs = (d.recommendations || []).map((r) => `<div class="dep-smm-rec">— ${escapeHtml(r)}</div>`).join("");
+    const url = d.vk_url ? `<a href="${escapeHtml(d.vk_url)}" target="_blank" rel="noopener">${escapeHtml(d.vk_handle)}</a>` : "—";
+    return `
+      <div class="dep-smm-audit">
+        <div class="dep-smm-row">VK: ${url}</div>
+        <div class="dep-smm-row">Архетип: <strong>${escapeHtml(d.archetype_name || "")}</strong></div>
+        <div class="dep-smm-row">Соответствие стилю: <strong>${d.alignment_score == null ? "—" : d.alignment_score + "%"}</strong> (${escapeHtml(d.alignment_label || "")})</div>
+        <div class="dep-smm-row">Постов за 60 дней: ${m.posts_count ?? 0}, в неделю: ${m.posts_per_week ?? 0}, ср. длина: ${m.avg_length ?? 0} симв.</div>
+        <div class="dep-smm-row">Среднее: ${m.avg_likes ?? 0} лайков · ${m.avg_views ?? 0} просмотров.</div>
+        ${works ? `<div class="dep-smm-h">Что в стиле</div><ul>${works}</ul>` : ""}
+        ${hurts ? `<div class="dep-smm-h">Что мешает</div><ul>${hurts}</ul>` : ""}
+        <div class="dep-smm-h">Рекомендации</div>${recs}
+      </div>
+    `;
+  }
+
+  function renderPlan(d) {
+    if (!d || !Array.isArray(d.items) || d.items.length === 0) {
+      return '<div class="muted small">План не сформирован.</div>';
+    }
+    const items = d.items.map((it) => `
+      <div class="dep-smm-plan-item">
+        <div class="dep-smm-plan-day">${escapeHtml(it.day || "")}</div>
+        <div class="dep-smm-plan-topic">${escapeHtml(it.topic || "")}</div>
+        ${it.voice ? `<div class="muted small">${escapeHtml(it.voice)}</div>` : ""}
+        ${it.draft ? `<div class="dep-smm-plan-draft">${escapeHtml(it.draft)}</div>` : ""}
+      </div>
+    `).join("");
+    return `
+      <div class="dep-smm-plan">
+        <div class="muted small">Архетип: <strong>${escapeHtml(d.archetype_name || "")}</strong>${d.fallback ? " · шаблон без LLM" : ""}</div>
+        <div class="muted small">Неделя: ${escapeHtml(d.week_of || "")}</div>
+        ${items}
+      </div>
+    `;
+  }
+
+  async function generateSmmPost() {
+    const id = state.smmDeputyId;
+    if (!id) return;
+    const req = $("dep-smm-post-request").value.trim();
+    if (!req) {
+      alert("Опишите тему поста.");
+      return;
+    }
+    const out = $("dep-smm-post-result");
+    out.innerHTML = '<div class="muted small">Генерирую…</div>';
+    try {
+      const data = await apiPost(`/deputies/${id}/content_post`, { request: req });
+      out.innerHTML = `
+        <div class="dep-smm-post-card">
+          ${data.title ? `<div class="dep-smm-post-title">${escapeHtml(data.title)}</div>` : ""}
+          <div class="dep-smm-post-body">${escapeHtml(data.body || "")}</div>
+          ${data.cta ? `<div class="dep-smm-post-cta">${escapeHtml(data.cta)}</div>` : ""}
+          <div class="muted small">Архетип: ${escapeHtml(data.archetype_name || "")}${data.fallback ? " · шаблон без LLM" : ""}</div>
+        </div>
+      `;
+    } catch (e) {
+      out.innerHTML = `<div class="auth-error">${escapeHtml(e.message)}</div>`;
     }
   }
 
@@ -663,6 +816,11 @@
     $("autogen-close").addEventListener("click", closeAutogen);
     $("autogen-cancel").addEventListener("click", closeAutogen);
     $("autogen-confirm").addEventListener("click", confirmAutogen);
+    // SMM-табы в карточке депутата
+    document.querySelectorAll('.dep-smm-tab').forEach((btn) =>
+      btn.addEventListener("click", () => activateSmmTab(btn.dataset.smmTab)),
+    );
+    $("dep-smm-post-go")?.addEventListener("click", generateSmmPost);
     document.querySelectorAll('[data-card-close]').forEach((el) =>
       el.addEventListener("click", closeDeputyCard)
     );
