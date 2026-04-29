@@ -35,29 +35,167 @@
 }
 .dc-empty-sub { color: rgba(184, 212, 255, 0.5); font-size: 0.85rem; }
 
-/* --- Hero header --- */
+/* --- Hero header (компактный) --- */
 .dc-hero {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 22px;
+  grid-template-columns: 64px 1fr auto;
+  gap: 14px;
   align-items: center;
   position: relative; z-index: 1;
 }
 .dc-hero-photo {
-  width: 100px; height: 100px;
+  width: 64px; height: 64px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid rgba(94, 168, 255, 0.5);
-  box-shadow: 0 16px 40px -10px rgba(94, 168, 255, 0.45);
+  box-shadow: 0 8px 20px -6px rgba(94, 168, 255, 0.4);
   flex-shrink: 0;
 }
+.dc-hero-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.66rem;
+  color: rgba(184, 212, 255, 0.6);
+  font-weight: 700;
+}
+.dc-hero-greet {
+  margin: 2px 0 2px;
+  font-family: "Playfair Display", serif;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #DBE9FF;
+  line-height: 1.1;
+}
+.dc-hero-meta {
+  font-size: 0.8rem;
+  color: rgba(184, 212, 255, 0.7);
+}
+.dc-hero-arch {
+  font-weight: 700;
+  color: #B8D4FF;
+}
+.dc-hero-details {
+  margin-top: 6px;
+}
+.dc-hero-details > summary {
+  cursor: pointer;
+  font-size: 0.74rem;
+  color: rgba(184, 212, 255, 0.55);
+  list-style: none;
+  user-select: none;
+}
+.dc-hero-details > summary:hover { color: #5EA8FF; }
+.dc-hero-details > summary::-webkit-details-marker { display: none; }
+.dc-hero-details[open] > summary::after { content: " ▴"; }
+.dc-hero-details:not([open]) > summary::after { content: " ▾"; }
+.dc-actions {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.dc-action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.15s, transform 0.15s, border-color 0.15s;
+}
+.dc-action-btn .dc-action-emoji { font-size: 1rem; line-height: 1; }
+.dc-action-btn .dc-action-title { white-space: nowrap; }
+.dc-action-primary {
+  background: linear-gradient(180deg, #5EA8FF, #2C70D9);
+  color: #07142A;
+}
+.dc-action-secondary {
+  background: rgba(94, 168, 255, 0.08);
+  border-color: rgba(94, 168, 255, 0.4);
+  color: #B8D4FF;
+}
+.dc-action-audit {
+  background: rgba(94, 168, 255, 0.04);
+  border-color: rgba(94, 168, 255, 0.25);
+  color: rgba(184, 212, 255, 0.7);
+}
+.dc-action-btn:hover { transform: translateY(-1px); filter: brightness(1.07); }
+
+.dc-hero-text { min-width: 0; }
+
+/* --- Табы навигации (sticky) --- */
+.dc-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  margin: 16px -16px 0;
+  padding: 8px 16px;
+  background: rgba(10, 22, 40, 0.92);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(94, 168, 255, 0.15);
+  border-bottom: 1px solid rgba(94, 168, 255, 0.15);
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.dc-tabs::-webkit-scrollbar { display: none; }
+.dc-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: rgba(184, 212, 255, 0.65);
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.dc-tab:hover { background: rgba(94, 168, 255, 0.06); color: #B8D4FF; }
+.dc-tab.is-active {
+  background: rgba(94, 168, 255, 0.12);
+  border-color: rgba(94, 168, 255, 0.4);
+  color: #DBE9FF;
+}
+.dc-tab-icon { font-size: 1rem; line-height: 1; }
+.dc-tab-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
+.dc-tab-label { font-weight: 700; font-size: 0.86rem; }
+.dc-tab-sub {
+  font-size: 0.66rem;
+  color: rgba(184, 212, 255, 0.45);
+  font-weight: 400;
+}
+.dc-tab.is-active .dc-tab-sub { color: rgba(184, 212, 255, 0.75); }
+
+/* --- Tab pane (содержимое вкладки) --- */
+.dc-tab-pane {
+  margin-top: 14px;
+  display: flex; flex-direction: column; gap: 14px;
+  animation: dc-tab-fade 0.25s ease;
+}
+@keyframes dc-tab-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Унификация: каждый блок одинаковый padding + radius */
+.dc-tab-pane > .dc-block,
+.dc-tab-pane > details.dc-block {
+  margin-top: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+/* Stub-фото депутата (если фото из VK не загрузилось) */
 .dc-hero-photo-stub {
   display: inline-flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, #5EA8FF, #2C70D9);
   color: #07142A;
   font-family: "Playfair Display", serif;
   font-weight: 800;
-  font-size: 2.4rem;
+  font-size: 1.8rem;
 }
 .dc-hero-fact {
   display: inline-flex; align-items: center; gap: 4px;

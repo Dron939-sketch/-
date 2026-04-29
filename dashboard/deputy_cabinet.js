@@ -48,59 +48,106 @@
     const photo = profile && profile.photo
       ? `<img class="dc-hero-photo" src="${esc(profile.photo)}" alt="${esc(d.name || '')}" />`
       : `<div class="dc-hero-photo dc-hero-photo-stub">${esc((d.first_name || "Д")[0])}</div>`;
-    const followers = profile && profile.followers
-      ? `<span class="dc-hero-fact">👥 ${profile.followers} подписчиков</span>` : "";
-    const verified = profile && profile.verified
-      ? `<span class="dc-hero-verified">✓ верифицирована</span>` : "";
     return `
       <div class="dc-hero">
         ${photo}
         <div class="dc-hero-text">
-          <div class="dc-hero-eyebrow">Личный кабинет депутата</div>
+          <div class="dc-hero-eyebrow">Личный кабинет</div>
           <h1 class="dc-hero-greet">${greeting}</h1>
           <div class="dc-hero-meta">
-            ${esc(d.name || "")} · ${esc(d.district || "")}
-            ${d.vk_url ? `· <a href="${esc(d.vk_url)}" target="_blank" rel="noopener">VK ↗</a>` : ""}
-            ${followers}${verified}
+            ${esc(d.name || "")} · ${esc(d.district || "")} ·
+            <span class="dc-hero-arch">${archetypeEmoji(a.code)} «${esc(a.name)}»</span>
+            ${d.vk_url ? ` · <a href="${esc(d.vk_url)}" target="_blank" rel="noopener">VK ↗</a>` : ""}
           </div>
-          ${bio && bio.summary ? `<p class="dc-hero-sub">${esc(bio.summary)}</p>` : ""}
-          ${bio && bio.facts ? `
-            <div class="dc-hero-facts">
-              ${bio.facts.map((f) =>
-                `<span class="dc-hero-fact">${esc(f.icon || "")} ${esc(f.label || "")}</span>`
-              ).join("")}
-            </div>` : ""}
-          <div class="dc-actions">
-            <button type="button" class="dc-action-btn dc-action-primary" id="dc-create-content">
-              <span class="dc-action-emoji">🎬</span>
-              <span class="dc-action-text">
-                <span class="dc-action-title">Создать контент</span>
-                <span class="dc-action-sub">пост в твоём стиле за 30 секунд</span>
-              </span>
-            </button>
-            <button type="button" class="dc-action-btn dc-action-secondary" id="dc-create-event">
-              <span class="dc-action-emoji">📣</span>
-              <span class="dc-action-text">
-                <span class="dc-action-title">Создать медиаповод</span>
-                <span class="dc-action-sub">пошаговый сценарий PR-события</span>
-              </span>
-            </button>
-            <button type="button" class="dc-action-btn dc-action-audit" id="dc-run-audit">
-              <span class="dc-action-emoji">🔄</span>
-              <span class="dc-action-text">
-                <span class="dc-action-title">Аудит страницы VK</span>
-                <span class="dc-action-sub">пересчитать всё с нуля</span>
-              </span>
-            </button>
-          </div>
+          <details class="dc-hero-details">
+            <summary>Подробнее о профиле</summary>
+            ${bio && bio.summary ? `<p class="dc-hero-sub">${esc(bio.summary)}</p>` : ""}
+            ${bio && bio.facts ? `
+              <div class="dc-hero-facts">
+                ${bio.facts.map((f) =>
+                  `<span class="dc-hero-fact">${esc(f.icon || "")} ${esc(f.label || "")}</span>`
+                ).join("")}
+              </div>` : ""}
+          </details>
         </div>
-        <div class="dc-archetype-badge">
-          <div class="dc-arch-emoji">${archetypeEmoji(a.code)}</div>
-          <div class="dc-arch-name">«${esc(a.name)}»</div>
-          <div class="dc-arch-short">${esc(a.short || "")}</div>
+        <div class="dc-actions">
+          <button type="button" class="dc-action-btn dc-action-primary" id="dc-create-content"
+                  title="Готовый пост в твоём стиле за 30 секунд">
+            <span class="dc-action-emoji">🎬</span>
+            <span class="dc-action-title">Контент</span>
+          </button>
+          <button type="button" class="dc-action-btn dc-action-secondary" id="dc-create-event"
+                  title="Пошаговый сценарий PR-события">
+            <span class="dc-action-emoji">📣</span>
+            <span class="dc-action-title">Медиаповод</span>
+          </button>
+          <button type="button" class="dc-action-btn dc-action-audit" id="dc-run-audit"
+                  title="Пересчитать аудит VK с нуля">
+            <span class="dc-action-emoji">🔄</span>
+            <span class="dc-action-title">Аудит VK</span>
+          </button>
         </div>
       </div>
     `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Табы — 5 разделов кабинета
+  // ---------------------------------------------------------------------------
+
+  const TABS = [
+    { id: "today",   icon: "🏠", label: "Сегодня",   sub: "брифинг, миссии, действия" },
+    { id: "metrics", icon: "📊", label: "Метрики",   sub: "рейтинг, мейстер, план" },
+    { id: "context", icon: "🌐", label: "Контекст",  sub: "город, тренды, комменты" },
+    { id: "image",   icon: "🎭", label: "Образ",     sub: "персона, голос, аналитика" },
+    { id: "ties",    icon: "👥", label: "Связи",     sub: "коалиция, упоминания" },
+  ];
+
+  function loadActiveTab(deputyId) {
+    try {
+      const v = localStorage.getItem(`cm.deputy.tab.${deputyId || "default"}`);
+      return TABS.some((t) => t.id === v) ? v : "today";
+    } catch (_) { return "today"; }
+  }
+  function saveActiveTab(deputyId, tabId) {
+    try { localStorage.setItem(`cm.deputy.tab.${deputyId || "default"}`, tabId); } catch (_) {}
+  }
+
+  function renderTabs(activeId) {
+    return `
+      <nav class="dc-tabs" role="tablist">
+        ${TABS.map((t) => `
+          <button type="button" class="dc-tab ${t.id === activeId ? 'is-active' : ''}"
+                  role="tab" aria-selected="${t.id === activeId}"
+                  data-tab="${esc(t.id)}">
+            <span class="dc-tab-icon">${esc(t.icon)}</span>
+            <span class="dc-tab-text">
+              <span class="dc-tab-label">${esc(t.label)}</span>
+              <span class="dc-tab-sub">${esc(t.sub)}</span>
+            </span>
+          </button>
+        `).join("")}
+      </nav>
+    `;
+  }
+
+  function onTabClick(ev) {
+    const btn = ev.target.closest(".dc-tab");
+    if (!btn) return;
+    const id = btn.getAttribute("data-tab");
+    if (!id) return;
+    const eid = window.cmRole?.deputyId?.() || null;
+    saveActiveTab(eid, id);
+    document.querySelectorAll(".dc-tab").forEach((b) => {
+      const isActive = b.getAttribute("data-tab") === id;
+      b.classList.toggle("is-active", isActive);
+      b.setAttribute("aria-selected", String(isActive));
+    });
+    document.querySelectorAll(".dc-tab-pane").forEach((p) => {
+      p.hidden = p.getAttribute("data-tab") !== id;
+    });
+    // Скролл наверх к табам
+    document.querySelector(".dc-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderRatings(rating, audit) {
@@ -1257,32 +1304,44 @@
       renderError(hero, "Не удалось собрать кабинет. Попробуйте обновить страницу.");
       return;
     }
+    const activeTab = loadActiveTab(eid);
     hero.innerHTML = `
       ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {},
                      data.profile || null, data.bio || null)}
-      ${renderGoals((data.deputy || {}).external_id)}
-      ${renderBriefing(data.briefing || {}, (data.deputy || {}).external_id)}
-      ${renderPersona(data.persona || {}, data.affinity || [], data.voice_portrait || {})}
-      ${renderRatings(data.rating || {}, data.audit || null)}
-      ${renderMeister(data.meister || {})}
-      ${renderCityBrief(data.city_brief || {})}
-      ${renderTrendsNow(data.trends_now || {})}
-      ${renderMissions(data.missions || [])}
-      ${renderPrIdeas(data.pr_ideas || [])}
-      ${renderCommentTargets(data.comment_targets || {})}
-      ${renderActionsWidget(data.action_situations || [], (data.deputy || {}).external_id)}
-      ${renderScenarioWidget(data.scenario_meta || {}, data.scenario_initial || {})}
-      ${renderPersonalTasks(data.personal_tasks || [])}
-      ${renderExpectations(data.expectations || [])}
-      ${renderDistrictToday(data.district_today || {})}
-      ${renderMentions(data.mentions || {})}
-      ${renderCoalition(data.coalition || {})}
-      ${renderCitizensView(data.audit || {}, data.archetype || {})}
-      ${renderTimingHeatmap(data.timing || {})}
-      ${renderCalendar(data.calendar || [])}
-      ${renderRecommendations(data.audit || {})}
-      ${renderPlan(data.plan || {}, data.archetype || {})}
-      ${renderReplyTemplates(data.reply_categories || [], (data.deputy || {}).external_id)}
+      ${renderTabs(activeTab)}
+      <div class="dc-tab-pane" data-tab="today" ${activeTab === "today" ? "" : "hidden"}>
+        ${renderGoals(eid)}
+        ${renderBriefing(data.briefing || {}, eid)}
+        ${renderMissions(data.missions || [])}
+        ${renderPrIdeas(data.pr_ideas || [])}
+        ${renderActionsWidget(data.action_situations || [], eid)}
+        ${renderPersonalTasks(data.personal_tasks || [])}
+      </div>
+      <div class="dc-tab-pane" data-tab="metrics" ${activeTab === "metrics" ? "" : "hidden"}>
+        ${renderRatings(data.rating || {}, data.audit || null)}
+        ${renderMeister(data.meister || {})}
+        ${renderRecommendations(data.audit || {})}
+        ${renderPlan(data.plan || {}, data.archetype || {})}
+        ${renderScenarioWidget(data.scenario_meta || {}, data.scenario_initial || {})}
+      </div>
+      <div class="dc-tab-pane" data-tab="context" ${activeTab === "context" ? "" : "hidden"}>
+        ${renderCityBrief(data.city_brief || {})}
+        ${renderTrendsNow(data.trends_now || {})}
+        ${renderCommentTargets(data.comment_targets || {})}
+        ${renderDistrictToday(data.district_today || {})}
+        ${renderCalendar(data.calendar || [])}
+      </div>
+      <div class="dc-tab-pane" data-tab="image" ${activeTab === "image" ? "" : "hidden"}>
+        ${renderPersona(data.persona || {}, data.affinity || [], data.voice_portrait || {})}
+        ${renderCitizensView(data.audit || {}, data.archetype || {})}
+        ${renderTimingHeatmap(data.timing || {})}
+      </div>
+      <div class="dc-tab-pane" data-tab="ties" ${activeTab === "ties" ? "" : "hidden"}>
+        ${renderCoalition(data.coalition || {})}
+        ${renderExpectations(data.expectations || [])}
+        ${renderMentions(data.mentions || {})}
+        ${renderReplyTemplates(data.reply_categories || [], eid)}
+      </div>
     `;
     hero.addEventListener("click", onCopyClick);
     hero.addEventListener("click", onReplyClick);
@@ -1293,6 +1352,7 @@
     hero.addEventListener("click", onGoalClick);
     hero.addEventListener("click", onCommentCopyClick);
     hero.addEventListener("click", onRunAuditClick);
+    hero.addEventListener("click", onTabClick);
     hero.addEventListener("input", onScenarioInput);
     runScenario();
     document.getElementById("dc-create-content")?.addEventListener("click",
