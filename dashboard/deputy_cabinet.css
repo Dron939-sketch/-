@@ -10,7 +10,11 @@
               0 0 0 1px rgba(94, 168, 255, 0.08) inset;
   padding: 28px 32px 32px;
   position: relative;
-  overflow: hidden;
+  /* overflow: hidden ломал бы sticky-табы. Используем horizontal-clip
+     для glow-эффекта, а вертикальный overflow оставляем visible —
+     position: sticky работает. */
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 .deputy-cabinet::before {
   content: "";
@@ -125,19 +129,27 @@
 /* --- Табы навигации (sticky) --- */
 .dc-tabs {
   position: sticky;
-  top: 0;
+  /* Учитываем notch / strap на iPhone — env(safe-area-inset-top) даёт
+     отступ от верхнего уголка экрана, чтобы табы не уезжали под камеру */
+  top: env(safe-area-inset-top, 0px);
   z-index: 100;
   margin: 16px -16px 0;
-  padding: 8px 16px;
-  background: rgba(10, 22, 40, 0.92);
-  backdrop-filter: blur(8px);
+  padding: 10px 16px;
+  background: rgba(10, 22, 40, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid rgba(94, 168, 255, 0.15);
   border-bottom: 1px solid rgba(94, 168, 255, 0.15);
+  /* Тень снизу когда табы прилеплены — визуально отделяет от контента */
+  box-shadow: 0 4px 14px -8px rgba(0, 0, 0, 0.5);
   display: flex;
   gap: 6px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  /* Когда scrollIntoView fires — отступ сверху чтобы tabs не накладывались
+     на следующий блок при программном скролле */
+  scroll-margin-top: 8px;
 }
 .dc-tabs::-webkit-scrollbar { display: none; }
 .dc-tab {

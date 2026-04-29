@@ -36,7 +36,12 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
-html { -webkit-text-size-adjust: 100%; }   /* iOS не масштабирует текст в landscape */
+html {
+  -webkit-text-size-adjust: 100%;     /* iOS не масштабирует текст в landscape */
+  /* Когда программно скроллим к якорю (например табы кабинета) — учитываем
+     sticky-элементы, чтобы заголовок не прятался под URL-баром или sticky-tabs */
+  scroll-padding-top: max(env(safe-area-inset-top, 0px), 8px);
+}
 button, a { -webkit-tap-highlight-color: transparent; }  /* убираем серый flash на iOS */
 
 body {
