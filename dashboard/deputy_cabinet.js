@@ -210,6 +210,125 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Утренний брифинг — что важно сегодня + голос Джарвиса
+  // ---------------------------------------------------------------------------
+
+  function renderBriefing(b, deputyId) {
+    if (!b || !(b.items || []).length) return "";
+    return `
+      <div class="dc-briefing" data-deputy-id="${esc(deputyId || "")}">
+        <div class="dc-brief-head">
+          <div>
+            <div class="dc-brief-eyebrow">☕ Сегодня для тебя</div>
+            <div class="dc-brief-greet">${esc(b.greeting || "")}</div>
+          </div>
+          <button type="button" class="dc-brief-voice" id="dc-brief-voice"
+                  title="Послушать брифинг голосом">
+            <span class="dc-brief-voice-icon">🎙</span>
+            <span class="dc-brief-voice-lbl">Послушать (~2 мин)</span>
+          </button>
+        </div>
+        <div class="dc-brief-grid">
+          ${b.items.map((it) => `
+            <div class="dc-brief-card dc-brief-${esc(it.kind || 'item')}">
+              <div class="dc-brief-card-icon">${esc(it.icon || "▶")}</div>
+              <div class="dc-brief-card-tag">${esc(it.tag || "")}</div>
+              <div class="dc-brief-card-title">${esc(it.title || "")}</div>
+              <div class="dc-brief-card-body">${esc(it.body || "")}</div>
+              ${it.action ? `
+                <button type="button" class="dc-brief-card-go"
+                        data-wizard="${esc(it.wizard || '')}"
+                        data-text="${esc(it.draft || it.body || '')}">
+                  ${esc(it.action)} →
+                </button>
+              ` : ""}
+            </div>
+          `).join("")}
+        </div>
+        <audio class="dc-brief-audio" id="dc-brief-audio" preload="none"></audio>
+      </div>
+    `;
+  }
+
+  let briefingPlayer = null;
+  async function onBriefingVoiceClick(ev) {
+    const btn = ev.target.closest("#dc-brief-voice");
+    if (!btn) return;
+    const block = btn.closest(".dc-briefing");
+    const deputyId = block?.dataset.deputyId;
+    if (!deputyId) return;
+    const audio = document.getElementById("dc-brief-audio");
+    btn.disabled = true;
+    const lbl = btn.querySelector(".dc-brief-voice-lbl");
+    if (lbl) lbl.textContent = "Готовлю…";
+    try {
+      const r = await fetch(`/api/copilot/deputy/briefing/voice?external_id=${encodeURIComponent(deputyId)}`);
+      if (!r.ok) {
+        if (lbl) lbl.textContent = "Не получилось";
+        btn.disabled = false;
+        return;
+      }
+      const data = await r.json();
+      if (data.audio && audio) {
+        audio.src = `data:${data.audio_mime || "audio/mpeg"};base64,${data.audio}`;
+        audio.play().catch(() => {});
+        if (lbl) lbl.textContent = "Идёт воспроизведение…";
+        audio.onended = () => {
+          if (lbl) lbl.textContent = "Послушать ещё раз";
+          btn.disabled = false;
+        };
+      } else if (data.text && window.speechSynthesis) {
+        // Fallback: speechSynthesis browser
+        try {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(data.text);
+          u.lang = "ru-RU"; u.rate = 1.0;
+          u.onend = () => {
+            if (lbl) lbl.textContent = "Послушать ещё раз";
+            btn.disabled = false;
+          };
+          window.speechSynthesis.speak(u);
+          if (lbl) lbl.textContent = "Идёт воспроизведение…";
+        } catch (_) {
+          if (lbl) lbl.textContent = "Голос недоступен";
+          btn.disabled = false;
+        }
+      } else {
+        if (lbl) lbl.textContent = "Голос недоступен";
+        btn.disabled = false;
+      }
+    } catch (_) {
+      if (lbl) lbl.textContent = "Сеть недоступна";
+      btn.disabled = false;
+    }
+  }
+
+  function onBriefingCardClick(ev) {
+    const btn = ev.target.closest(".dc-brief-card-go");
+    if (!btn) return;
+    const wizard = btn.getAttribute("data-wizard");
+    if (wizard === "content") {
+      document.getElementById("dc-create-content")?.click();
+      return;
+    }
+    if (wizard === "event") {
+      document.getElementById("dc-create-event")?.click();
+      return;
+    }
+    // Без wizard — копируем body / draft в clipboard если есть
+    const text = btn.dataset.text || "";
+    if (text && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      btn.textContent = "Скопировано →";
+      setTimeout(() => {
+        const card = btn.closest(".dc-brief-card");
+        const tag = card?.dataset.action || "→";
+        btn.textContent = tag;
+      }, 1600);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Образ депутата — расширенный портрет
   // ---------------------------------------------------------------------------
 
@@ -898,6 +1017,7 @@
     hero.innerHTML = `
       ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {},
                      data.profile || null, data.bio || null)}
+      ${renderBriefing(data.briefing || {}, (data.deputy || {}).external_id)}
       ${renderPersona(data.persona || {}, data.affinity || [], data.voice_portrait || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
       ${renderMeister(data.meister || {})}
@@ -922,6 +1042,8 @@
     hero.addEventListener("click", onReplyClick);
     hero.addEventListener("click", onIdeaClick);
     hero.addEventListener("click", onActionClick);
+    hero.addEventListener("click", onBriefingVoiceClick);
+    hero.addEventListener("click", onBriefingCardClick);
     hero.addEventListener("input", onScenarioInput);
     runScenario();
     document.getElementById("dc-create-content")?.addEventListener("click",
