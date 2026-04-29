@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 _TTL_HOURS = 12
 
+# Версия структуры payload. При каждом добавлении нового топ-уровневого
+# поля в _build_deputy_cabinet (briefing / meister / trends_now / …)
+# инкрементить — это инвалидирует все старые записи в БД и заставляет
+# пересчитать кабинет с актуальной структурой.
+_CACHE_VERSION = 3
+
 
 async def get_cached(external_id: str) -> Optional[Dict[str, Any]]:
     """Вернуть payload или None если кэша нет / он устарел."""
@@ -51,6 +57,9 @@ async def get_cached(external_id: str) -> Optional[Dict[str, Any]]:
         if isinstance(payload, str):
             payload = json.loads(payload)
         if isinstance(payload, dict):
+            # Версия не совпадает — кэш устарел структурно, нужно пересчитать
+            if payload.get("_cache_version") != _CACHE_VERSION:
+                return None
             payload = dict(payload)
             payload["_cache"] = {
                 "computed_at": computed_at.isoformat() if computed_at else None,
@@ -73,6 +82,7 @@ async def upsert_cache(external_id: str, payload: Dict[str, Any]) -> bool:
     try:
         # Не сериализуем _cache-метаданные — они только для UI
         clean = {k: v for k, v in payload.items() if k != "_cache"}
+        clean["_cache_version"] = _CACHE_VERSION
         async with pool.acquire() as conn:
             await conn.execute(
                 """
