@@ -85,6 +85,13 @@
                 <span class="dc-action-sub">пошаговый сценарий PR-события</span>
               </span>
             </button>
+            <button type="button" class="dc-action-btn dc-action-audit" id="dc-run-audit">
+              <span class="dc-action-emoji">🔄</span>
+              <span class="dc-action-text">
+                <span class="dc-action-title">Аудит страницы VK</span>
+                <span class="dc-action-sub">пересчитать всё с нуля</span>
+              </span>
+            </button>
           </div>
         </div>
         <div class="dc-archetype-badge">
@@ -165,8 +172,9 @@
     const recs = (audit && audit.recommendations) || [];
     if (recs.length === 0) return "";
     return `
-      <div class="dc-block">
-        <div class="dc-block-title">🎯 Что поднимет рейтинг</div>
+      <div class="dc-block dc-recs-block">
+        <div class="dc-block-title">🎯 Рекомендации по улучшению образа</div>
+        <p class="dc-empty-sub">После аудита: что подтянуть в стиле, регулярности, тоне.</p>
         <ol class="dc-recs">
           ${recs.map((r) => `<li>${esc(r)}</li>`).join("")}
         </ol>
@@ -609,6 +617,107 @@
         ${m.summary ? `<div class="dc-meister-summary">${esc(m.summary)}</div>` : ""}
       </div>
     `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Где комментировать — горячие посты для роста подписчиков и охвата
+  // ---------------------------------------------------------------------------
+
+  function renderCommentTargets(t) {
+    if (!t || !(t.targets || []).length) {
+      if (t && t.state === "no_data") {
+        return `
+          <details class="dc-block dc-collapsible dc-comments-empty">
+            <summary class="dc-block-title">💬 Где комментировать для роста</summary>
+            <div class="dc-empty-sub">Подключи VK API token — здесь появятся посты горожан с высоким охватом и низкой конкуренцией в комментариях.</div>
+          </details>`;
+      }
+      return "";
+    }
+    return `
+      <div class="dc-block dc-comments-block">
+        <div class="dc-block-title">
+          💬 Где комментировать — рост подписчиков
+          <span class="dc-trends-source">live VK</span>
+        </div>
+        <p class="dc-empty-sub">
+          Посты с высоким охватом и небольшим количеством комментариев — твой комментарий будет на виду. Открой пост, скопируй готовый ответ.
+        </p>
+        <div class="dc-comments-list">
+          ${t.targets.map((c, i) => `
+            <div class="dc-comment-card">
+              <div class="dc-comment-head">
+                <div class="dc-comment-stats">
+                  👍 ${c.likes} · 👁 ${c.views} · 💬 ${c.comments}
+                  <span class="dc-comment-opp">opp ${c.opportunity}</span>
+                </div>
+                ${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener"
+                  class="dc-comment-go">Открыть пост ↗</a>` : ""}
+              </div>
+              <div class="dc-comment-text">${esc(c.text || "")}</div>
+              <div class="dc-comment-suggested">
+                <div class="dc-comment-suggested-tag">Шаблон в твоём голосе</div>
+                <pre class="dc-mod-text">${esc(c.comment || "")}</pre>
+                <button type="button" class="dc-mod-btn ghost dc-comment-copy"
+                        data-text="${esc(c.comment || "")}">Скопировать</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function onCommentCopyClick(ev) {
+    const btn = ev.target.closest(".dc-comment-copy");
+    if (!btn) return;
+    const text = btn.dataset.text || "";
+    if (text && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      btn.textContent = "Скопировано";
+      setTimeout(() => btn.textContent = "Скопировать", 1600);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Кнопка «Аудит страницы VK» — форсированный пересчёт через ?refresh=1
+  // ---------------------------------------------------------------------------
+
+  async function onRunAuditClick(ev) {
+    const btn = ev.target.closest("#dc-run-audit");
+    if (!btn) return;
+    const eid = window.cmRole?.deputyId?.() || null;
+    if (!eid) return;
+    const lbl = btn.querySelector(".dc-action-title");
+    const sub = btn.querySelector(".dc-action-sub");
+    const orig_lbl = lbl?.textContent || "";
+    const orig_sub = sub?.textContent || "";
+    btn.disabled = true;
+    if (lbl) lbl.textContent = "Анализирую…";
+    if (sub) sub.textContent = "VK-страница, тексты, тон";
+    try {
+      const hero = document.getElementById(HERO_ID);
+      if (hero) hero.classList.add("dc-auditing");
+      // refresh=1 форсирует пересчёт на бэке
+      const r = await fetch(`/api/copilot/deputy/cabinet?external_id=${encodeURIComponent(eid)}&refresh=1`);
+      if (!r.ok) {
+        if (lbl) lbl.textContent = "Не получилось";
+        btn.disabled = false;
+        return;
+      }
+      const data = await r.json();
+      if (hero) {
+        hero.innerHTML = "";
+        hero.classList.remove("dc-auditing");
+      }
+      // Перерендериваем
+      await renderCabinet();
+      // Прокручиваем к рекомендациям после аудита
+      document.querySelector(".dc-recs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (_) {
+      if (lbl) lbl.textContent = "Сеть недоступна";
+      btn.disabled = false;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1146,6 +1255,7 @@
       ${renderTrendsNow(data.trends_now || {})}
       ${renderMissions(data.missions || [])}
       ${renderPrIdeas(data.pr_ideas || [])}
+      ${renderCommentTargets(data.comment_targets || {})}
       ${renderActionsWidget(data.action_situations || [], (data.deputy || {}).external_id)}
       ${renderScenarioWidget(data.scenario_meta || {}, data.scenario_initial || {})}
       ${renderPersonalTasks(data.personal_tasks || [])}
@@ -1167,6 +1277,8 @@
     hero.addEventListener("click", onBriefingVoiceClick);
     hero.addEventListener("click", onBriefingCardClick);
     hero.addEventListener("click", onGoalClick);
+    hero.addEventListener("click", onCommentCopyClick);
+    hero.addEventListener("click", onRunAuditClick);
     hero.addEventListener("input", onScenarioInput);
     runScenario();
     document.getElementById("dc-create-content")?.addEventListener("click",

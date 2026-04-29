@@ -900,6 +900,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from analytics.archetype_affinity import compute_affinity
     from analytics.deputy_actions import situations_list
     from analytics.deputy_bio import build_bio
+    from analytics.comment_targets import build_comment_targets
     from analytics.deputy_briefing import build_briefing
     from analytics.deputy_city_brief import build_city_brief
     from analytics.trends_now import build_trends
@@ -1023,6 +1024,9 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     # Карта внимания — что обсуждают сейчас по её секторам
     trends_now = await build_trends(deputy, city=city)
 
+    # Где комментировать — посты с high engagement / low comments
+    comment_targets = await build_comment_targets(deputy, archetype, city=city)
+
     # Утренний брифинг — собираем из всего что уже посчитано выше
     briefing = build_briefing(
         deputy, archetype,
@@ -1093,6 +1097,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "voice_portrait":   voice_portrait,
         "city_brief":       city_brief,
         "trends_now":       trends_now,
+        "comment_targets":  comment_targets,
         "briefing":         briefing,
     }
 

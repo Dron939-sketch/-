@@ -1608,6 +1608,109 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
   line-height: 1.45;
 }
 
+/* --- Где комментировать (рост подписчиков) --- */
+.dc-comments-block {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(176, 240, 192, 0.08), transparent);
+  border-left: 3px solid #4FCC75;
+  border-radius: 10px;
+}
+.dc-comments-list {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.dc-comment-card {
+  padding: 12px 14px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+}
+.dc-comment-head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 6px;
+  margin-bottom: 6px;
+}
+.dc-comment-stats {
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.78);
+}
+.dc-comment-opp {
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(79, 204, 117, 0.15);
+  border: 1px solid rgba(79, 204, 117, 0.4);
+  border-radius: 999px;
+  color: #B0F0C0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.dc-comment-go {
+  font-size: 0.78rem;
+  color: #5EA8FF;
+  text-decoration: none;
+  font-weight: 700;
+}
+.dc-comment-go:hover { text-decoration: underline; }
+.dc-comment-text {
+  font-size: 0.86rem;
+  color: #DBE9FF;
+  line-height: 1.45;
+  font-style: italic;
+}
+.dc-comment-suggested {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(94, 168, 255, 0.06);
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 8px;
+}
+.dc-comment-suggested-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #5EA8FF;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+/* --- Кнопка «Аудит страницы VK» (третья action) --- */
+.dc-action-audit {
+  background: linear-gradient(180deg, rgba(140, 86, 224, 0.2), rgba(140, 86, 224, 0.08));
+  border: 1px solid rgba(140, 86, 224, 0.5);
+  color: #C9A0FF;
+}
+.dc-action-audit:hover {
+  background: linear-gradient(180deg, rgba(140, 86, 224, 0.3), rgba(140, 86, 224, 0.1));
+}
+.dc-action-audit:disabled { opacity: 0.7; cursor: progress; }
+.deputy-cabinet.dc-auditing { position: relative; }
+.deputy-cabinet.dc-auditing::after {
+  content: "Анализирую…";
+  position: absolute; inset: 0;
+  background: rgba(7, 14, 30, 0.78);
+  color: #C9A0FF;
+  font-family: "Playfair Display", serif;
+  font-size: 1.4rem;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10;
+  border-radius: 14px;
+  animation: dc-aud-pulse 1.6s ease infinite;
+}
+@keyframes dc-aud-pulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+
+/* Усиление блока рекомендаций */
+.dc-recs-block {
+  background: linear-gradient(180deg, rgba(94, 168, 255, 0.1), transparent);
+  border-left: 3px solid #5EA8FF;
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+
 /* --- Action buttons in hero --- */
 .dc-actions {
   margin-top: 16px;
