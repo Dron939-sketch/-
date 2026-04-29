@@ -902,6 +902,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from analytics.deputy_bio import build_bio
     from analytics.deputy_briefing import build_briefing
     from analytics.deputy_city_brief import build_city_brief
+    from analytics.trends_now import build_trends
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.deputy_meister import build_meister
     from analytics.deputy_missions import build_weekly_missions
@@ -1019,6 +1020,9 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     # Городской контекст: ключевые показатели + новости по секторам
     city_brief = await build_city_brief(deputy, city=city)
 
+    # Карта внимания — что обсуждают сейчас по её секторам
+    trends_now = await build_trends(deputy, city=city)
+
     # Утренний брифинг — собираем из всего что уже посчитано выше
     briefing = build_briefing(
         deputy, archetype,
@@ -1088,6 +1092,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "affinity":         affinity,
         "voice_portrait":   voice_portrait,
         "city_brief":       city_brief,
+        "trends_now":       trends_now,
         "briefing":         briefing,
     }
 

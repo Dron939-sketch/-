@@ -410,6 +410,58 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Карта внимания — что обсуждают сейчас по её секторам
+  // ---------------------------------------------------------------------------
+
+  function renderTrendsNow(t) {
+    if (!t || !(t.trends || []).length) {
+      if (t && t.state === "no_data") {
+        return `
+          <div class="dc-block dc-trends-empty">
+            <div class="dc-block-title">🌐 Карта внимания</div>
+            <div class="dc-empty-sub">Пока нет данных. Подключи VK API token или БД новостей —
+            здесь появятся горячие темы по твоим секторам.</div>
+          </div>`;
+      }
+      return "";
+    }
+    const sourceTag = t.source === "vk"
+      ? `<span class="dc-trends-source">live VK</span>`
+      : `<span class="dc-trends-source dc-trends-fallback">из новостей</span>`;
+    return `
+      <div class="dc-block dc-trends-block">
+        <div class="dc-block-title">
+          🌐 Карта внимания — что обсуждают сейчас
+          ${sourceTag}
+        </div>
+        <p class="dc-empty-sub">Топ горячих тем за 48ч в твоих секторах. Тот, кто заходит в тему первым — собирает охват.</p>
+        <div class="dc-trends-list">
+          ${t.trends.map((tr, i) => `
+            <div class="dc-trend-card">
+              <div class="dc-trend-num">${i + 1}</div>
+              <div class="dc-trend-body">
+                <div class="dc-trend-kw">${esc(tr.keyword || "")}</div>
+                <div class="dc-trend-stats">
+                  📝 ${tr.posts || 0} постов
+                  ${tr.engagement ? `· 👍 ${tr.engagement} реакций` : ""}
+                </div>
+                ${(tr.samples || []).length ? `
+                  <ul class="dc-trend-samples">
+                    ${tr.samples.slice(0, 2).map((s) => `
+                      <li>
+                        ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">↗</a> ` : ""}«${esc(s.text || "")}…»
+                      </li>
+                    `).join("")}
+                  </ul>` : ""}
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
   // Городской контекст: ключевые показатели + новости по секторам
   // ---------------------------------------------------------------------------
 
@@ -1022,6 +1074,7 @@
       ${renderRatings(data.rating || {}, data.audit || null)}
       ${renderMeister(data.meister || {})}
       ${renderCityBrief(data.city_brief || {})}
+      ${renderTrendsNow(data.trends_now || {})}
       ${renderMissions(data.missions || [])}
       ${renderPrIdeas(data.pr_ideas || [])}
       ${renderActionsWidget(data.action_situations || [], (data.deputy || {}).external_id)}

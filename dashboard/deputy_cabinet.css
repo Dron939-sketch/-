@@ -430,6 +430,88 @@
 .dc-brief-card-go:hover { transform: translateY(-1px); filter: brightness(1.07); }
 .dc-brief-audio { display: none; }
 
+/* --- Карта внимания (Trends Now) --- */
+.dc-trends-block {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(140, 86, 224, 0.08), transparent);
+  border-left: 3px solid #8956E0;
+  border-radius: 10px;
+}
+.dc-trends-empty {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px dashed rgba(94, 168, 255, 0.25);
+  border-radius: 10px;
+}
+.dc-trends-source {
+  margin-left: auto;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  padding: 2px 10px;
+  background: rgba(79, 204, 117, 0.15);
+  border: 1px solid rgba(79, 204, 117, 0.4);
+  border-radius: 999px;
+  color: #B0F0C0;
+}
+.dc-trends-fallback {
+  background: rgba(184, 212, 255, 0.08);
+  border-color: rgba(184, 212, 255, 0.2);
+  color: rgba(184, 212, 255, 0.7);
+}
+.dc-trends-list {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.dc-trend-card {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+}
+.dc-trend-num {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #C9A0FF, #8956E0);
+  color: #07142A;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: "Playfair Display", serif;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+.dc-trend-kw {
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #DBE9FF;
+  text-transform: capitalize;
+}
+.dc-trend-stats {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.7);
+}
+.dc-trend-samples {
+  margin: 6px 0 0;
+  padding-left: 1rem;
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 0.82rem;
+  color: rgba(219, 233, 255, 0.78);
+  font-style: italic;
+}
+.dc-trend-samples a {
+  color: #5EA8FF;
+  text-decoration: none;
+  font-weight: 700;
+  font-style: normal;
+}
+.dc-trend-samples a:hover { text-decoration: underline; }
+
 /* --- Город сегодня (KPI + новости для меня) --- */
 .dc-city-block {
   margin-top: 18px;
