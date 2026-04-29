@@ -291,6 +291,53 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Городской контекст: ключевые показатели + новости по секторам
+  // ---------------------------------------------------------------------------
+
+  function renderCityBrief(b) {
+    if (!b || (!(b.kpi || []).length && !(b.news_for_me || []).length)) return "";
+    const counts = b.news_counts || {};
+    return `
+      <div class="dc-block dc-city-block">
+        <div class="dc-block-title">
+          🏙 Город сегодня
+          ${counts.total ? `<span class="dc-city-meta">·  за 24ч: ${counts.total} сюжетов</span>` : ""}
+        </div>
+        ${(b.kpi || []).length ? `
+          <div class="dc-city-kpi">
+            ${b.kpi.map((v) => `
+              <div class="dc-kpi-tile ${v.important ? 'dc-kpi-mine' : ''}"
+                   title="${esc(v.name)} · ${v.value}/${v.max}">
+                <div class="dc-kpi-code">${esc(v.code)}</div>
+                <div class="dc-kpi-val">${v.value}<span class="dc-kpi-max">/${v.max}</span></div>
+                <div class="dc-kpi-name">${esc(v.name)}</div>
+                ${v.important ? `<div class="dc-kpi-mine-tag">мой сектор</div>` : ""}
+              </div>
+            `).join("")}
+          </div>` : ""}
+        ${(b.news_for_me || []).length ? `
+          <div class="dc-city-news">
+            <div class="dc-persona-lbl">📰 Заслуживает твоего внимания</div>
+            <ul class="dc-news-list">
+              ${b.news_for_me.map((n) => `
+                <li>
+                  <span class="dc-news-text">${esc(n.text || "")}</span>
+                  ${(n.sectors || []).length ? `
+                    <span class="dc-news-tags">
+                      ${n.sectors.map((s) => `<span class="dc-news-tag">${esc(s)}</span>`).join("")}
+                    </span>` : ""}
+                </li>
+              `).join("")}
+            </ul>
+          </div>` : ""}
+        ${b.state === "no_db" ? `
+          <div class="dc-empty-sub">Подключи БД с метриками и новостями — здесь появится живая сводка.</div>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
   // Алгоритм Мейстера для депутата — 4 вектора + прогноз 4 недели
   // ---------------------------------------------------------------------------
 
@@ -854,6 +901,7 @@
       ${renderPersona(data.persona || {}, data.affinity || [], data.voice_portrait || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
       ${renderMeister(data.meister || {})}
+      ${renderCityBrief(data.city_brief || {})}
       ${renderMissions(data.missions || [])}
       ${renderPrIdeas(data.pr_ideas || [])}
       ${renderActionsWidget(data.action_situations || [], (data.deputy || {}).external_id)}

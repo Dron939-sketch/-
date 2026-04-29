@@ -900,6 +900,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from analytics.archetype_affinity import compute_affinity
     from analytics.deputy_actions import situations_list
     from analytics.deputy_bio import build_bio
+    from analytics.deputy_city_brief import build_city_brief
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.deputy_meister import build_meister
     from analytics.deputy_missions import build_weekly_missions
@@ -1014,6 +1015,9 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     # Голос-портрет: маркеры стиля
     voice_portrait = build_voice_portrait(audit)
 
+    # Городской контекст: ключевые показатели + новости по секторам
+    city_brief = await build_city_brief(deputy, city=city)
+
     # Очищаем audit от тяжёлых сырых текстов перед кэшем — affinity и
     # voice уже посчитаны, в payload они не нужны.
     audit.pop("_posts_text", None)
@@ -1073,6 +1077,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "bio":              bio,
         "affinity":         affinity,
         "voice_portrait":   voice_portrait,
+        "city_brief":       city_brief,
     }
 
 
