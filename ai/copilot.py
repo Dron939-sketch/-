@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .deepseek_client import DeepSeekClient, DeepSeekError
-from .emotion import detect as detect_emotion
+# from .emotion import detect as detect_emotion  # отключено по просьбе
+                                                  # пользователя для скорости
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ ALLOWED_ACTIONS = {
     "run_search_vk":      "Поиск в VK (группы / люди / посты)",
     "run_search_web":     "Поиск в интернете",
     "run_daily_brief":    "Сводка дня — главное по городу одной фразой",
+    "run_action_plan":    "Маршрут к решению — план из 3 шагов с исполнителями и сроками",
 }
 
 OPEN_ACTIONS = {a for a in ALLOWED_ACTIONS if a.startswith("open_") or a == "show_chart"}
@@ -360,7 +362,11 @@ async def chat(
     if not cli.enabled:
         return _fallback(ctx, q)
 
-    emotion_block = detect_emotion(q)
+    # Эмоции временно отключены (по запросу пользователя — для скорости).
+    # Модуль ai.emotion остаётся, можно вернуть одной строчкой:
+    #   emotion_block = detect_emotion(q)
+    # Сейчас передаём пустой блок — system prompt без instruction.
+    emotion_block: Dict[str, str] = {"instruction": "", "tone": "", "emotion": ""}
     system_prompt = _build_system_prompt(emotion_block)
 
     try:
@@ -372,8 +378,6 @@ async def chat(
             use_cache=False,
         )
         parsed = _parse_response(data)
-        parsed["emotion"] = emotion_block.get("emotion") or "neutral"
-        parsed["tone"] = emotion_block.get("tone") or "friendly"
         return parsed
     except DeepSeekError as exc:
         logger.warning("copilot DeepSeekError: %s", exc)

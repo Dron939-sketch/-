@@ -51,12 +51,18 @@ _PLAN_SYSTEM = """\
   run_search_web     — поиск в интернете (DuckDuckGo)
   run_daily_brief    — короткая сводка дня (пульс + векторы + кризис +
                        темы депутатов + свежие новости одной фразой)
+  run_action_plan    — маршрут к решению: 3 шага с исполнителями и
+                       сроками (нужно при «как поднять / что делать /
+                       дай план / маршрут к решению»)
 
 Если вопрос содержит «найди / поищи / в вк / в интернете / погугли /
 кто такой» — почти всегда нужны run_search_vk или run_search_web.
 
 «Что сегодня важно», «коротко главное», «сводка дня» —
 run_daily_brief (один шаг достаточно).
+
+«Как поднять УБ», «что делать с дорогами», «дай план / маршрут» —
+run_action_plan (один шаг достаточно).
 
 Формат ответа — строго JSON:
 {"steps": ["run_search_vk"]}
@@ -83,7 +89,8 @@ _MULTISTEP_TRIGGERS = re.compile(
     r"что у нас|общее состояние|сделай обзор|полный отчёт|общий отчет|"
     r"что тревожит|сводку|где беда|где проблема|"
     r"найди|поищи|погугли|в вк|в интернете|кто такой|кто это|"
-    r"сводк|коротко главное|что сегодня важно|что важного)",
+    r"сводк|коротко главное|что сегодня важно|что важного|"
+    r"что делать|дай план|маршрут|план действий|план к решению)",
     re.IGNORECASE | re.UNICODE,
 )
 
@@ -202,17 +209,23 @@ async def run_plan(
     results: List[Dict[str, Any]] = []
     try:
         async with asyncio.timeout(PLAN_TIMEOUT_S):  # py3.11+
-            for step in steps:
-                try:
-                    out = await executor(step)
+            # Параллелим выполнение шагов — каждый шаг независим, нет
+            # cross-dependency между run_*-actions. Время плана = время
+            # самого медленного шага, а не сумма.
+            outs = await asyncio.gather(
+                *(executor(step) for step in steps),
+                return_exceptions=True,
+            )
+            for step, out in zip(steps, outs):
+                if isinstance(out, Exception):
+                    logger.exception("plan step %s failed", step, exc_info=out)
+                    results.append({"step": step, "text": "", "sources": []})
+                else:
                     results.append({
                         "step":    step,
                         "text":    (out or {}).get("text", ""),
                         "sources": (out or {}).get("sources", []),
                     })
-                except Exception:  # noqa: BLE001
-                    logger.exception("plan step %s failed", step)
-                    results.append({"step": step, "text": "", "sources": []})
     except asyncio.TimeoutError:
         logger.warning("run_plan timeout")
 
