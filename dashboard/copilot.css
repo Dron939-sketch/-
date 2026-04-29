@@ -278,6 +278,61 @@
   min-height: 1.2em;
 }
 
+/* ------------------ Уведомления ------------------ */
+.jv-notify {
+  margin: 0 12px 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(10, 22, 40, 0.6);
+  font-size: 0.85rem;
+  color: #B8D4FF;
+}
+.jv-notify summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  user-select: none;
+}
+.jv-notify summary::-webkit-details-marker { display: none; }
+.jv-notify[open] summary { margin-bottom: 8px; }
+.jv-notify-body { display: flex; flex-direction: column; gap: 0.4rem; }
+.jv-notify-status { color: rgba(184, 212, 255, 0.78); font-size: 0.82rem; }
+.jv-notify-link {
+  display: inline-block;
+  padding: 6px 12px;
+  background: linear-gradient(180deg, #5EA8FF, #2C70D9);
+  color: #07142A;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.82rem;
+  width: fit-content;
+}
+.jv-notify-link:hover { filter: brightness(1.07); }
+.jv-notify-recheck, .jv-notify-unlink {
+  background: transparent;
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  color: #B8D4FF;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  width: fit-content;
+}
+.jv-notify-recheck:hover, .jv-notify-unlink:hover {
+  border-color: #5EA8FF;
+  background: rgba(94, 168, 255, 0.08);
+}
+.jv-notify-prefs { display: flex; flex-direction: column; gap: 0.3rem; }
+.jv-notify-check {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.jv-notify-check input { accent-color: #5EA8FF; }
+
 /* ------------------ Toast «Я рядом» ------------------ */
 .jv-toast {
   position: fixed;

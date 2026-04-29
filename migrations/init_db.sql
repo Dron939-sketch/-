@@ -393,3 +393,21 @@ CREATE TABLE IF NOT EXISTS jarvis_alerts (
 
 CREATE INDEX IF NOT EXISTS jarvis_alerts_city_idx
     ON jarvis_alerts (city_id, last_triggered_at DESC);
+
+-- @SEGMENT jarvis_max_subscribers_table
+-- Подписки горожан на уведомления Джарвиса через мессенджер Max
+-- (https://max.ru). Identity — anon UUID из jarvis_memory.identity,
+-- max_chat_id — chat-id который Max API пришлёт в webhook bot_started.
+-- prefs — JSONB с булевыми флагами что присылать.
+CREATE TABLE IF NOT EXISTS jarvis_max_subscribers (
+    id            BIGSERIAL PRIMARY KEY,
+    identity      TEXT NOT NULL UNIQUE,
+    max_chat_id   TEXT NOT NULL UNIQUE,
+    user_name     TEXT,
+    prefs         JSONB NOT NULL DEFAULT
+        '{"critical": true, "daily_brief": false, "topics": false}'::jsonb,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS jarvis_max_chat_idx
+    ON jarvis_max_subscribers (max_chat_id);
