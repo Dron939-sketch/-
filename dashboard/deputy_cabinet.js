@@ -198,6 +198,93 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Миссии недели — gamification: рейтинг → action-list
+  // ---------------------------------------------------------------------------
+
+  function renderMissions(missions) {
+    if (!missions || missions.length === 0) return "";
+    return `
+      <div class="dc-block dc-missions-block">
+        <div class="dc-block-title">🎯 Миссии недели</div>
+        <div class="dc-missions">
+          ${missions.map((m, i) => `
+            <div class="dc-mission" data-code="${esc(m.code || '')}">
+              <div class="dc-mission-num">${i + 1}</div>
+              <div class="dc-mission-body">
+                <div class="dc-mission-title">${esc(m.title || "")}</div>
+                <div class="dc-mission-why">${esc(m.why || "")}</div>
+                ${m.hint ? `<div class="dc-mission-hint">${esc(m.hint)}</div>` : ""}
+              </div>
+              <div class="dc-mission-effort dc-effort-${esc(m.effort || 'M')}">${esc(m.effort || 'M')}</div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Шаблоны ответов на жалобы — карточки + on-demand генерация
+  // ---------------------------------------------------------------------------
+
+  function renderReplyTemplates(categories, deputyId) {
+    if (!categories || categories.length === 0) return "";
+    return `
+      <div class="dc-block dc-replies-block" data-deputy-id="${esc(deputyId || "")}">
+        <div class="dc-block-title">💬 Готовые ответы на жалобы</div>
+        <p class="dc-empty-sub">Кликни — Джарвис соберёт ответ в твоём голосе. Можно копировать сразу.</p>
+        <div class="dc-replies-grid">
+          ${categories.map((c) => `
+            <button type="button" class="dc-reply-card" data-cat="${esc(c.code)}">
+              <div class="dc-reply-emoji">${esc(c.emoji || "")}</div>
+              <div class="dc-reply-label">${esc(c.label || "")}</div>
+              <div class="dc-reply-example">${esc(c.example || "")}</div>
+            </button>
+          `).join("")}
+        </div>
+        <div class="dc-reply-result" id="dc-reply-result"></div>
+      </div>
+    `;
+  }
+
+  async function onReplyClick(ev) {
+    const card = ev.target.closest(".dc-reply-card");
+    if (!card) return;
+    const block = card.closest(".dc-replies-block");
+    const deputyId = block?.dataset.deputyId;
+    const category = card.getAttribute("data-cat");
+    const result = document.getElementById("dc-reply-result");
+    if (!deputyId || !category || !result) return;
+    result.innerHTML = `<div class="dc-mod-loading">Собираю ответ в твоём голосе…</div>`;
+    try {
+      const res = await fetch("/api/copilot/reply/render", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deputy_id: deputyId, category }),
+      });
+      if (!res.ok) {
+        result.innerHTML = `<div class="dc-empty-sub">Не получилось (${res.status}).</div>`;
+        return;
+      }
+      const data = await res.json();
+      result.innerHTML = `
+        <div class="dc-reply-output">
+          <div class="dc-reply-tag">Ответ в голосе «${esc(data.archetype || "—")}»</div>
+          <pre class="dc-mod-text">${esc(data.text || "")}</pre>
+          <button type="button" class="dc-mod-btn primary" id="dc-reply-copy">Скопировать</button>
+        </div>
+      `;
+      const copyBtn = document.getElementById("dc-reply-copy");
+      copyBtn?.addEventListener("click", () => {
+        navigator.clipboard?.writeText?.(data.text || "");
+        copyBtn.textContent = "Скопировано";
+        setTimeout(() => copyBtn.textContent = "Скопировать", 1600);
+      });
+    } catch (_) {
+      result.innerHTML = `<div class="dc-empty-sub">Сеть недоступна.</div>`;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Округ сегодня — приоритеты по секторам (на старте — demo-карточки)
   // ---------------------------------------------------------------------------
 
@@ -336,14 +423,17 @@
     hero.innerHTML = `
       ${renderHeader(data.deputy || {}, data.archetype || {}, data.rating || {})}
       ${renderRatings(data.rating || {}, data.audit || null)}
+      ${renderMissions(data.missions || [])}
       ${renderDistrictToday(data.district_today || {})}
       ${renderCitizensView(data.audit || {}, data.archetype || {})}
       ${renderTimingHeatmap(data.timing || {})}
       ${renderCalendar(data.calendar || [])}
       ${renderRecommendations(data.audit || {})}
       ${renderPlan(data.plan || {}, data.archetype || {})}
+      ${renderReplyTemplates(data.reply_categories || [], (data.deputy || {}).external_id)}
     `;
     hero.addEventListener("click", onCopyClick);
+    hero.addEventListener("click", onReplyClick);
     document.getElementById("dc-create-content")?.addEventListener("click",
       () => openContentWizard(data.deputy?.external_id, data.archetype?.name));
     document.getElementById("dc-create-event")?.addEventListener("click",
