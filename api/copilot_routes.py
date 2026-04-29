@@ -75,130 +75,139 @@ def _interesting_categories(question: str) -> List[str]:
 
 
 async def _build_context(city_name: str, question: str) -> Dict[str, Any]:
-    """Готовим context dict для ai.copilot.chat. Все источники fail-safe."""
+    """Готовим context dict для ai.copilot.chat.
+
+    Все источники независимы — запускаем их параллельно через
+    asyncio.gather, чтобы суммарное время свелось к самому медленному.
+    Раньше последовательный вариант съедал ~5-7 round-trip'ов в БД.
+    """
+    import asyncio
+
     ctx: Dict[str, Any] = {"name": city_name}
+
+    # Сначала — единственная зависимость: city_id (нужен большинству
+    # последующих запросов). Параллельно с этим запускаем crisis и
+    # agenda — они идут через city_name, не нуждаются в cid.
     cid: Optional[int] = None
+    cats = _interesting_categories(question)
+
     try:
-        from db.queries import (
-            latest_metrics, latest_weather, news_window, metrics_trend_7d,
-        )
         from db.seed import city_id_by_name
-
         cid = await city_id_by_name(city_name)
-        if cid is not None:
-            m = await latest_metrics(cid)
-            if m:
-                ctx["metrics"] = {
-                    "sb": m.get("sb"), "tf": m.get("tf"),
-                    "ub": m.get("ub"), "chv": m.get("chv"),
-                }
-            w = await latest_weather(cid)
-            if w:
-                ctx["weather"] = {
-                    "temperature": w.get("temperature"),
-                    "condition":   w.get("condition"),
-                }
-
-            # Тренды за неделю — Ко-пилот может говорить «на этой неделе УБ
-            # подрос», что делает его «живым».
-            try:
-                t = await metrics_trend_7d(cid)
-                if t:
-                    ctx["trend_7d"] = {
-                        "sb": t.get("sb"), "tf": t.get("tf"),
-                        "ub": t.get("ub"), "chv": t.get("chv"),
-                    }
-            except Exception:  # noqa: BLE001
-                pass
-
-            # Если в вопросе упоминается категория — поднимаем top-news
-            # из неё за последнюю неделю как источник.
-            cats = _interesting_categories(question)
-            if cats:
-                items = await news_window(cid, hours=168)
-                top_titles: List[str] = []
-                for it in items:
-                    if (it.category or "").lower() in cats:
-                        title = (it.title or "").strip()
-                        if title and title not in top_titles:
-                            top_titles.append(title[:140])
-                    if len(top_titles) >= 5:
-                        break
-                if top_titles:
-                    ctx["top_complaints"] = top_titles
     except Exception:  # noqa: BLE001
-        pass
+        cid = None
 
-    # Активные темы депутатов с прогрессом — Ко-пилот видит, что закрывается.
+    async def _safe(coro):
+        """Вспомогательная обёртка: ловим исключение и возвращаем None."""
+        try:
+            return await coro
+        except Exception:  # noqa: BLE001
+            return None
+
+    # Параллельные источники
+    tasks: Dict[str, Any] = {}
     if cid is not None:
         try:
+            from db.queries import (
+                latest_metrics, latest_weather, news_window, metrics_trend_7d,
+            )
             from db import deputy_queries as q
-            topics = await q.list_topics(cid, status="active", limit=5)
-            entries = []
-            for t in (topics or [])[:5]:
-                title = t.get("title")
-                if not title:
-                    continue
-                done = int(t.get("completed_posts") or 0)
-                req  = int(t.get("required_posts") or 0)
-                if req > 0:
-                    entries.append(f"{title} ({done}/{req} постов)")
-                else:
-                    entries.append(title)
-            if entries:
-                ctx["active_topics"] = entries
+            tasks["metrics"] = _safe(latest_metrics(cid))
+            tasks["weather"] = _safe(latest_weather(cid))
+            tasks["trend"]   = _safe(metrics_trend_7d(cid))
+            tasks["topics"]  = _safe(q.list_topics(cid, status="active", limit=5))
+            if cats:
+                tasks["news"] = _safe(news_window(cid, hours=168))
         except Exception:  # noqa: BLE001
             pass
 
-    # Снимок кризис-радара — если есть. Не зависит от cid (ползёт
-    # через city_name и pure-analytics).
     try:
-        from api.routes import city_crisis  # type: ignore
-        crisis = await city_crisis(city_name)
-        if isinstance(crisis, dict):
-            level = crisis.get("level") or crisis.get("status")
-            alerts = crisis.get("alerts") or []
-            if level or alerts:
-                ctx["crisis"] = {
-                    "level":  level,
-                    "alerts": [
-                        a.get("title") if isinstance(a, dict) else str(a)
-                        for a in alerts[:3]
-                    ],
-                }
+        from api.routes import city_crisis, _build_agenda  # type: ignore
+        tasks["crisis"] = _safe(city_crisis(city_name))
+        tasks["agenda"] = _safe(_build_agenda({"name": city_name}, 0.0))
     except Exception:  # noqa: BLE001
         pass
 
-    # Пробуем ещё агрегированную повестку (top complaints/praises) — она
-    # уже отфильтрована и валидирована.
-    try:
-        from api.routes import _build_agenda  # type: ignore
-        agenda_resp = await _build_agenda({"name": city_name}, 0.0)
-        if agenda_resp:
-            tc = list(getattr(agenda_resp, "top_complaints", []) or [])[:5]
-            tp = list(getattr(agenda_resp, "top_praises", []) or [])[:5]
-            # Если по эвристике уже что-то нашли — оставим, иначе
-            # возьмём из agenda.
-            if tc and not ctx.get("top_complaints"):
-                ctx["top_complaints"] = tc
-            if tp:
-                ctx["top_praises"] = tp
-    except Exception:  # noqa: BLE001
-        pass
+    if tasks:
+        results = await asyncio.gather(*tasks.values())
+        results_map = dict(zip(tasks.keys(), results))
+    else:
+        results_map = {}
 
-    # Активные темы депутатов — по 5 самых ближайших по сроку.
-    try:
-        from db import deputy_queries as q
-        from db.seed import city_id_by_name as _cid
+    # Сборка результатов
+    m = results_map.get("metrics")
+    if m:
+        ctx["metrics"] = {
+            "sb": m.get("sb"), "tf": m.get("tf"),
+            "ub": m.get("ub"), "chv": m.get("chv"),
+        }
+    w = results_map.get("weather")
+    if w:
+        ctx["weather"] = {
+            "temperature": w.get("temperature"),
+            "condition":   w.get("condition"),
+        }
+    t = results_map.get("trend")
+    if t:
+        ctx["trend_7d"] = {
+            "sb": t.get("sb"), "tf": t.get("tf"),
+            "ub": t.get("ub"), "chv": t.get("chv"),
+        }
 
-        cid = await _cid(city_name)
-        if cid is not None:
-            topics = await q.list_topics(cid, status="active", limit=5)
-            titles = [t.get("title") for t in (topics or []) if t.get("title")]
-            if titles:
-                ctx["active_topics"] = titles
-    except Exception:  # noqa: BLE001
-        pass
+    # Топ-новости по категориям-маркерам
+    items = results_map.get("news") or []
+    if items and cats:
+        top_titles: List[str] = []
+        for it in items:
+            if (it.category or "").lower() in cats:
+                title = (it.title or "").strip()
+                if title and title not in top_titles:
+                    top_titles.append(title[:140])
+            if len(top_titles) >= 5:
+                break
+        if top_titles:
+            ctx["top_complaints"] = top_titles
+
+    # Активные темы депутатов
+    topics = results_map.get("topics") or []
+    if topics:
+        entries: List[str] = []
+        for tp in topics[:5]:
+            title = tp.get("title")
+            if not title:
+                continue
+            done = int(tp.get("completed_posts") or 0)
+            req = int(tp.get("required_posts") or 0)
+            if req > 0:
+                entries.append(f"{title} ({done}/{req} постов)")
+            else:
+                entries.append(title)
+        if entries:
+            ctx["active_topics"] = entries
+
+    # Кризис-радар
+    crisis = results_map.get("crisis")
+    if isinstance(crisis, dict):
+        level = crisis.get("level") or crisis.get("status")
+        alerts = crisis.get("alerts") or []
+        if level or alerts:
+            ctx["crisis"] = {
+                "level":  level,
+                "alerts": [
+                    a.get("title") if isinstance(a, dict) else str(a)
+                    for a in alerts[:3]
+                ],
+            }
+
+    # Agenda → top_complaints (если эвристика по категории не сработала) + top_praises
+    agenda_resp = results_map.get("agenda")
+    if agenda_resp:
+        tc = list(getattr(agenda_resp, "top_complaints", []) or [])[:5]
+        tp = list(getattr(agenda_resp, "top_praises", []) or [])[:5]
+        if tc and not ctx.get("top_complaints"):
+            ctx["top_complaints"] = tc
+        if tp:
+            ctx["top_praises"] = tp
 
     return ctx
 
@@ -275,6 +284,8 @@ async def _execute_action(
             text, src = await _run_search_web(query or city_name)
         elif action == "run_daily_brief":
             text, src = await _run_daily_brief(city_name, city_id)
+        elif action == "run_action_plan":
+            text, src = await _run_action_plan(city_name, city_id, query)
         else:
             text, src = (
                 f"Расчёт «{action}» у меня не заложен.",
@@ -292,91 +303,219 @@ async def _execute_action(
 
 
 async def _run_daily_brief(city_name: str, cid: Optional[int]) -> tuple[str, List[str]]:
-    """Сводка дня — короткая фраза о состоянии города. Собирает:
-    пульс, текущие 4 вектора, кризис-радар (count алертов), активные
-    темы депутатов, новости за сутки. Всё в одну голосовую фразу."""
+    """Сводка дня — короткая фраза о состоянии города.
+
+    Все 5 источников (пульс, метрики, кризис, темы депутатов, новости)
+    запускаются параллельно через asyncio.gather — суммарное время =
+    время самого медленного, а не сумма.
+    """
+    import asyncio
+
+    async def _safe(coro):
+        try:
+            return await coro
+        except Exception:  # noqa: BLE001
+            return None
+
+    tasks: Dict[str, Any] = {}
+    try:
+        from api.routes import city_pulse, city_crisis  # type: ignore
+        tasks["pulse"]  = _safe(city_pulse(city_name))
+        tasks["crisis"] = _safe(city_crisis(city_name))
+    except Exception:  # noqa: BLE001
+        pass
+
+    if cid is not None:
+        try:
+            from db.queries import latest_metrics, news_window
+            from db import deputy_queries as q
+            tasks["metrics"] = _safe(latest_metrics(cid))
+            tasks["topics"]  = _safe(q.list_topics(cid, status="active", limit=20))
+            tasks["news"]    = _safe(news_window(cid, hours=24))
+        except Exception:  # noqa: BLE001
+            pass
+
+    results = await asyncio.gather(*tasks.values()) if tasks else []
+    rmap = dict(zip(tasks.keys(), results))
+
     bits: List[str] = []
 
-    # 1. Пульс (если получится)
-    try:
-        from api.routes import city_pulse  # type: ignore
-        p = await city_pulse(city_name)
-        if isinstance(p, dict):
-            score = p.get("score") or p.get("pulse_score")
-            if score is not None:
+    p = rmap.get("pulse")
+    if isinstance(p, dict):
+        score = p.get("score") or p.get("pulse_score")
+        if score is not None:
+            try:
                 bits.append(f"пульс {round(float(score))} из 100")
-    except Exception:  # noqa: BLE001
-        pass
+            except Exception:  # noqa: BLE001
+                pass
 
-    # 2. Просевшие метрики
-    try:
-        if cid is not None:
-            from db.queries import latest_metrics
-            m = await latest_metrics(cid)
-            if m:
-                low_vec = []
-                for code, label in (("sb", "СБ"), ("tf", "ТФ"),
-                                    ("ub", "УБ"), ("chv", "ЧВ")):
-                    v = m.get(code)
-                    if v is None:
-                        continue
-                    try:
-                        fv = float(v)
-                    except (TypeError, ValueError):
-                        continue
-                    if fv < 3.0:
-                        low_vec.append(f"{label} {fv:.1f}")
-                if low_vec:
-                    bits.append("просели: " + ", ".join(low_vec))
-    except Exception:  # noqa: BLE001
-        pass
+    m = rmap.get("metrics")
+    if m:
+        low_vec = []
+        for code, label in (("sb", "СБ"), ("tf", "ТФ"),
+                            ("ub", "УБ"), ("chv", "ЧВ")):
+            v = m.get(code)
+            if v is None:
+                continue
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                continue
+            if fv < 3.0:
+                low_vec.append(f"{label} {fv:.1f}")
+        if low_vec:
+            bits.append("просели: " + ", ".join(low_vec))
 
-    # 3. Кризис-радар
-    try:
-        from api.routes import city_crisis  # type: ignore
-        c = await city_crisis(city_name)
-        if isinstance(c, dict):
-            alerts = c.get("alerts") or []
-            if alerts:
-                bits.append(f"кризис-алертов: {len(alerts)}")
-            else:
-                bits.append("кризис-радар чист")
-    except Exception:  # noqa: BLE001
-        pass
+    c = rmap.get("crisis")
+    if isinstance(c, dict):
+        alerts = c.get("alerts") or []
+        if alerts:
+            bits.append(f"кризис-алертов: {len(alerts)}")
+        else:
+            bits.append("кризис-радар чист")
 
-    # 4. Темы депутатов
-    try:
-        if cid is not None:
-            from db import deputy_queries as q
-            topics = await q.list_topics(cid, status="active", limit=20)
-            if topics:
-                bits.append(f"у депутатов {len(topics)} активных тем")
-    except Exception:  # noqa: BLE001
-        pass
+    topics = rmap.get("topics") or []
+    if topics:
+        bits.append(f"у депутатов {len(topics)} активных тем")
 
-    # 5. Новости за сутки
-    try:
-        if cid is not None:
-            from db.queries import news_window
-            items = await news_window(cid, hours=24)
-            if items:
-                bits.append(f"свежих новостей: {len(items)}")
-    except Exception:  # noqa: BLE001
-        pass
+    news = rmap.get("news") or []
+    if news:
+        bits.append(f"свежих новостей: {len(news)}")
 
     if not bits:
         return ("Сегодня по городу пока тихо — данных у меня мало.", ["daily_brief"])
     return ("Сводка дня: " + "; ".join(bits) + ".", ["daily_brief"])
 
 
+async def _run_action_plan(
+    city_name: str, cid: Optional[int], query: Optional[str],
+) -> tuple[str, List[str]]:
+    """Маршрут к решению — план из 3 шагов с исполнителями и сроками.
+
+    Использует analytics.action_generator.ActionGenerator + текущие
+    метрики/тренды/жалобы. На вход: query (из голоса/текста — например
+    «как поднять УБ?»). Возвращает голосовое резюме плана.
+    """
+    import asyncio as _asyncio
+
+    try:
+        from analytics.action_generator import ActionGenerator
+    except Exception:  # noqa: BLE001
+        return ("Action-генератор сейчас недоступен.", [])
+
+    # Параллельно подтягиваем метрики, тренды и top complaints — нужны
+    # все три для создания осмысленного плана.
+    async def _safe(coro):
+        try:
+            return await coro
+        except Exception:  # noqa: BLE001
+            return None
+
+    metrics_task = None
+    trend_task = None
+    agenda_task = None
+
+    if cid is not None:
+        try:
+            from db.queries import latest_metrics, metrics_trend_7d
+            metrics_task = _safe(latest_metrics(cid))
+            trend_task = _safe(metrics_trend_7d(cid))
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        from api.routes import _build_agenda  # type: ignore
+        agenda_task = _safe(_build_agenda({"name": city_name}, 0.0))
+    except Exception:  # noqa: BLE001
+        pass
+
+    metrics_row, trend_row, agenda_resp = await _asyncio.gather(
+        metrics_task or _asyncio.sleep(0, result=None),
+        trend_task   or _asyncio.sleep(0, result=None),
+        agenda_task  or _asyncio.sleep(0, result=None),
+    )
+
+    # Подготовка проблем
+    problems: List[str] = []
+    if query:
+        problems.append(query.strip())
+    if agenda_resp:
+        complaints = list(getattr(agenda_resp, "top_complaints", []) or [])[:3]
+        for c in complaints:
+            if c and c not in problems:
+                problems.append(c)
+    if not problems:
+        # Дефолт — общий запрос на улучшение
+        problems = ["Что улучшить в городе сейчас"]
+
+    # Метрики на 0..1 шкале (action_generator ожидает unit-масштаб)
+    metrics_unit: Optional[Dict[str, Optional[float]]] = None
+    if metrics_row:
+        def _to_unit(v):
+            return None if v is None else round(float(v) / 6.0, 3)
+        metrics_unit = {
+            "safety":  _to_unit(metrics_row.get("sb")),
+            "economy": _to_unit(metrics_row.get("tf")),
+            "quality": _to_unit(metrics_row.get("ub")),
+            "social":  _to_unit(metrics_row.get("chv")),
+        }
+
+    trends: Optional[Dict[str, Optional[float]]] = None
+    if trend_row:
+        trends = {
+            "safety":  trend_row.get("sb"),
+            "economy": trend_row.get("tf"),
+            "quality": trend_row.get("ub"),
+            "social":  trend_row.get("chv"),
+        }
+
+    # Генерация
+    try:
+        plan = ActionGenerator(city_name).create_daily_plan(
+            problems=problems, metrics=metrics_unit, trends=trends,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("action_plan generation failed")
+        return ("Не получилось построить маршрут к решению — попробуй позже.", [])
+
+    # Берём топ-3 для голоса (план может содержать больше)
+    top_actions = plan.actions[:3] if plan.actions else []
+    if not top_actions:
+        return (
+            "По текущим данным конкретных шагов не вижу. Сформулируй проблему ещё раз.",
+            [],
+        )
+
+    bits: List[str] = []
+    for i, a in enumerate(top_actions, 1):
+        responsible_role = (
+            a.responsible.role if hasattr(a.responsible, "role")
+            else str(a.responsible)
+        )
+        bits.append(
+            f"Шаг {i}: {a.title}. "
+            f"Ответственный — {responsible_role}, срок — {a.deadline_days} дн."
+        )
+    summary = " ".join(bits)
+    if plan.summary:
+        # plan.summary содержит эмодзи — Джарвис их не озвучивает,
+        # они отфильтруются в expand_temperatures+expand_units → normalize.
+        summary = f"{plan.summary}. {summary}"
+
+    return (summary, ["action_generator"])
+
+
 async def _run_search_vk(query: str) -> tuple[str, List[str]]:
-    """Поиск VK: люди + группы + свежие посты. Сжимаем в одну фразу
-    под голос (3-5 фактов)."""
+    """Поиск VK: люди + группы + свежие посты. Параллельно три VK API
+    вызова через asyncio.gather, потом сжимаем в одну фразу."""
+    import asyncio
     from collectors.vk_discover import search_groups, search_news, search_users
 
-    groups = await search_groups(query, limit=3)
-    users = await search_users(query, limit=3)
-    posts = await search_news(query, count=3)
+    groups, users, posts = await asyncio.gather(
+        search_groups(query, limit=3),
+        search_users(query, limit=3),
+        search_news(query, count=3),
+        return_exceptions=False,
+    )
 
     if not (groups or users or posts):
         return (f"В VK по запросу «{query}» ничего не нашёл.", ["vk"])
@@ -612,18 +751,28 @@ async def copilot_greeting() -> dict:
 
 @router.post("/chat")
 async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
-    cfg = _resolve_city_safe(payload.city)
-    ctx = await _build_context(cfg["name"], payload.message)
+    import asyncio as _asyncio
 
-    # Долговременная память — подмешиваем 2-4 строки в context
-    if payload.identity:
+    cfg = _resolve_city_safe(payload.city)
+
+    # Контекст города и долговременная память собираются параллельно —
+    # они никак не зависят друг от друга, последовательно делать не нужно.
+    async def _safe_memory():
+        if not payload.identity:
+            return None
         try:
             from ai.jarvis_memory import build_memory_lines
-            mem_lines = await build_memory_lines(payload.identity)
-            if mem_lines:
-                ctx["memory"] = mem_lines
+            return await build_memory_lines(payload.identity)
         except Exception:  # noqa: BLE001
             logger.exception("memory load failed")
+            return None
+
+    ctx, mem_lines = await _asyncio.gather(
+        _build_context(cfg["name"], payload.message),
+        _safe_memory(),
+    )
+    if mem_lines:
+        ctx["memory"] = mem_lines
 
     # Многошаговое планирование: если вопрос «обзорный» — chain-of-actions.
     # Возвращаем сразу синтезированный ответ, минуя обычный chat-LLM-вызов.

@@ -41,7 +41,16 @@ def test_prompt_skips_zero_trends():
     assert "Тренд за 7 дней" not in p
 
 
-def test_system_prompt_injects_emotion_instruction():
+def test_system_prompt_does_not_inject_when_no_instruction():
+    """С пустой instruction (эмоции отключены) — нет блока тона в prompt."""
+    sp = _build_system_prompt({
+        "emotion": "", "tone": "", "instruction": "",
+    })
+    assert "Тон ответа" not in sp
+
+
+def test_system_prompt_injects_emotion_when_instruction_present():
+    """Если эмоции включены и instruction передан — он подмешивается."""
     sp = _build_system_prompt({
         "emotion": "sadness", "tone": "gentle",
         "instruction": "Будь мягким, не сыпь цифрами.",
@@ -71,17 +80,21 @@ class _FakeClient:
         return self.response
 
 
-def test_chat_returns_emotion_field():
+def test_chat_no_emotion_field_after_disable():
+    """Эмоции временно отключены — поле в ответе отсутствует или пустое."""
     cli = _FakeClient({"text": "ок"})
     out = asyncio.run(chat("Мне грустно", {"name": "Коломна"}, [], client=cli))
-    assert out.get("emotion") == "sadness"
-    assert out.get("tone") == "gentle"
+    # ключи могут отсутствовать или быть None / "" — главное, что не sadness
+    assert out.get("emotion") in (None, "", "neutral")
+    assert out.get("tone") in (None, "", "friendly")
 
 
-def test_chat_neutral_when_no_emotion():
-    cli = _FakeClient({"text": "ок"})
-    out = asyncio.run(chat("Что у нас с метриками?", {"name": "Коломна"}, [], client=cli))
-    assert out.get("emotion") == "neutral"
+def test_chat_returns_text_action_sources_only():
+    cli = _FakeClient({"text": "ок", "action": None, "sources": []})
+    out = asyncio.run(chat("Что нового?", {"name": "Коломна"}, [], client=cli))
+    assert "text" in out
+    assert "action" in out
+    assert "sources" in out
 
 
 def test_chat_run_action_passes_through_whitelist():
