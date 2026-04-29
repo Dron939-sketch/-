@@ -18,10 +18,26 @@ const VECTOR_META = [
 const SPARKLINE_W = 160;
 const SPARKLINE_H = 30;
 
-async function fetchJson(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+// Все API-запросы должны иметь жёсткий таймаут — иначе один зависший
+// endpoint (например, медленный /agenda на холодном Render) держит
+// весь дашборд бесконечно. AbortController прерывает через
+// FETCH_TIMEOUT_MS, и refresh() через Promise.allSettled спокойно
+// собирает остальные виджеты.
+const FETCH_TIMEOUT_MS = 15000;
+async function fetchJson(url, opts = {}) {
+  const ctrl = new AbortController();
+  const ms = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal:  ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 // -------------------------------------------------- City bootstrap
@@ -2789,10 +2805,12 @@ async function switchCity(city) {
 async function init() {
   let cities = [];
   try {
-    cities = await fetchJson("/api/cities");
+    cities = await fetchJson("/api/cities", { timeoutMs: 8000 });
   } catch (e) {
-    console.error("cities unavailable", e);
-    return;
+    console.error("cities unavailable, using fallback Kolomna", e);
+    // Fallback — без сетевого ответа page всё равно запускается с
+    // дефолтным городом, виджеты сами помечают «нет данных».
+    cities = [{ slug: "kolomna", name: "Коломна", emoji: "🏰", is_pilot: true }];
   }
   window.__CITIES__ = cities;
 
