@@ -900,6 +900,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from analytics.archetype_affinity import compute_affinity
     from analytics.deputy_actions import situations_list
     from analytics.deputy_bio import build_bio
+    from analytics.deputy_briefing import build_briefing
     from analytics.deputy_city_brief import build_city_brief
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.deputy_meister import build_meister
@@ -1018,6 +1019,15 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     # Городской контекст: ключевые показатели + новости по секторам
     city_brief = await build_city_brief(deputy, city=city)
 
+    # Утренний брифинг — собираем из всего что уже посчитано выше
+    briefing = build_briefing(
+        deputy, archetype,
+        district_today=_build_district_today(deputy),
+        missions=missions, plan=plan, coalition=coalition,
+        calendar=events, mentions=mentions,
+        timing={"heatmap": timing_heatmap},
+    )
+
     # Очищаем audit от тяжёлых сырых текстов перед кэшем — affinity и
     # voice уже посчитаны, в payload они не нужны.
     audit.pop("_posts_text", None)
@@ -1078,6 +1088,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "affinity":         affinity,
         "voice_portrait":   voice_portrait,
         "city_brief":       city_brief,
+        "briefing":         briefing,
     }
 
 
@@ -1359,6 +1370,39 @@ _FORMAT_BLUEPRINTS = {
         "callto": ["Партнёрская организация", "Местные СМИ — пресс-релиз за 2 дня"],
     },
 }
+
+
+@router.get("/deputy/briefing/voice")
+async def copilot_deputy_briefing_voice(external_id: str, city: str = "Коломна") -> dict:
+    """Голосовой брифинг — Джарвис озвучивает текст из cabinet.briefing.
+    Возвращает {text, audio?, audio_mime?}: фронт сначала проигрывает MP3,
+    при отсутствии — деградирует к speechSynthesis по тексту.
+    """
+    from db.deputy_audit_cache import get_cached
+
+    cached = await get_cached(external_id)
+    if cached is None:
+        cached = await _build_deputy_cabinet(external_id, city)
+
+    briefing = cached.get("briefing") or {}
+    text = (briefing.get("voice_text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=404, detail="Брифинг недоступен.")
+
+    response: Dict[str, Any] = {
+        "text":       text,
+        "audio":      None,
+        "audio_mime": None,
+    }
+    if fish_configured():
+        try:
+            mp3 = await fish_synthesize(text)
+            if mp3:
+                response["audio"]      = base64.b64encode(mp3).decode("ascii")
+                response["audio_mime"] = "audio/mpeg"
+        except Exception:  # noqa: BLE001
+            logger.exception("briefing fish_synthesize failed")
+    return response
 
 
 class ActionPlanIn(BaseModel):

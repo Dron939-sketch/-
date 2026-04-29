@@ -322,6 +322,114 @@
 }
 .dc-copy:hover { filter: brightness(1.07); transform: translateY(-1px); }
 
+/* --- Утренний брифинг ---------------------------------------------------- */
+.dc-briefing {
+  margin-top: 18px;
+  padding: 18px 20px 20px;
+  background: linear-gradient(135deg, rgba(255, 217, 155, 0.15), rgba(94, 168, 255, 0.08) 60%, transparent);
+  border: 1px solid rgba(255, 217, 155, 0.4);
+  border-radius: 16px;
+  position: relative; z-index: 1;
+}
+.dc-brief-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.dc-brief-eyebrow {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #FFD89B;
+  font-weight: 800;
+}
+.dc-brief-greet {
+  margin-top: 4px;
+  font-family: "Playfair Display", serif;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #DBE9FF;
+}
+.dc-brief-voice {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #5EA8FF, #2C70D9);
+  color: #07142A;
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.15s;
+  box-shadow: 0 8px 22px -8px rgba(94, 168, 255, 0.6);
+}
+.dc-brief-voice:hover { transform: translateY(-1px); filter: brightness(1.07); }
+.dc-brief-voice:disabled { opacity: 0.7; cursor: progress; }
+.dc-brief-voice-icon { font-size: 1rem; line-height: 1; }
+.dc-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.dc-brief-card {
+  position: relative;
+  padding: 14px 14px 14px;
+  background: rgba(7, 20, 42, 0.6);
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  border-radius: 12px;
+  display: flex; flex-direction: column; gap: 0.45rem;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.dc-brief-card:hover {
+  transform: translateY(-2px);
+  border-color: #5EA8FF;
+}
+.dc-brief-needs_reply {
+  border-left: 3px solid #FF9F4A;
+}
+.dc-brief-hot_topic {
+  border-left: 3px solid #FFD89B;
+}
+.dc-brief-urgent_mission {
+  border-left: 3px solid #B0F0C0;
+}
+.dc-brief-card-icon { font-size: 1.6rem; line-height: 1; }
+.dc-brief-card-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #5EA8FF;
+  font-weight: 800;
+}
+.dc-brief-card-title {
+  font-family: "Playfair Display", serif;
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: #DBE9FF;
+}
+.dc-brief-card-body {
+  font-size: 0.84rem;
+  color: rgba(184, 212, 255, 0.78);
+  line-height: 1.45;
+}
+.dc-brief-card-go {
+  align-self: flex-start;
+  margin-top: 4px;
+  background: linear-gradient(180deg, #5EA8FF, #2C70D9);
+  color: #07142A;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.15s;
+}
+.dc-brief-card-go:hover { transform: translateY(-1px); filter: brightness(1.07); }
+.dc-brief-audio { display: none; }
+
 /* --- Город сегодня (KPI + новости для меня) --- */
 .dc-city-block {
   margin-top: 18px;
