@@ -116,7 +116,16 @@ _DISTRICT_5 = "Округ №5"
 
 KOLOMNA_DEPUTIES: List[DeputyConfig] = [
     # --- Округ №1 ---
-    _district_rep(external_id="vaulin-av",     name="Ваулин Андрей Валерьевич",       district=_DISTRICT_1),
+    {
+        "external_id": "vaulin-av",
+        "name":        "Ваулин Андрей Валерьевич",
+        "role":        "district_rep",
+        "district":    _DISTRICT_1,
+        "sectors":     list(_DISTRICT_REP_SECTORS),
+        "vk":          "avvaulin",
+        "influence_score": 0.5,
+        "enabled":     True,
+    },
     _district_rep(external_id="orlov-sv",      name="Орлов Сергей Владимирович",      district=_DISTRICT_1),
     _district_rep(external_id="kostyunin-aa",  name="Костюнин Анатолий Александрович", district=_DISTRICT_1),
     {
@@ -153,12 +162,17 @@ KOLOMNA_DEPUTIES: List[DeputyConfig] = [
     _district_rep(external_id="murzak-na",     name="Мурзак Наталия Александровна",   district=_DISTRICT_4),
 
     # --- Округ №5 (руководство Совета + двое рядовых) ---
-    _leader(
-        external_id="bratushkov-nv",
-        name="Братушков Николай Владимирович",
-        district=_DISTRICT_5,
-        role_label="Председатель Совета депутатов",
-    ),
+    {
+        "external_id": "bratushkov-nv",
+        "name":        "Братушков Николай Владимирович",
+        "role":        "speaker",
+        "district":    _DISTRICT_5,
+        "sectors":     list(_LEADERSHIP_SECTORS),
+        "vk":          "bratushkov",
+        "influence_score": 0.85,
+        "enabled":     True,
+        "note":        "Председатель Совета депутатов",
+    },
     _leader(
         external_id="androsov-rv",
         name="Андросов Роман Викторович",

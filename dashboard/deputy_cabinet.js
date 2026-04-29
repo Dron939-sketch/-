@@ -354,6 +354,75 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Бенчмарк коллег — таблица позиций + лучшие посты для вдохновения
+  // ---------------------------------------------------------------------------
+
+  function renderBenchmark(b) {
+    if (!b || b.state !== "ok" || !(b.ranking || []).length) {
+      return `
+        <details class="dc-block dc-collapsible" open>
+          <summary class="dc-block-title">🏆 Бенчмарк коллег</summary>
+          <div class="dc-empty-sub">${
+            b && b.state === "no_peers"
+              ? "Пока только вы привязали VK. Когда коллеги подключатся — появится сравнение."
+              : "Подключи VK API token — здесь появится сравнение с коллегами."
+          }</div>
+        </details>`;
+    }
+    const ranking = b.ranking || [];
+    const myPos = ranking.find((r) => r.is_me)?.position;
+    const total = ranking.length;
+    return `
+      <details class="dc-block dc-collapsible dc-bench-block" open>
+        <summary class="dc-block-title">
+          🏆 Бенчмарк коллег
+          ${myPos ? `<span class="dc-bench-pos">ты на ${myPos} из ${total}</span>` : ""}
+        </summary>
+        <p class="dc-empty-sub">Ранжируем по composite-рейтингу (alignment + регулярность + лайки).</p>
+        <table class="dc-bench-table">
+          <thead><tr>
+            <th>#</th><th>Депутат</th>
+            <th>Рейтинг</th><th>Голос %</th><th>Постов/нед</th><th>Лайков ср.</th>
+          </tr></thead>
+          <tbody>
+            ${ranking.map((r) => `
+              <tr class="${r.is_me ? 'dc-bench-me' : ''}">
+                <td class="dc-bench-rank">${r.position}</td>
+                <td>
+                  ${r.is_me ? "<b>Я</b> · " : ""}
+                  ${r.vk_url ? `<a href="${esc(r.vk_url)}" target="_blank" rel="noopener">${esc((r.name || '').split(' ').slice(0,2).join(' '))}</a>`
+                    : esc((r.name || '').split(' ').slice(0,2).join(' '))}
+                </td>
+                <td><b>${(r.composite || 0).toFixed(1)}</b>/5</td>
+                <td>${(r.alignment_pct || 0).toFixed(0)}%</td>
+                <td>${(r.posts_per_week || 0).toFixed(1)}</td>
+                <td>${(r.avg_likes || 0).toFixed(0)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        ${(b.best_posts || []).length ? `
+          <div class="dc-bench-best">
+            <div class="dc-persona-lbl">🏅 Топ постов коллег — для вдохновения</div>
+            <div class="dc-info-grid">
+              ${b.best_posts.map((p) => `
+                <div class="dc-info-card">
+                  <div class="dc-info-head">
+                    <span class="dc-info-emoji">👍</span>
+                    <span class="dc-info-tag">${p.likes} лайков · ${p.reposts} репостов</span>
+                  </div>
+                  <div class="dc-info-title">${esc(p.deputy_short || "")}</div>
+                  <div class="dc-info-body" style="font-style:italic">«${esc(p.text || "")}…»</div>
+                  ${p.url ? `<div class="dc-info-foot"><a href="${esc(p.url)}" target="_blank" rel="noopener">посмотреть пост ↗</a></div>` : ""}
+                </div>
+              `).join("")}
+            </div>
+          </div>` : ""}
+      </details>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
   // Прогресс рейтинга — недельные snapshot'ы (line chart)
   // ---------------------------------------------------------------------------
 
@@ -1482,6 +1551,7 @@
       <div class="dc-tab-pane" data-tab="metrics" ${activeTab === "metrics" ? "" : "hidden"}>
         ${renderRatings(data.rating || {}, data.audit || null)}
         ${renderRatingHistory(data.rating_history || [])}
+        ${renderBenchmark(data.benchmark || {})}
         ${renderMeister(data.meister || {})}
         ${renderRecommendations(data.audit || {})}
         ${renderPlan(data.plan || {}, data.archetype || {})}

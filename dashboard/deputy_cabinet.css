@@ -1436,6 +1436,63 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
   gap: 8px;
   margin-top: 4px;
 }
+/* --- Бенчмарк коллег --- */
+.dc-bench-pos {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #FFD89B;
+  padding: 3px 10px;
+  background: rgba(255, 217, 155, 0.12);
+  border: 1px solid rgba(255, 217, 155, 0.4);
+  border-radius: 999px;
+}
+.dc-bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 0.84rem;
+}
+.dc-bench-table th {
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(184, 212, 255, 0.6);
+  font-weight: 700;
+  border-bottom: 1px solid rgba(94, 168, 255, 0.18);
+}
+.dc-bench-table td {
+  padding: 8px;
+  color: #DBE9FF;
+  border-bottom: 1px solid rgba(94, 168, 255, 0.08);
+}
+.dc-bench-table td a {
+  color: #5EA8FF;
+  text-decoration: none;
+}
+.dc-bench-table td a:hover { text-decoration: underline; }
+.dc-bench-rank {
+  font-family: "Playfair Display", serif;
+  font-weight: 800;
+  width: 30px;
+  text-align: center;
+  color: rgba(184, 212, 255, 0.6);
+}
+.dc-bench-me {
+  background: rgba(94, 168, 255, 0.1);
+}
+.dc-bench-me .dc-bench-rank { color: #FFD89B; }
+.dc-bench-best {
+  margin-top: 14px;
+}
+
+@media (max-width: 540px) {
+  .dc-bench-table { font-size: 0.74rem; }
+  .dc-bench-table th, .dc-bench-table td { padding: 5px 4px; }
+}
+
 /* --- Реактивный трекер комментариев --- */
 .dc-comments-queue { border-left: 3px solid #FF9F4A; }
 .dc-cmt-actions {
