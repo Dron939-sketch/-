@@ -721,6 +721,110 @@ async def copilot_alerts(
     return {"city": cfg["name"], "alerts": alerts, "max_id": max_id}
 
 
+# ---------------------------------------------------------------------------
+# Личная VK-страница пользователя — привязка + аудит
+# ---------------------------------------------------------------------------
+
+
+class VKLinkIn(BaseModel):
+    identity:  str = Field(..., min_length=16, max_length=80)
+    vk_handle: str = Field(..., min_length=2,  max_length=120)
+    archetype: Optional[str] = Field(None, max_length=40)
+
+
+class VKAuditIn(BaseModel):
+    identity: str = Field(..., min_length=16, max_length=80)
+
+
+@router.get("/vk/status")
+async def copilot_vk_status(identity: str = "") -> dict:
+    """Привязана ли VK-страница у этого identity. Возвращает
+    {linked, vk_handle, vk_url, archetype, last_audit_at}."""
+    if not identity or len(identity) < 16:
+        return {"linked": False}
+    from db.jarvis_user_vk_queries import get_link
+    link = await get_link(identity)
+    if link is None:
+        return {"linked": False}
+    return {
+        "linked":        True,
+        "vk_handle":     link["vk_handle"],
+        "vk_url":        f"https://vk.com/{link['vk_handle']}",
+        "archetype":     link.get("archetype"),
+        "last_audit_at": link.get("last_audit_at"),
+    }
+
+
+@router.post("/vk/link")
+async def copilot_vk_link(payload: VKLinkIn) -> dict:
+    """Привязать VK-страницу к identity. vk_handle нормализуется —
+    можно передать URL вида https://vk.com/ivanov или просто ivanov."""
+    from db.jarvis_user_vk_queries import normalize_handle, upsert_link
+
+    handle = normalize_handle(payload.vk_handle)
+    if handle is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Не получилось распознать VK handle (укажи screen_name "
+                   "или ссылку https://vk.com/...).",
+        )
+    ok = await upsert_link(
+        payload.identity, handle, archetype=payload.archetype,
+    )
+    if not ok:
+        raise HTTPException(status_code=503, detail="БД недоступна.")
+    return {"ok": True, "vk_handle": handle, "vk_url": f"https://vk.com/{handle}"}
+
+
+@router.post("/vk/unlink")
+async def copilot_vk_unlink(payload: VKAuditIn) -> dict:
+    from db.jarvis_user_vk_queries import delete_link
+    ok = await delete_link(payload.identity)
+    return {"ok": bool(ok)}
+
+
+@router.post("/vk/audit")
+async def copilot_vk_audit(payload: VKAuditIn) -> dict:
+    """Запуск аудита привязанной к identity VK-страницы.
+
+    Возвращает тот же формат что deputy audit (см. audit_vk_page).
+    """
+    from analytics.vk_audit import audit_vk_page
+    from db.jarvis_user_vk_queries import get_link, touch_audit
+
+    link = await get_link(payload.identity)
+    if not link:
+        raise HTTPException(
+            status_code=404,
+            detail="Сначала привяжите VK-страницу.",
+        )
+    out = await audit_vk_page(
+        link["vk_handle"],
+        name=link.get("user_label"),
+        archetype_code=link.get("archetype"),
+    )
+    # Помечаем что аудит был — last_audit_at для UI
+    await touch_audit(payload.identity)
+    return out
+
+
+@router.get("/vk/archetypes")
+async def copilot_vk_archetypes() -> dict:
+    """Список 12 архетипов для пикера в виджете SMM-аудита.
+    Возвращает только code/name/short — UI не нужен полный voice/do/dont."""
+    from config.archetypes import ARCHETYPES
+    return {
+        "archetypes": [
+            {
+                "code":  a["code"],
+                "name":  a["name"],
+                "short": a.get("short", ""),
+            }
+            for a in ARCHETYPES
+        ],
+    }
+
+
 @router.get("/greeting")
 async def copilot_greeting() -> dict:
     """Короткое приветствие Джарвиса. Используется фронтом через

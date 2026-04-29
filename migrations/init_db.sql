@@ -411,3 +411,18 @@ CREATE TABLE IF NOT EXISTS jarvis_max_subscribers (
 );
 CREATE INDEX IF NOT EXISTS jarvis_max_chat_idx
     ON jarvis_max_subscribers (max_chat_id);
+
+-- @SEGMENT jarvis_user_vk_table
+-- Привязка пользователем своей VK-страницы для персонального аудита
+-- через виджет Джарвиса. Identity — anon UUID, как везде. vk_handle —
+-- screen_name (например, "ivanov") или числовой owner_id.
+CREATE TABLE IF NOT EXISTS jarvis_user_vk (
+    identity      TEXT PRIMARY KEY,
+    vk_handle     TEXT NOT NULL,
+    user_label    TEXT,
+    archetype     TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_audit_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS jarvis_user_vk_handle_idx
+    ON jarvis_user_vk (vk_handle);
