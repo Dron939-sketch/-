@@ -248,6 +248,29 @@
         <div class="muted small" id="dep-card-posts-empty" hidden>Постов пока не зарегистрировано.</div>
       </section>
 
+      <!-- SMM-блок: архетип бренда + аудит VK + генератор контента -->
+      <section class="dep-card-section dep-smm">
+        <h3>Личный бренд и контент</h3>
+        <div class="dep-smm-tabs" role="tablist">
+          <button type="button" class="dep-smm-tab" data-smm-tab="archetype" data-active="1">Архетип</button>
+          <button type="button" class="dep-smm-tab" data-smm-tab="audit">VK-аудит</button>
+          <button type="button" class="dep-smm-tab" data-smm-tab="post">Пост по запросу</button>
+          <button type="button" class="dep-smm-tab" data-smm-tab="plan">План на неделю</button>
+        </div>
+        <div class="dep-smm-pane" id="dep-smm-archetype" hidden></div>
+        <div class="dep-smm-pane" id="dep-smm-audit" hidden></div>
+        <div class="dep-smm-pane" id="dep-smm-post" hidden>
+          <label class="rm-field">
+            <span class="rm-label">Тема / повод для поста</span>
+            <textarea id="dep-smm-post-request" rows="2" maxlength="800"
+              placeholder="Например: ямы на дорогах в моём округе"></textarea>
+          </label>
+          <button type="button" class="rm-submit" id="dep-smm-post-go">Сгенерировать пост</button>
+          <div class="dep-smm-post-result" id="dep-smm-post-result"></div>
+        </div>
+        <div class="dep-smm-pane" id="dep-smm-plan" hidden></div>
+      </section>
+
       <div class="dep-card-error" id="dep-card-error" hidden></div>
     </div>
   </div>
