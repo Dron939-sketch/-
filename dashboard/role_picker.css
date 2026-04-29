@@ -116,6 +116,84 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* --- Шаг 2: список депутатов --- */
+.rc-deputies {
+  display: flex; flex-direction: column; gap: 14px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.rc-deputies-group {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.rc-deputies-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(184, 212, 255, 0.6);
+  font-weight: 700;
+  padding: 0 4px;
+}
+.rc-deputy {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 14px;
+  text-align: left;
+  background: rgba(94, 168, 255, 0.06);
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 10px;
+  color: #DBE9FF;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+}
+.rc-deputy:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(94, 168, 255, 0.14);
+  border-color: #5EA8FF;
+}
+.rc-deputy:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.rc-deputy-name {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: #B8D4FF;
+}
+.rc-deputy-meta {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.65);
+}
+.rc-deputy-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(79, 204, 117, 0.15);
+  border: 1px solid rgba(79, 204, 117, 0.4);
+  border-radius: 999px;
+  color: #B0F0C0;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.rc-deputy-badge.muted {
+  background: rgba(184, 212, 255, 0.08);
+  border-color: rgba(184, 212, 255, 0.18);
+  color: rgba(184, 212, 255, 0.6);
+}
+.rc-back {
+  margin-top: 12px;
+  background: transparent;
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  color: #B8D4FF;
+  font: inherit;
+  font-size: 0.84rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  width: fit-content;
+}
+.rc-back:hover { border-color: #5EA8FF; background: rgba(94, 168, 255, 0.1); }
+
 @media (max-width: 540px) {
   .rc-grid { grid-template-columns: 1fr; }
   .rc-card { padding: 22px 20px 24px; }

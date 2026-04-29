@@ -845,6 +845,105 @@ async def copilot_vk_archetypes() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Кабинет депутата — для demo-режима «вошёл как депутат → wow-первый экран»
+# ---------------------------------------------------------------------------
+
+
+@router.get("/deputies/list")
+async def copilot_deputies_list(city: str = "Коломна") -> dict:
+    """Список депутатов для второго шага role-picker'а.
+    has_vk=true означает, что у депутата привязана VK-страница и можно
+    запустить полноценный аудит/план в его «личном кабинете».
+    """
+    from config.deputies import deputies_for_city
+    out = []
+    for d in deputies_for_city(city):
+        out.append({
+            "external_id": d.get("external_id"),
+            "name":        d.get("name"),
+            "district":    d.get("district"),
+            "sectors":     d.get("sectors") or [],
+            "vk":          d.get("vk") or None,
+            "has_vk":      bool(d.get("vk")),
+            "note":        d.get("note") or None,
+        })
+    return {"city": city, "deputies": out}
+
+
+@router.get("/deputy/cabinet")
+async def copilot_deputy_cabinet(external_id: str, city: str = "Коломна") -> dict:
+    """Личный кабинет депутата: аудит + план + рейтинг + рекомендации
+    в одном пакете. Используется hero-блоком на главном дашборде.
+
+    Wow-эффект собран из существующих модулей:
+    - analytics.vk_audit.audit_deputy → alignment_score, what_works/hurts
+    - analytics.deputy_content.recommend_weekly_plan → 5 постов на неделю
+    - composite rating = смесь alignment + posts_per_week + длины
+    - top_complaints — заглушка из archetype.dont (пока без topics-API)
+    """
+    from analytics.deputy_content import recommend_weekly_plan
+    from analytics.vk_audit import audit_deputy
+    from config.archetypes import suggest_for_deputy
+    from config.deputies import deputies_for_city
+
+    deputy = next(
+        (d for d in deputies_for_city(city) if d.get("external_id") == external_id),
+        None,
+    )
+    if not deputy:
+        raise HTTPException(status_code=404, detail="Депутат не найден.")
+
+    archetype = suggest_for_deputy(deputy)
+    audit = await audit_deputy(deputy)
+    plan = await recommend_weekly_plan(deputy)
+
+    # Composite rating 0..5: alignment / частота / engagement
+    metrics = audit.get("metrics") or {}
+    align = audit.get("alignment_score") or 0
+    pp_week = float(metrics.get("posts_per_week") or 0)
+    avg_likes = float(metrics.get("avg_likes") or 0)
+
+    rating_align    = min(align / 100, 1.0)            # 0..1
+    rating_freq     = min(pp_week / 3.0, 1.0)          # цель — 3 поста/неделю
+    rating_engage   = min(avg_likes / 50.0, 1.0)       # 50 лайков = max
+    rating_value    = round((rating_align * 0.4 + rating_freq * 0.35
+                             + rating_engage * 0.25) * 5, 1)
+
+    return {
+        "deputy": {
+            "external_id": deputy.get("external_id"),
+            "name":        deputy.get("name"),
+            "first_name":  (deputy.get("name") or "").split(" ")[1]
+                           if len(((deputy.get("name") or "").split(" "))) > 1 else deputy.get("name"),
+            "district":    deputy.get("district"),
+            "sectors":     deputy.get("sectors") or [],
+            "vk":          deputy.get("vk"),
+            "vk_url":      f"https://vk.com/{deputy['vk']}" if deputy.get("vk") else None,
+            "note":        deputy.get("note"),
+        },
+        "archetype": {
+            "code":  archetype.get("code"),
+            "name":  archetype.get("name"),
+            "short": archetype.get("short"),
+            "voice": archetype.get("voice"),
+            "do":    archetype.get("do") or [],
+            "dont":  archetype.get("dont") or [],
+        },
+        "audit":  audit,
+        "plan":   plan,
+        "rating": {
+            "value":   rating_value,
+            "stars":   round(rating_value),
+            "factors": {
+                "alignment": round(rating_align * 100),
+                "frequency": round(rating_freq * 100),
+                "engagement": round(rating_engage * 100),
+            },
+        },
+    }
+
+
 @router.get("/greeting")
 async def copilot_greeting() -> dict:
     """Короткое приветствие Джарвиса. Используется фронтом через

@@ -10,6 +10,7 @@
   "use strict";
 
   const STORAGE_KEY = "cm.role";
+  const STORAGE_DEPUTY = "cm.deputyId";
   const VALID_ROLES = ["mayor", "vice", "deputy", "guest"];
 
   const ROLES = {
@@ -31,6 +32,27 @@
   }
   function setRole(role) {
     try { localStorage.setItem(STORAGE_KEY, role); } catch (_) {}
+  }
+  function getDeputyId() {
+    try { return localStorage.getItem(STORAGE_DEPUTY) || null; } catch (_) { return null; }
+  }
+  function setDeputyId(id) {
+    try {
+      if (id) localStorage.setItem(STORAGE_DEPUTY, id);
+      else    localStorage.removeItem(STORAGE_DEPUTY);
+    } catch (_) {}
+  }
+
+  let deputiesCache = null;
+  async function loadDeputies() {
+    if (deputiesCache) return deputiesCache;
+    try {
+      const r = await fetch("/api/copilot/deputies/list");
+      if (!r.ok) return [];
+      const data = await r.json();
+      deputiesCache = data.deputies || [];
+      return deputiesCache;
+    } catch (_) { return []; }
   }
 
   // ---------------------------------------------------------------------------
@@ -54,16 +76,28 @@
   // Topbar chip
   // ---------------------------------------------------------------------------
 
-  function renderChip(role) {
+  async function renderChip(role) {
     const chip = document.getElementById("role-chip");
     if (!chip) return;
     const meta = ROLES[role] || ROLES.guest;
+    let label = meta.label;
+    if (role === "deputy") {
+      const eid = getDeputyId();
+      if (eid) {
+        const list = await loadDeputies();
+        const d = list.find((x) => x.external_id === eid);
+        if (d) {
+          // Только фамилия в чипе — короче
+          label = d.name.split(" ")[0];
+        }
+      }
+    }
     chip.innerHTML = `
       <span class="rc-chip-emoji">${meta.emoji}</span>
-      <span class="rc-chip-label">${meta.label}</span>
+      <span class="rc-chip-label">${label}</span>
       <span class="rc-chip-arrow">▾</span>
     `;
-    chip.title = `Сменить роль (текущая: ${meta.label})`;
+    chip.title = `Сменить роль (текущая: ${meta.label}${label !== meta.label ? " — " + label : ""})`;
   }
 
   // ---------------------------------------------------------------------------
@@ -94,14 +128,19 @@
     `;
     document.body.appendChild(wrap);
     wrap.querySelectorAll(".rc-option").forEach((b) => {
-      b.addEventListener("click", () => {
+      b.addEventListener("click", async () => {
         const role = b.getAttribute("data-role");
         if (!VALID_ROLES.includes(role)) return;
+        if (role === "deputy") {
+          await renderDeputyStep(wrap);
+          return;
+        }
+        // Для не-депутата сбрасываем привязку к конкретному депутату
+        setDeputyId(null);
         setRole(role);
         applyRoleVisibility(role);
         renderChip(role);
         closePicker();
-        // Триггерим событие, чтобы виджеты могли пере-инициализироваться
         document.dispatchEvent(new CustomEvent("role:change", { detail: { role } }));
       });
     });
@@ -112,6 +151,73 @@
       });
     });
     document.addEventListener("keydown", onEsc);
+  }
+
+  async function renderDeputyStep(wrap) {
+    const card = wrap.querySelector(".rc-card");
+    if (!card) return;
+    card.innerHTML = `
+      <div class="rc-eyebrow">Демо-режим · Городской Разум</div>
+      <h2 class="rc-title">Кто из депутатов?</h2>
+      <p class="rc-sub">
+        Загружаю список…
+      </p>
+    `;
+    const deputies = await loadDeputies();
+    const withVK    = deputies.filter((d) => d.has_vk);
+    const withoutVK = deputies.filter((d) => !d.has_vk);
+
+    const dItem = (d, disabled) => `
+      <button type="button" class="rc-deputy ${disabled ? "rc-deputy-soon" : ""}"
+              data-eid="${d.external_id}" ${disabled ? "disabled" : ""}>
+        <span class="rc-deputy-name">${d.name}</span>
+        <span class="rc-deputy-meta">
+          ${d.district || ""}${d.note ? ` · ${d.note}` : ""}
+          ${d.has_vk ? `<span class="rc-deputy-badge">📊 VK подключён</span>` : `<span class="rc-deputy-badge muted">скоро</span>`}
+        </span>
+      </button>
+    `;
+
+    card.innerHTML = `
+      <div class="rc-eyebrow">Демо-режим · Шаг 2 из 2</div>
+      <h2 class="rc-title">Кто из депутатов?</h2>
+      <p class="rc-sub">
+        Выберите депутата — для него я подготовлю личный кабинет: аудит VK,
+        архетип, рекомендации и контент-план.
+      </p>
+      <div class="rc-deputies">
+        ${withVK.length ? `
+          <div class="rc-deputies-group">
+            <div class="rc-deputies-title">Активная демо-страница</div>
+            ${withVK.map((d) => dItem(d, false)).join("")}
+          </div>` : ""}
+        ${withoutVK.length ? `
+          <div class="rc-deputies-group">
+            <div class="rc-deputies-title">Остальной состав</div>
+            ${withoutVK.map((d) => dItem(d, true)).join("")}
+          </div>` : ""}
+      </div>
+      <button type="button" class="rc-back" id="rc-back">← Назад к выбору роли</button>
+    `;
+
+    card.querySelectorAll(".rc-deputy:not([disabled])").forEach((b) => {
+      b.addEventListener("click", () => {
+        const eid = b.getAttribute("data-eid");
+        if (!eid) return;
+        setRole("deputy");
+        setDeputyId(eid);
+        applyRoleVisibility("deputy");
+        renderChip("deputy");
+        closePicker();
+        document.dispatchEvent(new CustomEvent("role:change", {
+          detail: { role: "deputy", deputyId: eid },
+        }));
+      });
+    });
+    card.querySelector("#rc-back")?.addEventListener("click", () => {
+      closePicker();
+      openPicker();
+    });
   }
 
   function closePicker() {
@@ -129,10 +235,11 @@
   // ---------------------------------------------------------------------------
 
   window.cmRole = {
-    get:    getRole,
-    set:    (r) => { if (VALID_ROLES.includes(r)) setRole(r); applyRoleVisibility(r); renderChip(r); },
-    open:   openPicker,
-    apply:  (r) => applyRoleVisibility(r || getRole() || "guest"),
+    get:        getRole,
+    deputyId:   getDeputyId,
+    set:        (r) => { if (VALID_ROLES.includes(r)) setRole(r); applyRoleVisibility(r); renderChip(r); },
+    open:       openPicker,
+    apply:      (r) => applyRoleVisibility(r || getRole() || "guest"),
   };
 
   function init() {

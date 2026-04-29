@@ -119,7 +119,16 @@ KOLOMNA_DEPUTIES: List[DeputyConfig] = [
     _district_rep(external_id="vaulin-av",     name="Ваулин Андрей Валерьевич",       district=_DISTRICT_1),
     _district_rep(external_id="orlov-sv",      name="Орлов Сергей Владимирович",      district=_DISTRICT_1),
     _district_rep(external_id="kostyunin-aa",  name="Костюнин Анатолий Александрович", district=_DISTRICT_1),
-    _district_rep(external_id="pavlova-na",    name="Павлова Наталья Александровна",  district=_DISTRICT_1),
+    {
+        "external_id": "pavlova-na",
+        "name":        "Павлова Наталья Александровна",
+        "role":        "district_rep",
+        "district":    _DISTRICT_1,
+        "sectors":     list(_DISTRICT_REP_SECTORS),
+        "vk":          "id342610269",
+        "influence_score": 0.5,
+        "enabled":     True,
+    },
     _district_rep(external_id="rvachev-vm",    name="Рвачев Виктор Михайлович",       district=_DISTRICT_1),
 
     # --- Округ №2 ---

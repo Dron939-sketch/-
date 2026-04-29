@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/style.css?v=7" />
   <link rel="stylesheet" href="/copilot.css?v=4" />
   <link rel="stylesheet" href="/role_picker.css?v=1" />
+  <link rel="stylesheet" href="/deputy_cabinet.css?v=1" />
 </head>
 <body>
   <header class="topbar">
@@ -71,6 +72,11 @@
   </header>
 
   <main class="page">
+    <!-- Личный кабинет депутата — wow-первый экран при role=deputy -->
+    <section class="card wide deputy-cabinet" id="deputy-cabinet-hero" data-roles="deputy" hidden>
+      <div class="dc-loading">Готовлю ваш личный кабинет…</div>
+    </section>
+
     <!-- row 0: crisis early-warning strip (status + alert list) -->
     <section class="card wide crisis-strip" id="crisis-strip" data-status="ok" data-roles="mayor,vice,guest">
       <div class="crisis-head">
@@ -762,6 +768,7 @@
     src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"
     defer></script>
   <script src="/role_picker.js?v=1" defer></script>
+  <script src="/deputy_cabinet.js?v=1" defer></script>
   <script src="/dashboard.js?v=7" defer></script>
   <!-- Голосовой Ко-пилот — universal widget на всех страницах -->
   <script src="/copilot.js?v=6" defer></script>
