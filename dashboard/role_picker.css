@@ -1,0 +1,123 @@
+/* =============================================================================
+   Role picker — модалка выбора роли + чип в topbar.
+   Префикс .rc-* (Role Chooser).
+   ============================================================================= */
+
+/* --- Чип в topbar --- */
+.role-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px;
+  background: rgba(94, 168, 255, 0.08);
+  border: 1px solid rgba(94, 168, 255, 0.3);
+  border-radius: 999px;
+  color: #B8D4FF;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s;
+}
+.role-chip:hover {
+  background: rgba(94, 168, 255, 0.15);
+  border-color: #5EA8FF;
+}
+.rc-chip-emoji { line-height: 1; font-size: 1rem; }
+.rc-chip-arrow { font-size: 0.7rem; opacity: 0.7; }
+
+/* --- Модалка --- */
+.rc-modal {
+  position: fixed; inset: 0;
+  z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: rc-fade 0.2s ease both;
+}
+.rc-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(7, 14, 30, 0.72);
+  backdrop-filter: blur(4px);
+}
+.rc-card {
+  position: relative;
+  width: min(640px, 100%);
+  background: linear-gradient(180deg, #0E1F3D 0%, #07142A 100%);
+  border: 1px solid rgba(94, 168, 255, 0.3);
+  border-radius: 18px;
+  padding: 28px 32px 32px;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+  animation: rc-rise 0.25s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.rc-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  color: #5EA8FF;
+}
+.rc-title {
+  margin: 6px 0 4px;
+  font-family: "Playfair Display", serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #DBE9FF;
+}
+.rc-sub {
+  margin: 0 0 20px;
+  color: rgba(184, 212, 255, 0.7);
+  font-size: 0.92rem;
+}
+.rc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.rc-option {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 16px;
+  text-align: left;
+  background: rgba(94, 168, 255, 0.06);
+  border: 1px solid rgba(94, 168, 255, 0.22);
+  border-radius: 14px;
+  color: #DBE9FF;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.18s, background 0.18s, border-color 0.18s;
+}
+.rc-option:hover {
+  transform: translateY(-2px);
+  background: rgba(94, 168, 255, 0.14);
+  border-color: #5EA8FF;
+}
+.rc-option:focus-visible {
+  outline: 3px solid rgba(94, 168, 255, 0.5);
+  outline-offset: 2px;
+}
+.rc-option-emoji {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.rc-option-label {
+  font-family: "Playfair Display", serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #B8D4FF;
+}
+.rc-option-desc {
+  font-size: 0.84rem;
+  color: rgba(184, 212, 255, 0.68);
+  line-height: 1.4;
+}
+
+@keyframes rc-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes rc-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 540px) {
+  .rc-grid { grid-template-columns: 1fr; }
+  .rc-card { padding: 22px 20px 24px; }
+  .rc-title { font-size: 1.35rem; }
+}

@@ -2031,18 +2031,21 @@ async function submitRoadmap(event) {
 
 // -------------------------------------------------- Admin link toggle
 
-// Admin panel теперь на /admin.html — главный dashboard лишь показывает
-// ссылку в топбаре, когда у текущего пользователя роль admin.
+// Admin panel и /deputies.html — только для роли «мэр» в demo-режиме.
+// Если у пользователя реальный JWT с ролью admin/editor — тоже разрешаем
+// (старый поток сохраняется как backup для прода).
 function updateAdminLinkVisibility() {
+  const demoRole = window.cmRole?.get?.() || null;
+  const isMayor = demoRole === "mayor";
+  const realRole = currentUser && currentUser.role;
   const link = document.getElementById("admin-link");
-  if (link) link.hidden = !(currentUser && currentUser.role === "admin");
-  // Депутаты — управление повесткой; доступно editor и admin.
+  if (link) link.hidden = !(isMayor || realRole === "admin");
   const deputies = document.getElementById("deputies-link");
   if (deputies) {
-    const role = currentUser && currentUser.role;
-    deputies.hidden = !(role === "admin" || role === "editor");
+    deputies.hidden = !(isMayor || realRole === "admin" || realRole === "editor");
   }
 }
+document.addEventListener("role:change", updateAdminLinkVisibility);
 
 // -------------------------------------------------- City pulse
 
