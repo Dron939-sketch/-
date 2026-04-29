@@ -875,8 +875,17 @@
     if (alreadyGreeted()) return;
     markGreeted();   // помечаем сразу, чтобы не зациклить при ошибке
     let payload = null;
+    // Подмешиваем role + deputy_id чтобы получить персональное приветствие
+    let url = "/api/copilot/greeting";
+    const role = window.cmRole?.get?.() || null;
+    const deputyId = window.cmRole?.deputyId?.() || null;
+    if (role) {
+      const params = new URLSearchParams({ role });
+      if (deputyId) params.set("deputy_id", deputyId);
+      url += "?" + params.toString();
+    }
     try {
-      const res = await fetch("/api/copilot/greeting");
+      const res = await fetch(url);
       if (res.ok) payload = await res.json();
     } catch (_) {}
     const text = (payload && payload.text)
