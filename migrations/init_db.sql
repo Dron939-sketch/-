@@ -426,3 +426,16 @@ CREATE TABLE IF NOT EXISTS jarvis_user_vk (
 );
 CREATE INDEX IF NOT EXISTS jarvis_user_vk_handle_idx
     ON jarvis_user_vk (vk_handle);
+
+-- @SEGMENT deputy_audit_cache_table
+-- Кэш агрегированного аудита по депутатам (cabinet endpoint). Без него
+-- каждый заход депутата запускает full re-fetch wall.get + LLM-план,
+-- что медленно. TTL — 12 часов (форсированный refresh всё равно перетрёт
+-- через UPSERT).
+CREATE TABLE IF NOT EXISTS deputy_audit_cache (
+    external_id   TEXT PRIMARY KEY,
+    payload       JSONB NOT NULL,
+    computed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS deputy_audit_cache_computed_idx
+    ON deputy_audit_cache (computed_at DESC);

@@ -17,6 +17,7 @@ import base64
 import logging
 import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -872,16 +873,30 @@ async def copilot_deputies_list(city: str = "Коломна") -> dict:
 
 
 @router.get("/deputy/cabinet")
-async def copilot_deputy_cabinet(external_id: str, city: str = "Коломна") -> dict:
-    """Личный кабинет депутата: аудит + план + рейтинг + рекомендации
-    в одном пакете. Используется hero-блоком на главном дашборде.
+async def copilot_deputy_cabinet(
+    external_id: str, city: str = "Коломна", refresh: bool = False,
+) -> dict:
+    """Личный кабинет депутата: аудит + план + рейтинг + рекомендации.
 
-    Wow-эффект собран из существующих модулей:
-    - analytics.vk_audit.audit_deputy → alignment_score, what_works/hurts
-    - analytics.deputy_content.recommend_weekly_plan → 5 постов на неделю
-    - composite rating = смесь alignment + posts_per_week + длины
-    - top_complaints — заглушка из archetype.dont (пока без topics-API)
+    Кэш в БД (`deputy_audit_cache`) с TTL 12 часов. ?refresh=1 форсирует
+    пересчёт. Без кэша (когда pool недоступен) — пересчитываем каждый
+    раз, как раньше.
     """
+    from db.deputy_audit_cache import get_cached, upsert_cache
+
+    if not refresh:
+        cached = await get_cached(external_id)
+        if cached is not None:
+            return cached
+
+    payload = await _build_deputy_cabinet(external_id, city)
+    await upsert_cache(external_id, payload)
+    payload["_cache"] = {"computed_at": None, "fresh": False}
+    return payload
+
+
+async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
+    """Тяжёлый расчёт кабинета — выносим из роута для кэширования."""
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.vk_audit import audit_deputy
     from config.archetypes import suggest_for_deputy
@@ -910,12 +925,14 @@ async def copilot_deputy_cabinet(external_id: str, city: str = "Коломна")
     rating_value    = round((rating_align * 0.4 + rating_freq * 0.35
                              + rating_engage * 0.25) * 5, 1)
 
+    name_parts = (deputy.get("name") or "").split(" ")
+    first_name = name_parts[1] if len(name_parts) > 1 else deputy.get("name")
+
     return {
         "deputy": {
             "external_id": deputy.get("external_id"),
             "name":        deputy.get("name"),
-            "first_name":  (deputy.get("name") or "").split(" ")[1]
-                           if len(((deputy.get("name") or "").split(" "))) > 1 else deputy.get("name"),
+            "first_name":  first_name,
             "district":    deputy.get("district"),
             "sectors":     deputy.get("sectors") or [],
             "vk":          deputy.get("vk"),
@@ -945,24 +962,31 @@ async def copilot_deputy_cabinet(external_id: str, city: str = "Коломна")
 
 
 @router.get("/greeting")
-async def copilot_greeting() -> dict:
-    """Короткое приветствие Джарвиса. Используется фронтом через
-    10 секунд после первой загрузки страницы (один раз за сессию).
-
-    Текст единый — озвучивается Fish Audio'м, если он настроен. Иначе
-    фронт деградирует к speechSynthesis.
+async def copilot_greeting(
+    role: Optional[str] = None,
+    deputy_id: Optional[str] = None,
+    city: str = "Коломна",
+) -> dict:
+    """Короткое приветствие Джарвиса. Один раз за сессию через 10 секунд
+    после загрузки. Если role=deputy и deputy_id задан — приветствие
+    персональное: «Привет, Наташа! Я Джарвис, твой помощник по работе с
+    округом…» + перечисление возможностей.
     """
     from ai.copilot import GREETING_TEXT
 
+    text = GREETING_TEXT
+    if role == "deputy" and deputy_id:
+        text = _build_deputy_greeting(deputy_id, city) or GREETING_TEXT
+
     response: Dict[str, Any] = {
-        "text": GREETING_TEXT,
+        "text": text,
         "tts_engine": "browser",
         "audio": None,
         "audio_mime": None,
     }
     if fish_configured():
         try:
-            mp3 = await fish_synthesize(GREETING_TEXT)
+            mp3 = await fish_synthesize(text)
             if mp3:
                 response["audio"] = base64.b64encode(mp3).decode("ascii")
                 response["audio_mime"] = "audio/mpeg"
@@ -970,6 +994,270 @@ async def copilot_greeting() -> dict:
         except Exception:  # noqa: BLE001
             logger.exception("greeting fish_synthesize failed")
     return response
+
+
+# Сокращения формальных имён → дружеские формы для приветствия.
+# Если депутата нет в маппе — берём отчество как есть, это уже
+# по-человечески, но можно когда-нибудь добавить.
+_DIMINUTIVES = {
+    "Наталья":   "Наташа",
+    "Александр": "Саша",
+    "Сергей":    "Серёжа",
+    "Андрей":    "Андрей",
+    "Дмитрий":   "Дима",
+    "Алексей":   "Алёша",
+    "Михаил":    "Миша",
+    "Николай":   "Коля",
+    "Виктор":    "Витя",
+    "Анатолий":  "Толя",
+    "Игорь":     "Игорь",
+    "Роман":     "Рома",
+    "Валерий":   "Валера",
+    "Жанна":     "Жанна",
+    "Екатерина": "Катя",
+    "Нина":      "Нина",
+    "Наталия":   "Наташа",
+    "Абдула":    "Абдула",
+}
+
+
+def _build_deputy_greeting(external_id: str, city: str) -> Optional[str]:
+    """Собирает персональное приветствие. Имя из config.deputies."""
+    from config.deputies import deputies_for_city
+
+    deputy = next(
+        (d for d in deputies_for_city(city) if d.get("external_id") == external_id),
+        None,
+    )
+    if not deputy:
+        return None
+    name_parts = (deputy.get("name") or "").split(" ")
+    first = name_parts[1] if len(name_parts) > 1 else (name_parts[0] if name_parts else "")
+    diminutive = _DIMINUTIVES.get(first, first)
+    district = deputy.get("district") or ""
+    return (
+        f"Привет, {diminutive}! Я Джарвис, твой помощник по работе с {district}. "
+        f"Я уже посмотрел твою страницу и вижу, что можно улучшить. "
+        f"Я умею: подготовить пост в твоём стиле, помочь придумать медиаповод, "
+        f"показать, что просят жители твоего округа. Просто скажи, что нужно, или жми кнопки."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Контент-визард — готовый пост по шагам тип/тема/длина
+# ---------------------------------------------------------------------------
+
+
+class ContentGenerateIn(BaseModel):
+    deputy_id:   str = Field(..., min_length=2, max_length=80)
+    post_type:   str = Field(..., min_length=2, max_length=40)
+    topic:       str = Field("", max_length=400)
+    length:      str = Field("standard", pattern="^(short|standard|long)$")
+
+
+_POST_TYPE_LABELS = {
+    "story":       "история помощи",
+    "thanks":      "благодарность жителям",
+    "appeal":      "обращение в администрацию",
+    "report":      "отчёт о решении",
+    "news":        "срочная новость",
+    "congrats":    "поздравление",
+}
+
+_LENGTH_HINTS = {
+    "short":    "короткий — до 350 знаков, один абзац",
+    "standard": "стандарт — 600-800 знаков, 2-3 абзаца",
+    "long":     "лонгрид — 1200-1500 знаков, 3-4 абзаца с фактурой",
+}
+
+
+@router.post("/content/generate")
+async def copilot_content_generate(payload: ContentGenerateIn) -> dict:
+    """Готовый пост в архетипе депутата. Использует recommend_post,
+    подмешивая в request_text жанр/длину/тему пользователя.
+    """
+    from analytics.deputy_content import recommend_post
+    from config.archetypes import suggest_for_deputy
+    from config.deputies import deputies_for_city
+
+    deputy = next(
+        (d for d in deputies_for_city("Коломна") if d.get("external_id") == payload.deputy_id),
+        None,
+    )
+    if not deputy:
+        raise HTTPException(status_code=404, detail="Депутат не найден.")
+
+    archetype = suggest_for_deputy(deputy)
+    type_label = _POST_TYPE_LABELS.get(payload.post_type, payload.post_type)
+    length_hint = _LENGTH_HINTS.get(payload.length, _LENGTH_HINTS["standard"])
+    request_text = (
+        f"Напиши пост типа «{type_label}». "
+        f"Тема: {payload.topic.strip() or 'на твой выбор по контексту округа'}. "
+        f"Объём: {length_hint}."
+    )
+    result = await recommend_post(deputy, request_text)
+
+    # Дополняем: 3 варианта заголовка + фото-задание + хэштеги
+    title_seed = result.get("title") or type_label
+    title_variants = [
+        title_seed,
+        f"{deputy.get('district') or ''}: {title_seed.lower()}".strip(": "),
+        f"Что я сделала по {payload.topic.strip()[:40] or 'просьбе жителей'}",
+    ]
+    photo_brief = (
+        "Сделай фото на месте события: ты в кадре + объект (дом, двор, "
+        "ведомство). Естественный свет, без постановочного фона."
+    )
+    hashtags = "#Коломна #" + (deputy.get("district") or "Округ").replace(" ", "").replace("№", "")
+
+    body = result.get("body") or archetype.get("sample_post") or ""
+    cta = result.get("cta") or ""
+    full_text = body
+    if cta and cta.strip():
+        full_text = f"{body}\n\n{cta}"
+
+    vk_compose_url = (
+        f"https://vk.com/share.php?url=&title={quote_plus(title_seed[:80])}"
+        f"&description={quote_plus(full_text[:1500])}"
+    )
+
+    return {
+        "title":         title_seed,
+        "title_variants": [t for t in title_variants if t][:3],
+        "body":          body,
+        "cta":           cta,
+        "full_text":     full_text,
+        "photo_brief":   photo_brief,
+        "hashtags":      hashtags,
+        "archetype":     archetype.get("name"),
+        "vk_compose_url": vk_compose_url,
+        "fallback":      bool(result.get("fallback")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Медиаповод-визард — пошаговый сценарий PR-события
+# ---------------------------------------------------------------------------
+
+
+class EventScenarioIn(BaseModel):
+    deputy_id: str = Field(..., min_length=2, max_length=80)
+    source:    str = Field(..., pattern="^(complaint|result|anniversary|joint)$")
+    format:    str = Field(..., pattern="^(meeting|walkaround|live|action)$")
+    topic:     str = Field("", max_length=300)
+
+
+_SOURCE_LABELS = {
+    "complaint":   "нерешённой жалобе жителей",
+    "result":      "уже сделанной работе",
+    "anniversary": "годовщине / памятной дате",
+    "joint":       "совместной акции с партнёрами",
+}
+
+_FORMAT_BLUEPRINTS = {
+    "meeting": {
+        "label":  "встреча с жителями",
+        "steps":  [
+            "За 3 дня: выбери место (двор / общественное пространство), согласуй с УК / администрацией.",
+            "За 1 день: обзвон актива + публикация тизера в VK с временем и точкой.",
+            "День X: 60 минут вживую — короткое выступление 5 мин, затем Q&A. Видео тизер в первые 15 минут.",
+            "После: пост-репортаж в тот же день вечером с 3-5 фотографиями и цитатами от жителей.",
+        ],
+        "media":  ["3-5 фото с разных ракурсов", "1 короткое видео 30-60 сек",
+                   "Запись 1-2 цитат от жителей (можно текстом)"],
+        "callto": ["Управляющая компания (вопрос ЖКХ)",
+                   "Депутат-сосед по округу (для подкрепления)"],
+    },
+    "walkaround": {
+        "label":  "обход территории",
+        "steps":  [
+            "За 2 дня: маршрут — 5-7 точек по жалобам, проверь актуальность.",
+            "В день обхода: фото каждой точки до начала, заметки.",
+            "На месте: 1 короткое видео 30 сек на каждой точке с твоим комментарием.",
+            "После: пост-итог обхода в тот же вечер — карта с точками, фотодо/после-обещание.",
+        ],
+        "media":  ["По 1 фото на точку", "По 30 сек видео на 2-3 ключевых точках",
+                   "Карта района с отметками (можно скриншот Яндекс-карт)"],
+        "callto": ["ДорСервис / Благоустройство — после обхода передать список",
+                   "Жители-инициаторы — пригласить, зафиксировать историю"],
+    },
+    "live": {
+        "label":  "прямой эфир в VK",
+        "steps":  [
+            "За 2 дня: тема + 5 вопросов от жителей собрать в комментариях.",
+            "За 1 час: тестовый прогон, проверь свет/звук, запасной интернет.",
+            "Эфир 25-30 мин: 5 мин ввод, 15 мин по вопросам, 5 мин планы и обратная связь.",
+            "После: запись закрепить, нарезать 2-3 коротких клипа на популярные вопросы.",
+        ],
+        "media":  ["Запись эфира", "2-3 клипа по 30-60 сек", "Скриншот пиков просмотров"],
+        "callto": ["Партнёр-эксперт (если тема узкая) — приглашение за 2 дня"],
+    },
+    "action": {
+        "label":  "совместная акция / открытие",
+        "steps":  [
+            "За 7 дней: формат + партнёры (школа / соц.центр / бизнес).",
+            "За 3 дня: афиша в VK + расклейка в районе.",
+            "За 1 день: пост-напоминание + сторис.",
+            "День X: фото/видео процесса + интервью с участниками.",
+            "После: благодарственный пост с тегами всех партнёров.",
+        ],
+        "media":  ["Афиша", "10+ фото", "1 видео-репортаж 60-90 сек"],
+        "callto": ["Партнёрская организация", "Местные СМИ — пресс-релиз за 2 дня"],
+    },
+}
+
+
+@router.post("/event/scenario")
+async def copilot_event_scenario(payload: EventScenarioIn) -> dict:
+    """Сценарий медиаповода. Шаблоны deterministic — собираются из
+    blueprint'ов формата + текстов в архетипе депутата для тизера/
+    репортажа/итога. Без LLM на старте — стабильно и быстро.
+    """
+    from config.archetypes import suggest_for_deputy
+    from config.deputies import deputies_for_city
+
+    deputy = next(
+        (d for d in deputies_for_city("Коломна") if d.get("external_id") == payload.deputy_id),
+        None,
+    )
+    if not deputy:
+        raise HTTPException(status_code=404, detail="Депутат не найден.")
+    archetype = suggest_for_deputy(deputy)
+    blueprint = _FORMAT_BLUEPRINTS[payload.format]
+    source_label = _SOURCE_LABELS[payload.source]
+    topic = payload.topic.strip() or "(тема — на твой выбор по контексту округа)"
+    voice_short = archetype.get("voice", "")[:120]
+
+    teaser_post = (
+        f"Завтра я провожу {blueprint['label']} по {source_label}: {topic}. "
+        f"Время и точку публикую за 2 часа. Кому актуально — пишите в комментариях, "
+        f"возьму ваши вопросы первыми."
+    )
+    report_post = (
+        f"Сегодня прошла {blueprint['label']}. Тема: {topic}. "
+        f"Что увидели и что будем делать — в постах ниже. Спасибо всем, кто пришёл и поделился."
+    )
+    summary_post = (
+        f"По итогам {blueprint['label']} собрала список из конкретных шагов и "
+        f"передала ответственным. Срок — 10 рабочих дней. Буду держать в курсе по каждой "
+        f"точке. Голос «{archetype.get('name')}» — {voice_short}"
+    )
+
+    return {
+        "deputy_name":   deputy.get("name"),
+        "archetype":     archetype.get("name"),
+        "source_label":  source_label,
+        "format_label":  blueprint["label"],
+        "topic":         topic,
+        "steps":         blueprint["steps"],
+        "media_checklist": blueprint["media"],
+        "callto":        blueprint["callto"],
+        "drafts": {
+            "teaser":  teaser_post,
+            "report":  report_post,
+            "summary": summary_post,
+        },
+    }
 
 
 @router.post("/chat")
