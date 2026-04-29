@@ -1001,17 +1001,20 @@
     return `
       <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">🎯 Чего ждут от меня избиратели</summary>
-        <div class="dc-chip-grid">
+        <p class="dc-empty-sub">Главные ожидания по моим секторам — это первое что просят жители.</p>
+        <div class="dc-info-grid">
           ${items.map((it) => `
-            <button type="button" class="dc-chip dc-chip-${esc(it.priority || 'medium')}"
-                    title="${esc(it.why || '')}"
-                    data-text="${esc(it.title || '')}: ${esc(it.why || '')}">
-              <span class="dc-chip-icon">${it.priority === "high" ? "★" : "○"}</span>
-              <span class="dc-chip-text">
-                <span class="dc-chip-label">${esc(it.title || "")}</span>
-                <span class="dc-chip-meta">${esc(it.sector || "")}</span>
-              </span>
-            </button>
+            <div class="dc-info-card dc-info-${esc(it.priority || 'medium')}">
+              <div class="dc-info-head">
+                <span class="dc-info-emoji">${it.priority === "high" ? "🔥" : "·"}</span>
+                <span class="dc-info-tag">${esc(it.sector || "")}</span>
+              </div>
+              <div class="dc-info-title">${esc(it.title || "")}</div>
+              <div class="dc-info-body">${esc(it.why || "")}</div>
+              <div class="dc-info-foot">
+                ${it.priority === "high" ? "★ Высокий приоритет" : "Средний приоритет"}
+              </div>
+            </div>
           `).join("")}
         </div>
       </details>
@@ -1025,6 +1028,7 @@
   function renderMentions(m) {
     if (!m || !m.items || m.items.length === 0) return "";
     const icon = (k) => k === "positive" ? "💚" : k === "critical" ? "⚠" : "·";
+    const label = (k) => k === "positive" ? "позитив" : k === "critical" ? "критика" : "нейтрально";
     return `
       <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">
@@ -1032,17 +1036,17 @@
           ${m.data_kind === "demo" ? `<span class="dc-fallback-tag">пример</span>` : ""}
         </summary>
         ${m.summary ? `<p class="dc-empty-sub">${esc(m.summary)}</p>` : ""}
-        <div class="dc-chip-grid">
+        <div class="dc-info-grid">
           ${m.items.map((it) => `
-            <button type="button" class="dc-chip dc-chip-${esc(it.weight || 'neutral')}"
-                    title="«${esc(it.text || '')}»"
-                    data-text="${esc(it.source || '')} · ${esc(it.context || '')}">
-              <span class="dc-chip-icon">${icon(it.kind)}</span>
-              <span class="dc-chip-text">
-                <span class="dc-chip-label">${esc(it.source || "")} · ${esc(it.context || "")}</span>
-                <span class="dc-chip-meta">«${esc((it.text || '').slice(0, 60))}…»</span>
-              </span>
-            </button>
+            <div class="dc-info-card dc-info-${esc(it.weight || 'neutral')}">
+              <div class="dc-info-head">
+                <span class="dc-info-emoji">${icon(it.kind)}</span>
+                <span class="dc-info-tag">${esc(label(it.kind))}</span>
+              </div>
+              <div class="dc-info-title">${esc(it.source || "")}</div>
+              <div class="dc-info-body" style="font-style:italic">«${esc(it.text || "")}»</div>
+              <div class="dc-info-foot">${esc(it.context || "")}</div>
+            </div>
           `).join("")}
         </div>
         ${m.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(m.hint)}</div>` : ""}
@@ -1059,19 +1063,20 @@
     return `
       <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">🤝 Коалиция</summary>
-        <div class="dc-chip-grid">
+        ${c.hint ? `<p class="dc-empty-sub">${esc(c.hint)}</p>` : ""}
+        <div class="dc-info-grid">
           ${c.items.map((it) => `
-            <button type="button" class="dc-chip dc-chip-${esc(it.scope || 'neighbour')}"
-                    data-text="${esc(it.name || '')} — сильна в ${esc(it.strength || '')}">
-              <span class="dc-chip-icon">${it.scope === 'leadership' ? '👑' : '🤝'}</span>
-              <span class="dc-chip-text">
-                <span class="dc-chip-label">${esc(it.name || "")}</span>
-                <span class="dc-chip-meta">${esc(it.role || "")} · ${esc(it.strength || "")}</span>
-              </span>
-            </button>
+            <div class="dc-info-card dc-info-${esc(it.scope || 'neighbour')}">
+              <div class="dc-info-head">
+                <span class="dc-info-emoji">${it.scope === 'leadership' ? '👑' : '🤝'}</span>
+                <span class="dc-info-tag">${esc(it.scope === 'leadership' ? 'руководство' : 'по округу')}</span>
+              </div>
+              <div class="dc-info-title">${esc(it.name || "")}</div>
+              <div class="dc-info-body">${esc(it.role || "")}</div>
+              <div class="dc-info-foot">сильна в: <b>${esc(it.strength || "")}</b></div>
+            </div>
           `).join("")}
         </div>
-        ${c.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(c.hint)}</div>` : ""}
       </details>
     `;
   }
@@ -1177,20 +1182,18 @@
           🏘 Округ сегодня
           ${isDemo ? `<span class="dc-fallback-tag">пример</span>` : ""}
         </summary>
-        <div class="dc-chip-grid">
+        ${isDemo && dt.hint ? `<p class="dc-empty-sub">${esc(dt.hint)}</p>` : ""}
+        <div class="dc-info-grid">
           ${items.map((it) => `
-            <button type="button" class="dc-chip"
-                    title="${esc(it.text || '')}"
-                    data-text="${esc(it.sector || '')}: ${esc(it.text || '')}">
-              <span class="dc-chip-icon">📍</span>
-              <span class="dc-chip-text">
-                <span class="dc-chip-label">${esc(it.sector || "")}</span>
-                <span class="dc-chip-meta">${esc((it.text || '').slice(0, 70))}…</span>
-              </span>
-            </button>
+            <div class="dc-info-card">
+              <div class="dc-info-head">
+                <span class="dc-info-emoji">📍</span>
+                <span class="dc-info-tag">${esc(it.sector || "")}</span>
+              </div>
+              <div class="dc-info-body">${esc(it.text || "")}</div>
+            </div>
           `).join("")}
         </div>
-        ${isDemo && dt.hint ? `<div class="dc-empty-sub" style="margin-top:8px">${esc(dt.hint)}</div>` : ""}
       </details>
     `;
   }
