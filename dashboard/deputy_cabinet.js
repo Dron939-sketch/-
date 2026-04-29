@@ -186,7 +186,7 @@
     const donts = (archetype.dont || []).slice(0, 2);
     if (audit.state === "no_posts") {
       return `
-        <details class="dc-block dc-collapsible">
+        <details class="dc-block dc-collapsible" open>
           <summary class="dc-block-title">👀 Голос архетипа</summary>
           <div class="dc-empty">
             Стена пустая или закрытая. Откройте её и опубликуйте первый пост.
@@ -195,7 +195,7 @@
       `;
     }
     return `
-      <details class="dc-block dc-collapsible">
+      <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">👀 Голос «${esc(archetype.name)}» — что делать и чего избегать</summary>
         <div class="dc-two-col">
           <div class="dc-col dc-col-good">
@@ -560,7 +560,7 @@
       ? `<span class="dc-trends-source">live VK</span>`
       : `<span class="dc-trends-source dc-trends-fallback">из новостей</span>`;
     return `
-      <details class="dc-block dc-collapsible dc-trends-block">
+      <details class="dc-block dc-collapsible dc-trends-block" open>
         <summary class="dc-block-title">
           🌐 Карта внимания — что обсуждают сейчас
           ${sourceTag}
@@ -999,7 +999,7 @@
   function renderExpectations(items) {
     if (!items || items.length === 0) return "";
     return `
-      <details class="dc-block dc-collapsible">
+      <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">🎯 Чего ждут от меня избиратели</summary>
         <div class="dc-chip-grid">
           ${items.map((it) => `
@@ -1026,7 +1026,7 @@
     if (!m || !m.items || m.items.length === 0) return "";
     const icon = (k) => k === "positive" ? "💚" : k === "critical" ? "⚠" : "·";
     return `
-      <details class="dc-block dc-collapsible">
+      <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">
           🔔 Упоминания обо мне
           ${m.data_kind === "demo" ? `<span class="dc-fallback-tag">пример</span>` : ""}
@@ -1057,7 +1057,7 @@
   function renderCoalition(c) {
     if (!c || !c.items || c.items.length === 0) return "";
     return `
-      <details class="dc-block dc-collapsible">
+      <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">🤝 Коалиция</summary>
         <div class="dc-chip-grid">
           ${c.items.map((it) => `
@@ -1172,7 +1172,7 @@
     if (items.length === 0) return "";
     const isDemo = dt.data_kind === "demo";
     return `
-      <details class="dc-block dc-collapsible">
+      <details class="dc-block dc-collapsible" open>
         <summary class="dc-block-title">
           🏘 Округ сегодня
           ${isDemo ? `<span class="dc-fallback-tag">пример</span>` : ""}
