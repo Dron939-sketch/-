@@ -899,10 +899,15 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     """Тяжёлый расчёт кабинета — выносим из роута для кэширования."""
     from analytics.deputy_content import recommend_weekly_plan
     from analytics.deputy_missions import build_weekly_missions
+    from analytics.deputy_persona import (
+        build_expectations, build_persona, build_personal_tasks,
+        build_pr_ideas,
+    )
     from analytics.vk_audit import audit_deputy
     from analytics.vk_timing import build_timing_heatmap, heatmap_advice
     from config.archetypes import suggest_for_deputy
     from config.deputies import deputies_for_city
+    from config.deputy_demo_data import coalition_for, mentions_for
     from config.district_calendar import (
         relevance_for_district, upcoming_for,
     )
@@ -950,6 +955,26 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     # Категории для шаблонов ответов (тексты ответов рендерятся on-demand)
     complaint_cats = complaint_examples()
 
+    # Образ депутата (расширенный портрет архетипа + штрихи метрик)
+    persona = build_persona(audit, archetype)
+
+    # Чего ждут избиратели (по секторам)
+    expectations = build_expectations(deputy)
+
+    # Упоминания обо мне + Коалиция (demo)
+    mentions = mentions_for(deputy)
+    all_in_city = list(deputies_for_city(city))
+    coalition = coalition_for(deputy, all_in_city)
+
+    # Идеи/пиар: 3 актуальных
+    pr_ideas = build_pr_ideas(
+        archetype, events, _build_district_today(deputy),
+        {"heatmap": timing_heatmap},
+    )
+
+    # Личные задачи (упрощённый Эйзенхауэр для депутата)
+    personal_tasks = build_personal_tasks(missions, plan, audit)
+
     name_parts = (deputy.get("name") or "").split(" ")
     first_name = name_parts[1] if len(name_parts) > 1 else deputy.get("name")
 
@@ -991,6 +1016,12 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "district_today":   _build_district_today(deputy),
         "missions":         missions,
         "reply_categories": complaint_cats,
+        "persona":          persona,
+        "expectations":     expectations,
+        "mentions":         mentions,
+        "coalition":        coalition,
+        "pr_ideas":         pr_ideas,
+        "personal_tasks":   personal_tasks,
     }
 
 
