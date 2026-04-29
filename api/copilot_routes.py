@@ -901,6 +901,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     from analytics.deputy_actions import situations_list
     from analytics.deputy_bio import build_bio
     from analytics.comment_targets import build_comment_targets
+    from analytics.deputy_benchmark import build_benchmark
     from analytics.deputy_briefing import build_briefing
     from analytics.deputy_city_brief import build_city_brief
     from analytics.trends_now import build_trends
@@ -1034,6 +1035,9 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     seen_ids = await get_seen_ids(external_id)
     comments_queue = await build_comments_queue(deputy, seen_ids=seen_ids)
 
+    # Бенчмарк коллег по городу с привязанными VK
+    benchmark = await build_benchmark(deputy, all_in_city)
+
     # Snapshot истории рейтинга (раз в неделю автоматом, идемпотентный
     # UPSERT — можно вызывать каждый раз без дедупликации)
     metrics = audit.get("metrics") or {}
@@ -1120,6 +1124,7 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
         "comment_targets":  comment_targets,
         "comments_queue":   comments_queue,
         "rating_history":   rating_history,
+        "benchmark":        benchmark,
         "briefing":         briefing,
     }
 
