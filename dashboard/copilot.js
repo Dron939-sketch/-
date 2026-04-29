@@ -580,6 +580,7 @@
 
   let smmArchetypesCache = null;
   let smmLastAudit = null;
+  let smmLastPlan = null;
 
   async function loadSmmStatus() {
     const id = getIdentity();
@@ -627,9 +628,44 @@
           target="_blank" rel="noopener">${esc(s.vk_handle)}</a>
         ${last ? `<span class="muted"> · аудит ${esc(last)}</span>` : ""}
       </div>
-      <button type="button" class="jv-smm-btn primary" id="jv-smm-audit">Запустить аудит</button>
-      <button type="button" class="jv-notify-unlink" id="jv-smm-unlink">Отвязать</button>
+      <div class="jv-smm-buttons">
+        <button type="button" class="jv-smm-btn primary" id="jv-smm-audit">Запустить аудит</button>
+        <button type="button" class="jv-smm-btn" id="jv-smm-plan">📅 План на неделю</button>
+        <button type="button" class="jv-notify-unlink" id="jv-smm-unlink">Отвязать</button>
+      </div>
       <div class="jv-smm-result" id="jv-smm-result"></div>
+      <div class="jv-smm-plan-result" id="jv-smm-plan-result"></div>
+    `;
+  }
+
+  function renderSmmPlan(out) {
+    if (!out) return "";
+    const items = out.items || [];
+    if (items.length === 0) {
+      return `<div class="jv-notify-status">План пуст.</div>`;
+    }
+    const arch = out.archetype_name || "—";
+    const week = out.week_of ? new Date(out.week_of).toLocaleDateString("ru-RU",
+      { day: "numeric", month: "short" }) : "";
+    return `
+      <div class="jv-smm-section">
+        <div class="jv-smm-recs-title">
+          📅 План на неделю${week ? ` · с ${esc(week)}` : ""}
+          <span class="jv-smm-score-arch">голос «${esc(arch)}»</span>
+          ${out.fallback ? `<span class="muted"> · шаблон</span>` : ""}
+        </div>
+        <div class="jv-smm-plan-list">
+          ${items.map((it) => `
+            <div class="jv-smm-plan-card">
+              <div class="jv-smm-plan-day">${esc(it.day || "")}</div>
+              <div class="jv-smm-plan-topic">${esc(it.topic || "")}</div>
+              ${it.draft ? `<div class="jv-smm-plan-draft">${esc(it.draft)}</div>` : ""}
+              ${it.draft ? `<button type="button" class="jv-smm-copy"
+                data-text="${esc(it.draft)}">Скопировать</button>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      </div>
     `;
   }
 
@@ -694,11 +730,59 @@
     }
     body.innerHTML = renderSmmLinked(status);
     el("jv-smm-audit")?.addEventListener("click", onSmmAudit);
+    el("jv-smm-plan")?.addEventListener("click", onSmmPlan);
     el("jv-smm-unlink")?.addEventListener("click", onSmmUnlink);
-    // Если уже делали аудит в этой сессии — показываем результат сразу
+    body.addEventListener("click", onSmmCopyClick);
+    // Если уже делали аудит/план в этой сессии — показываем результат сразу
     if (smmLastAudit) {
       const r = el("jv-smm-result");
       if (r) r.innerHTML = renderSmmAudit(smmLastAudit);
+    }
+    if (smmLastPlan) {
+      const r = el("jv-smm-plan-result");
+      if (r) r.innerHTML = renderSmmPlan(smmLastPlan);
+    }
+  }
+
+  function onSmmCopyClick(ev) {
+    const btn = ev.target.closest(".jv-smm-copy");
+    if (!btn) return;
+    const text = btn.dataset.text || "";
+    if (!text) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => { btn.textContent = "Скопировано"; },
+        () => { btn.textContent = "Не получилось"; },
+      );
+    } else {
+      btn.textContent = "Не поддерживается";
+    }
+    setTimeout(() => { btn.textContent = "Скопировать"; }, 1800);
+  }
+
+  async function onSmmPlan() {
+    const id = getIdentity();
+    if (!id) return;
+    const btn = el("jv-smm-plan");
+    const result = el("jv-smm-plan-result");
+    if (btn) { btn.disabled = true; btn.textContent = "Готовлю план…"; }
+    if (result) result.innerHTML = `<div class="jv-notify-status">Думаю над темами на неделю…</div>`;
+    try {
+      const res = await fetch("/api/copilot/vk/plan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity: id }),
+      });
+      if (!res.ok) {
+        if (result) result.innerHTML = `<div class="jv-notify-status">План не получился (${res.status}).</div>`;
+        return;
+      }
+      const data = await res.json();
+      smmLastPlan = data;
+      if (result) result.innerHTML = renderSmmPlan(data);
+    } catch (_) {
+      if (result) result.innerHTML = `<div class="jv-notify-status">Сеть недоступна.</div>`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "📅 Перегенерировать план"; }
     }
   }
 
@@ -746,6 +830,7 @@
       });
     } catch (_) {}
     smmLastAudit = null;
+    smmLastPlan = null;
     refreshSmmSection();
   }
 

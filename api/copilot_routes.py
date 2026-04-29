@@ -808,6 +808,26 @@ async def copilot_vk_audit(payload: VKAuditIn) -> dict:
     return out
 
 
+@router.post("/vk/plan")
+async def copilot_vk_plan(payload: VKAuditIn) -> dict:
+    """Контент-план на неделю для привязанной VK-страницы.
+    Возвращает {week_of, items[5], archetype, archetype_name}."""
+    from analytics.vk_audit import plan_vk_page
+    from db.jarvis_user_vk_queries import get_link
+
+    link = await get_link(payload.identity)
+    if not link:
+        raise HTTPException(
+            status_code=404,
+            detail="Сначала привяжите VK-страницу.",
+        )
+    return await plan_vk_page(
+        link["vk_handle"],
+        name=link.get("user_label"),
+        archetype_code=link.get("archetype"),
+    )
+
+
 @router.get("/vk/archetypes")
 async def copilot_vk_archetypes() -> dict:
     """Список 12 архетипов для пикера в виджете SMM-аудита.

@@ -64,6 +64,33 @@ async def audit_vk_page(
     return out
 
 
+async def plan_vk_page(
+    vk_handle: str, *,
+    name: Optional[str] = None,
+    sectors: Optional[List[str]] = None,
+    archetype_code: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Контент-план на неделю для произвольного пользователя.
+
+    Thin-wrapper над analytics.deputy_content.recommend_weekly_plan: строит
+    pseudo-deputy и резолвит archetype_code в архетип-словарь, чтобы
+    переопределить автоподбор по секторам.
+    """
+    from analytics.deputy_content import recommend_weekly_plan
+    from config.archetypes import get as get_arch
+
+    pseudo = {
+        "name":     name or "Страница",
+        "id":       0,
+        "vk":       vk_handle,
+        "sectors":  list(sectors or ["общая_повестка"]),
+        "role":     "district_rep",
+        "district": "",
+    }
+    override = get_arch(archetype_code) if archetype_code else None
+    return await recommend_weekly_plan(pseudo, archetype_override=override)
+
+
 async def audit_deputy(deputy: Dict[str, Any]) -> Dict[str, Any]:
     """Главная точка. Принимает dict депутата (как из db.list_deputies),
     возвращает словарь с метриками и рекомендациями."""

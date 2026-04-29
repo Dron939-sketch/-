@@ -433,6 +433,56 @@
 }
 .muted { color: rgba(184, 212, 255, 0.55); font-weight: 400; }
 
+.jv-smm-buttons {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+}
+.jv-smm-plan-result:empty { display: none; }
+.jv-smm-plan-list {
+  display: flex; flex-direction: column; gap: 0.45rem;
+  margin-top: 4px;
+}
+.jv-smm-plan-card {
+  padding: 8px 10px;
+  background: rgba(94, 168, 255, 0.06);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 8px;
+  display: flex; flex-direction: column; gap: 0.25rem;
+}
+.jv-smm-plan-day {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #5EA8FF;
+  font-weight: 700;
+}
+.jv-smm-plan-topic {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #DBE9FF;
+}
+.jv-smm-plan-draft {
+  font-size: 0.8rem;
+  color: rgba(219, 233, 255, 0.78);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.jv-smm-copy {
+  align-self: flex-start;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.72rem;
+  background: transparent;
+  border: 1px solid rgba(94, 168, 255, 0.3);
+  border-radius: 999px;
+  color: #5EA8FF;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s;
+}
+.jv-smm-copy:hover {
+  background: rgba(94, 168, 255, 0.12);
+  border-color: #5EA8FF;
+}
+
 /* ------------------ Toast «Я рядом» ------------------ */
 .jv-toast {
   position: fixed;
