@@ -1277,6 +1277,70 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
 .dc-task-title { font-size: 0.88rem; font-weight: 600; color: #DBE9FF; line-height: 1.35; }
 .dc-task-sub { font-size: 0.78rem; color: rgba(184, 212, 255, 0.7); margin-top: 2px; line-height: 1.4; }
 
+/* --- Универсальные chip-кнопки (expectations, coalition, district, mentions) --- */
+.dc-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+.dc-chip {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+  text-align: left;
+  color: #DBE9FF;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+}
+.dc-chip:hover {
+  transform: translateY(-1px);
+  background: rgba(94, 168, 255, 0.12);
+  border-color: #5EA8FF;
+}
+.dc-chip-icon {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  background: rgba(94, 168, 255, 0.1);
+  border-radius: 50%;
+}
+.dc-chip-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dc-chip-label {
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: #DBE9FF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dc-chip-meta {
+  font-size: 0.74rem;
+  color: rgba(184, 212, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Приоритеты / варианты */
+.dc-chip-high       { border-left: 3px solid #FF9F4A; }
+.dc-chip-medium     { border-left: 3px solid rgba(94, 168, 255, 0.4); }
+.dc-chip-low        { border-left: 3px solid rgba(184, 212, 255, 0.2); }
+.dc-chip-good       { border-left: 3px solid #4FCC75; }
+.dc-chip-bad        { border-left: 3px solid #FF9F4A; }
+.dc-chip-leadership { border-left: 3px solid #FFD89B; }
+.dc-chip-neighbour  { border-left: 3px solid #5EA8FF; }
+.dc-chip-neutral    { border-left: 3px solid rgba(184, 212, 255, 0.3); }
+.dc-chip-high .dc-chip-icon { color: #FFD89B; background: rgba(255, 159, 74, 0.15); }
+.dc-chip-good .dc-chip-icon { color: #B0F0C0; background: rgba(79, 204, 117, 0.15); }
+.dc-chip-bad  .dc-chip-icon { color: #FF9F4A; background: rgba(255, 159, 74, 0.15); }
+
 /* --- Чего ждут избиратели --- */
 .dc-exp-list { display: flex; flex-direction: column; gap: 6px; }
 .dc-exp-row {
