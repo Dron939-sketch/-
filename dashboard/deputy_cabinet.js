@@ -358,7 +358,8 @@
   // ---------------------------------------------------------------------------
 
   function renderBenchmark(b) {
-    if (!b || b.state !== "ok" || !(b.ranking || []).length) {
+    const ranking = (b && b.ranking) || [];
+    if (ranking.length === 0) {
       return `
         <details class="dc-block dc-collapsible" open>
           <summary class="dc-block-title">🏆 Бенчмарк коллег</summary>
@@ -369,36 +370,53 @@
           }</div>
         </details>`;
     }
-    const ranking = b.ranking || [];
     const myPos = ranking.find((r) => r.is_me)?.position;
     const total = ranking.length;
+    const onlyMe = total === 1;
     return `
       <details class="dc-block dc-collapsible dc-bench-block" open>
         <summary class="dc-block-title">
           🏆 Бенчмарк коллег
           ${myPos ? `<span class="dc-bench-pos">ты на ${myPos} из ${total}</span>` : ""}
         </summary>
-        <p class="dc-empty-sub">Ранжируем по composite-рейтингу (alignment + регулярность + лайки).</p>
+        <p class="dc-empty-sub">${
+          onlyMe
+            ? "Только вы привязали VK. Когда подключатся коллеги — увидите ранжирование."
+            : "Ранжируем по composite-рейтингу (alignment + регулярность + лайки)."
+        }</p>
         <table class="dc-bench-table">
           <thead><tr>
             <th>#</th><th>Депутат</th>
             <th>Рейтинг</th><th>Голос %</th><th>Постов/нед</th><th>Лайков ср.</th>
           </tr></thead>
           <tbody>
-            ${ranking.map((r) => `
-              <tr class="${r.is_me ? 'dc-bench-me' : ''}">
-                <td class="dc-bench-rank">${r.position}</td>
-                <td>
-                  ${r.is_me ? "<b>Я</b> · " : ""}
-                  ${r.vk_url ? `<a href="${esc(r.vk_url)}" target="_blank" rel="noopener">${esc((r.name || '').split(' ').slice(0,2).join(' '))}</a>`
-                    : esc((r.name || '').split(' ').slice(0,2).join(' '))}
-                </td>
-                <td><b>${(r.composite || 0).toFixed(1)}</b>/5</td>
-                <td>${(r.alignment_pct || 0).toFixed(0)}%</td>
-                <td>${(r.posts_per_week || 0).toFixed(1)}</td>
-                <td>${(r.avg_likes || 0).toFixed(0)}</td>
-              </tr>
-            `).join("")}
+            ${ranking.map((r) => {
+              if (r.error === "unreachable") {
+                return `
+                  <tr class="dc-bench-na">
+                    <td class="dc-bench-rank">${r.position}</td>
+                    <td>
+                      ${r.vk_url ? `<a href="${esc(r.vk_url)}" target="_blank" rel="noopener">${esc((r.name || '').split(' ').slice(0,2).join(' '))}</a>`
+                        : esc((r.name || '').split(' ').slice(0,2).join(' '))}
+                    </td>
+                    <td colspan="4" class="dc-bench-na-cell">страница приватная или API недоступен</td>
+                  </tr>`;
+              }
+              return `
+                <tr class="${r.is_me ? 'dc-bench-me' : ''}">
+                  <td class="dc-bench-rank">${r.position}</td>
+                  <td>
+                    ${r.is_me ? "<b>Я</b> · " : ""}
+                    ${r.vk_url ? `<a href="${esc(r.vk_url)}" target="_blank" rel="noopener">${esc((r.name || '').split(' ').slice(0,2).join(' '))}</a>`
+                      : esc((r.name || '').split(' ').slice(0,2).join(' '))}
+                  </td>
+                  <td><b>${(r.composite || 0).toFixed(1)}</b>/5</td>
+                  <td>${(r.alignment_pct || 0).toFixed(0)}%</td>
+                  <td>${(r.posts_per_week || 0).toFixed(1)}</td>
+                  <td>${(r.avg_likes || 0).toFixed(0)}</td>
+                </tr>
+              `;
+            }).join("")}
           </tbody>
         </table>
         ${(b.best_posts || []).length ? `

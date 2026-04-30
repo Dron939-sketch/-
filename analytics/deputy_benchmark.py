@@ -31,62 +31,116 @@ _LOOKBACK_DAYS = 30
 async def build_benchmark(
     current_deputy: Dict[str, Any],
     all_deputies: List[Dict[str, Any]],
+    current_metrics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Собирает бенчмарк по коллегам с VK. Возвращает {ranking, best_posts, state}."""
+    """Собирает бенчмарк по коллегам с VK. Возвращает {ranking, best_posts, state}.
+
+    current_metrics — уже посчитанные для текущего депутата (из audit), чтобы
+    не делать второй запрос wall.get. Если None — рассчитаем заново.
+    Peers с ошибкой fetch'а попадают в ranking с пометкой error — их видно
+    что страница приватная / API недоступен; ranking не пустеет.
+    """
     peers = [
         d for d in all_deputies
         if d.get("vk") and d.get("external_id") != current_deputy.get("external_id")
     ]
-    if not peers:
-        return {"ranking": [], "best_posts": [], "state": "no_peers"}
-
-    # Параллельно берём метрики для каждого peer + current
-    targets = [current_deputy] + peers
-    results = await asyncio.gather(
-        *[_fetch_metrics(d) for d in targets],
-        return_exceptions=True,
-    )
-
     ranking: List[Dict[str, Any]] = []
     all_posts_with_meta: List[Dict[str, Any]] = []
-    for d, res in zip(targets, results):
+
+    # Текущий депутат — всегда в ranking
+    if current_metrics is None:
+        cur_res = await _fetch_metrics(current_deputy)
+        cur_res = cur_res or {}
+    else:
+        cur_res = current_metrics
+    ranking.append({
+        "external_id":     current_deputy.get("external_id"),
+        "name":            current_deputy.get("name"),
+        "vk":              current_deputy.get("vk"),
+        "vk_url":          f"https://vk.com/{current_deputy.get('vk')}" if current_deputy.get("vk") else None,
+        "district":        current_deputy.get("district"),
+        "is_me":           True,
+        "posts_per_week":  cur_res.get("posts_per_week", 0),
+        "avg_likes":       cur_res.get("avg_likes", 0),
+        "alignment_pct":   cur_res.get("alignment_pct", 0),
+        "composite":       cur_res.get("composite", 0),
+        "error":           None,
+    })
+    for p in cur_res.get("posts", []):
+        all_posts_with_meta.append({
+            **p,
+            "deputy_name":  current_deputy.get("name"),
+            "deputy_short": (current_deputy.get("name") or "").split(" ")[0],
+            "vk_url":       f"https://vk.com/{current_deputy.get('vk')}" if current_deputy.get("vk") else None,
+            "is_me":        True,
+        })
+
+    if not peers:
+        return {
+            "ranking":    [{**ranking[0], "position": 1}],
+            "best_posts": [],
+            "state":      "no_peers",
+        }
+
+    # Параллельно тянем метрики для peers
+    results = await asyncio.gather(
+        *[_fetch_metrics(d) for d in peers],
+        return_exceptions=True,
+    )
+    for peer, res in zip(peers, results):
         if isinstance(res, Exception) or res is None:
+            # Peer есть в списке, но fetch не получился (стена закрыта, токен
+            # без прав, rate-limit). Показываем строку с пометкой.
+            ranking.append({
+                "external_id":    peer.get("external_id"),
+                "name":           peer.get("name"),
+                "vk":             peer.get("vk"),
+                "vk_url":         f"https://vk.com/{peer.get('vk')}" if peer.get("vk") else None,
+                "district":       peer.get("district"),
+                "is_me":          False,
+                "posts_per_week": None,
+                "avg_likes":      None,
+                "alignment_pct":  None,
+                "composite":      None,
+                "error":          "unreachable",
+            })
             continue
         ranking.append({
-            "external_id":     d.get("external_id"),
-            "name":            d.get("name"),
-            "vk":              d.get("vk"),
-            "vk_url":          f"https://vk.com/{d.get('vk')}" if d.get("vk") else None,
-            "district":        d.get("district"),
-            "is_me":           d.get("external_id") == current_deputy.get("external_id"),
-            "posts_per_week":  res.get("posts_per_week", 0),
-            "avg_likes":       res.get("avg_likes", 0),
-            "alignment_pct":   res.get("alignment_pct", 0),
-            "composite":       res.get("composite", 0),
+            "external_id":    peer.get("external_id"),
+            "name":           peer.get("name"),
+            "vk":             peer.get("vk"),
+            "vk_url":         f"https://vk.com/{peer.get('vk')}" if peer.get("vk") else None,
+            "district":       peer.get("district"),
+            "is_me":          False,
+            "posts_per_week": res.get("posts_per_week", 0),
+            "avg_likes":      res.get("avg_likes", 0),
+            "alignment_pct":  res.get("alignment_pct", 0),
+            "composite":      res.get("composite", 0),
+            "error":          None,
         })
         for p in res.get("posts", []):
             all_posts_with_meta.append({
                 **p,
-                "deputy_name":   d.get("name"),
-                "deputy_short":  (d.get("name") or "").split(" ")[0],
-                "vk_url":        f"https://vk.com/{d.get('vk')}" if d.get("vk") else None,
-                "is_me":         d.get("external_id") == current_deputy.get("external_id"),
+                "deputy_name":  peer.get("name"),
+                "deputy_short": (peer.get("name") or "").split(" ")[0],
+                "vk_url":       f"https://vk.com/{peer.get('vk')}" if peer.get("vk") else None,
+                "is_me":        False,
             })
 
-    # Сортировка ranking по composite (моя позиция подсветится)
-    ranking.sort(key=lambda r: -r["composite"])
+    # Sort: сначала те у кого есть composite, потом «недоступные» в конец
+    ranking.sort(key=lambda r: (r["composite"] is None, -(r["composite"] or 0)))
     for i, r in enumerate(ranking):
         r["position"] = i + 1
 
-    # Top-3 поста от коллег (исключаем мои) с max engagement
+    # Top-3 поста от коллег
     peer_posts = [p for p in all_posts_with_meta if not p.get("is_me")]
     peer_posts.sort(key=lambda p: -(p.get("likes", 0) + p.get("reposts", 0) * 2))
     best_posts = peer_posts[:3]
 
     return {
-        "ranking":   ranking,
+        "ranking":    ranking,
         "best_posts": best_posts,
-        "state":     "ok",
+        "state":      "ok",
     }
 
 

@@ -1035,8 +1035,19 @@ async def _build_deputy_cabinet(external_id: str, city: str) -> dict:
     seen_ids = await get_seen_ids(external_id)
     comments_queue = await build_comments_queue(deputy, seen_ids=seen_ids)
 
-    # Бенчмарк коллег по городу с привязанными VK
-    benchmark = await build_benchmark(deputy, all_in_city)
+    # Бенчмарк коллег по городу с привязанными VK. Передаём уже
+    # посчитанные метрики текущего депутата чтобы не дёргать wall.get
+    # повторно — экономит время и quota.
+    benchmark = await build_benchmark(
+        deputy, all_in_city,
+        current_metrics={
+            "posts_per_week": float(metrics.get("posts_per_week") or 0),
+            "avg_likes":      float(metrics.get("avg_likes") or 0),
+            "alignment_pct":  float(audit.get("alignment_score") or 0),
+            "composite":      rating_value,
+            "posts":          [],  # не нужно заново — best_posts всё равно от peers
+        },
+    )
 
     # Snapshot истории рейтинга (раз в неделю автоматом, идемпотентный
     # UPSERT — можно вызывать каждый раз без дедупликации)
