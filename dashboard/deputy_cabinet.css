@@ -1496,6 +1496,14 @@ details.dc-collapsible > summary:hover { color: #B8D4FF; }
   background: rgba(94, 168, 255, 0.1);
 }
 .dc-bench-me .dc-bench-rank { color: #FFD89B; }
+.dc-bench-na td {
+  color: rgba(184, 212, 255, 0.5);
+}
+.dc-bench-na-cell {
+  font-style: italic;
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.55);
+}
 .dc-bench-best {
   margin-top: 14px;
 }
