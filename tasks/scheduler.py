@@ -223,43 +223,74 @@ async def analyze_loops_for_city(city_name: str) -> int:
 # Loops
 # ---------------------------------------------------------------------------
 
+# Окно сбора данных по МСК (UTC+3): не дёргаем платные API ночью.
+# Можно переопределить через env (QUIET_HOURS_FROM=22, QUIET_HOURS_TO=8).
+_QUIET_FROM_HOUR = _env_int("QUIET_HOURS_FROM", 22)  # с 22:00 МСК
+_QUIET_TO_HOUR   = _env_int("QUIET_HOURS_TO",   8)   # до 08:00 МСК
+_MSK_OFFSET_H    = 3                                  # Москва UTC+3 (без DST)
+
+
+def _msk_hour() -> int:
+    """Текущий час по МСК (0-23). Серверное время может быть UTC."""
+    from datetime import datetime, timezone, timedelta
+    msk = datetime.now(tz=timezone.utc) + timedelta(hours=_MSK_OFFSET_H)
+    return msk.hour
+
+
+def _is_quiet_now() -> bool:
+    """True если сейчас «тихие часы» — не собираем данные."""
+    h = _msk_hour()
+    if _QUIET_FROM_HOUR > _QUIET_TO_HOUR:  # переход через полночь (22 → 8)
+        return h >= _QUIET_FROM_HOUR or h < _QUIET_TO_HOUR
+    return _QUIET_FROM_HOUR <= h < _QUIET_TO_HOUR
+
+
 async def _collection_loop(interval_s: int) -> None:
     # Give the web tier a moment to finish startup before the first cycle.
     await asyncio.sleep(15)
     enricher = NewsEnricher()
     while True:
-        for city_name in CITIES:
-            try:
-                await collect_city(city_name, enricher=enricher)
-            except Exception:  # noqa: BLE001
-                logger.exception("collection_loop failed for %s", city_name)
-        Heartbeat.tick("collection")
+        if _is_quiet_now():
+            logger.info("collection_loop: quiet hours (МСК), skip cycle")
+        else:
+            for city_name in CITIES:
+                try:
+                    await collect_city(city_name, enricher=enricher)
+                except Exception:  # noqa: BLE001
+                    logger.exception("collection_loop failed for %s", city_name)
+            Heartbeat.tick("collection")
         await asyncio.sleep(interval_s)
 
 
 async def _weather_loop(interval_s: int) -> None:
     await asyncio.sleep(5)
     while True:
-        for city_name in CITIES:
-            try:
-                await refresh_weather(city_name)
-            except Exception:  # noqa: BLE001
-                logger.exception("weather_loop failed for %s", city_name)
-        Heartbeat.tick("weather")
+        if _is_quiet_now():
+            logger.info("weather_loop: quiet hours, skip")
+        else:
+            for city_name in CITIES:
+                try:
+                    await refresh_weather(city_name)
+                except Exception:  # noqa: BLE001
+                    logger.exception("weather_loop failed for %s", city_name)
+            Heartbeat.tick("weather")
         await asyncio.sleep(interval_s)
 
 
 async def _snapshot_loop(interval_s: int) -> None:
     await asyncio.sleep(120)
     while True:
-        for city_name in CITIES:
-            try:
-                wrote = await snapshot_metrics(city_name)
-                if wrote:
-                    await analyze_loops_for_city(city_name)
-            except Exception:  # noqa: BLE001
-                logger.exception("snapshot_loop failed for %s", city_name)
-        Heartbeat.tick("snapshot")
+        if _is_quiet_now():
+            logger.info("snapshot_loop: quiet hours, skip")
+        else:
+            for city_name in CITIES:
+                try:
+                    wrote = await snapshot_metrics(city_name)
+                    if wrote:
+                        await analyze_loops_for_city(city_name)
+                except Exception:  # noqa: BLE001
+                    logger.exception("snapshot_loop failed for %s", city_name)
+            Heartbeat.tick("snapshot")
         await asyncio.sleep(interval_s)
 
 
@@ -273,6 +304,10 @@ async def _jarvis_alerts_loop(interval_s: int) -> None:
     from tasks.jarvis_proactive import check_city, cleanup_expired_alerts
 
     while True:
+        if _is_quiet_now():
+            logger.info("jarvis_alerts_loop: quiet hours, skip")
+            await asyncio.sleep(interval_s)
+            continue
         # Городам мы уже сидируем депутатов — отсюда же берём список,
         # чтобы не конфликтовать с CITIES (которые могут включать пилоты,
         # для которых ещё нет данных).
@@ -346,15 +381,14 @@ def start() -> None:
     if not settings.openweather_api_key:
         logger.info("scheduler: weather loop disabled (no OPENWEATHER_API_KEY)")
 
-    # Demo-режим (бережный): интервалы в 2× длиннее боевых, чтобы не
-    # сжигать DeepSeek-токены при демонстрации. На проде выставляется
-    # COLLECTION_INTERVAL_MIN=30 (collection), WEATHER_INTERVAL_S=3600,
-    # SNAPSHOT_INTERVAL_S=3600, DEPUTY_TOPICS_INTERVAL_S=86400.
-    collection_s = max(300, settings.collection_interval_minutes * 60)
-    weather_s = max(300, _env_int("WEATHER_INTERVAL_S", 7200))
-    snapshot_s = max(300, _env_int("SNAPSHOT_INTERVAL_S", 7200))
-    deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 48 * 3600))
-    jarvis_alerts_s = max(300, _env_int("JARVIS_ALERTS_INTERVAL_S", 15 * 60))
+    # Экономный режим — реже дёргаем платные API (DeepSeek, OpenWeather,
+    # Fish Audio) и VK rate-limit. Пользователь форсирует свежесть через
+    # «Аудит VK» в кабинете. На проде можно ускорить через env-переменные.
+    collection_s = max(900, settings.collection_interval_minutes * 60)   # ≥15 мин
+    weather_s = max(900, _env_int("WEATHER_INTERVAL_S", 6 * 3600))       # default 6ч
+    snapshot_s = max(900, _env_int("SNAPSHOT_INTERVAL_S", 24 * 3600))    # default 24ч
+    deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 7 * 24 * 3600))  # default 1 нед
+    jarvis_alerts_s = max(900, _env_int("JARVIS_ALERTS_INTERVAL_S", 60 * 60))  # default 1ч
 
     _tasks.append(asyncio.create_task(_collection_loop(collection_s), name="collection_loop"))
     if settings.openweather_api_key:

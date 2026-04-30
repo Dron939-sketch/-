@@ -1,8 +1,9 @@
 """Кэш аудита/кабинета депутата в БД.
 
-Запись по external_id из config/deputies.py. TTL 12 часов — за это
-время рейтинг и метрики не успевают сильно измениться. Force-refresh
-делается явным вызовом upsert (UPSERT перетирает payload).
+Запись по external_id из config/deputies.py. TTL 48 часов — основная
+экономия DeepSeek-токенов: recommend_weekly_plan и прочие LLM-вызовы
+делаются только при cache miss. Если депутату нужны свежие данные —
+жмёт кнопку «Аудит VK» (forced refresh через ?refresh=1).
 
 На null pool возвращаем None — тогда вызывающий код спокойно
 работает без кэша (расчёт каждый раз).
@@ -20,7 +21,7 @@ from .pool import get_pool
 logger = logging.getLogger(__name__)
 
 
-_TTL_HOURS = 12
+_TTL_HOURS = 48
 
 # Версия структуры payload. При каждом добавлении нового топ-уровневого
 # поля в _build_deputy_cabinet (briefing / meister / trends_now / …)
