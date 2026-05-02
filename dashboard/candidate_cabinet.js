@@ -318,17 +318,74 @@
   }
 
   function renderMediaTab(data) {
+    const portals = data.bio_portals || {};
     return `
+      ${renderBioPortalsBlock(portals)}
       <div class="cc-block">
         <div class="cc-block-title">📢 Контент-план агитации</div>
-        <p class="cc-empty">Расширенный контент-план кандидата появится в Этапе 4.
+        <p class="cc-empty">Расширенный контент-план кандидата — на следующей итерации.
         В отличие от депутатского — 3-5 публикаций в день, А/Б-тест посланий,
         сегментация по аудитории, бюджет на полиграфию + реклама + ROI.</p>
       </div>
+    `;
+  }
+
+  function renderBioPortalsBlock(portals) {
+    if (!portals || !portals.total) return "";
+    const tierLabel = (t) => t === "must" ? "обязательно"
+                          : t === "recommended" ? "рекомендуется"
+                          : "усиление";
+    const tierColor = (t) => t === "must" ? "#FF9F4A"
+                          : t === "recommended" ? "#5EA8FF"
+                          : "rgba(184, 212, 255, 0.5)";
+    const renderPortal = (p) => `
+      <div class="cc-portal" style="border-left-color: ${esc(tierColor(p.tier))}">
+        <div class="cc-portal-head">
+          <span class="cc-portal-icon">${esc(p.icon)}</span>
+          <a class="cc-portal-link" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)} ↗</a>
+          <span class="cc-portal-tier" style="background: ${esc(tierColor(p.tier))}33; color: ${esc(tierColor(p.tier))}">
+            ${esc(tierLabel(p.tier))}
+          </span>
+          ${p.free ? `<span class="cc-portal-free">бесплатно</span>` : ""}
+        </div>
+        <div class="cc-portal-what">${esc(p.what || "")}</div>
+        <div class="cc-portal-why">💡 ${esc(p.why || "")}</div>
+        <details class="cc-portal-howto">
+          <summary>Как разместиться</summary>
+          <ol>${(p.how_to || []).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+        </details>
+        <div class="cc-portal-audience">🎯 ${esc(p.audience || "")}</div>
+      </div>
+    `;
+    return `
       <div class="cc-block">
-        <div class="cc-block-title">💰 Избирательный фонд</div>
-        <p class="cc-empty">Калькулятор бюджета и контроль за расходованием —
-        Этап 4. Лимиты и нарушения по 67-ФЗ.</p>
+        <div class="cc-block-title">🌐 Биография вне VK — что должно гуглиться</div>
+        <p class="cc-empty">Когда избиратель гуглит твоё имя, важно занять первую страницу выдачи.
+        Партнёрские био-порталы индексируются быстро и закрывают эту нишу.</p>
+
+        ${(portals.must || []).length ? `
+          <div class="cc-portal-group">
+            <div class="cc-portal-group-title">⭐ Обязательно</div>
+            ${(portals.must || []).map(renderPortal).join("")}
+          </div>` : ""}
+
+        ${(portals.recommended || []).length ? `
+          <div class="cc-portal-group">
+            <div class="cc-portal-group-title">👍 Рекомендуется</div>
+            ${(portals.recommended || []).map(renderPortal).join("")}
+          </div>` : ""}
+
+        ${(portals.advanced || []).length ? `
+          <div class="cc-portal-group">
+            <div class="cc-portal-group-title">🚀 Усиление (на этапе агитации)</div>
+            ${(portals.advanced || []).map(renderPortal).join("")}
+          </div>` : ""}
+
+        ${(portals.checklist || []).length ? `
+          <div class="cc-portal-checklist">
+            <div class="cc-block-title" style="font-size: 0.96rem">✓ Чек-лист</div>
+            <ul class="cc-list">${(portals.checklist || []).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+          </div>` : ""}
       </div>
     `;
   }
