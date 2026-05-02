@@ -47,7 +47,10 @@
           <span class="cc-hero-emoji">${esc(p.emoji || "🇷🇺")}</span>
         </div>
         <div class="cc-hero-text">
-          <div class="cc-hero-eyebrow">Кабинет кандидата · ${esc(p.short || "—")}</div>
+          <div class="cc-hero-eyebrow">
+            Кабинет кандидата · ${esc(p.short || "—")}
+            ${renderDemoIndicator()}
+          </div>
           <h1 class="cc-hero-greet">${esc(p.name || "Кандидат")}</h1>
           <div class="cc-hero-meta">
             ${esc(stage.icon || "▶")} Этап «${esc(stage.name)}» · ${esc(stage.what || "")}
@@ -112,23 +115,109 @@
     `;
   }
 
+  const THREAT_LABEL = {
+    5: { text: "Опасный",      color: "#FF9F4A" },
+    4: { text: "Сильный",       color: "#FFD89B" },
+    3: { text: "Средний",       color: "#5EA8FF" },
+    2: { text: "Низкий",        color: "rgba(184, 212, 255, 0.6)" },
+    1: { text: "Слабый",        color: "rgba(184, 212, 255, 0.4)" },
+  };
+
+  const STATUS_LABEL = {
+    registered:     { text: "✓ зарегистрирован", color: "#B0F0C0" },
+    primaries:      { text: "🗳 в праймериз",      color: "#FFD89B" },
+    not_registered: { text: "⏳ не зарегистрирован", color: "rgba(184, 212, 255, 0.5)" },
+  };
+
   function renderRivalsTab(data) {
+    const r = data.rivals || {};
+    const items = r.items || [];
+    if (items.length === 0) {
+      return `
+        <div class="cc-block">
+          <div class="cc-block-title">🥊 Конкуренты в гонке</div>
+          <div class="cc-empty">Конкурентов пока не выявлено.</div>
+        </div>`;
+    }
+    const agg = r.aggregate || {};
     return `
       <div class="cc-block">
-        <div class="cc-block-title">🥊 Конкуренты в гонке</div>
-        <p class="cc-empty">Досье на соперников появится в Этапе 5.
-        Здесь будут карточки: имя, партия, опыт, ресурсы, тон, история постов,
-        сильные/слабые стороны и прогноз кого обходишь.</p>
-        <div class="cc-info-grid">
-          ${(data.party.rivals || []).map((r) => `
-            <div class="cc-info-card">
-              <div class="cc-info-emoji">⚔</div>
-              <div class="cc-info-title">${esc(r)}</div>
-              <div class="cc-info-body">Стандартный конкурент по партийной логике.</div>
-            </div>
-          `).join("")}
+        <div class="cc-block-title">
+          🥊 Конкуренты в гонке — ${items.length}
+          ${r.data_kind === "demo" ? `<span class="cc-fallback-tag">типажи</span>` : ""}
+        </div>
+        ${r.hint ? `<p class="cc-empty" style="margin: 0 0 8px;">${esc(r.hint)}</p>` : ""}
+
+        <div class="cc-rivals-summary">
+          <div class="cc-rival-stat">
+            <div class="cc-rival-stat-num">${agg.count || 0}</div>
+            <div class="cc-rival-stat-lbl">всего</div>
+          </div>
+          <div class="cc-rival-stat">
+            <div class="cc-rival-stat-num">${agg.avg_reach || 0}</div>
+            <div class="cc-rival-stat-lbl">ср. охват</div>
+          </div>
+          <div class="cc-rival-stat">
+            <div class="cc-rival-stat-num">${agg.max_reach || 0}</div>
+            <div class="cc-rival-stat-lbl">макс охват</div>
+          </div>
+          <div class="cc-rival-stat">
+            <div class="cc-rival-stat-num">${agg.avg_freq || 0}</div>
+            <div class="cc-rival-stat-lbl">ср. частота</div>
+          </div>
         </div>
       </div>
+
+      ${items.map((it) => {
+        const threat = THREAT_LABEL[it.threat] || THREAT_LABEL[1];
+        const status = STATUS_LABEL[it.status] || STATUS_LABEL.not_registered;
+        return `
+          <div class="cc-block cc-rival-card" style="border-left-color: ${esc(it.party_color)}">
+            <div class="cc-rival-head">
+              <div class="cc-rival-id">
+                <div class="cc-rival-name">${esc(it.name)}</div>
+                <div class="cc-rival-meta">
+                  <span class="cc-rival-party" style="background: ${esc(it.party_color)}33; border-color: ${esc(it.party_color)}">
+                    ${esc(it.party_short)}
+                  </span>
+                  <span class="cc-rival-exp">${it.experience_years} лет опыта</span>
+                  <span class="cc-rival-status" style="color: ${esc(status.color)}">${esc(status.text)}</span>
+                  ${it.is_same_party ? `<span class="cc-rival-same">в моей партии</span>` : ""}
+                </div>
+              </div>
+              <div class="cc-rival-threat" style="background: ${esc(threat.color)}33; border-color: ${esc(threat.color)}; color: ${esc(threat.color)}">
+                ⚔ ${esc(threat.text)}
+              </div>
+            </div>
+
+            <div class="cc-rival-bars">
+              <div class="cc-rival-bar-row">
+                <div class="cc-rival-bar-lbl">Охват</div>
+                <div class="cc-rival-bar"><div class="cc-rival-bar-fill" style="width:${it.reach}%; background: ${esc(it.party_color)}"></div></div>
+                <div class="cc-rival-bar-val">${it.reach}/100</div>
+              </div>
+              <div class="cc-rival-bar-row">
+                <div class="cc-rival-bar-lbl">Частота</div>
+                <div class="cc-rival-bar"><div class="cc-rival-bar-fill" style="width:${it.frequency}%; background: ${esc(it.party_color)}"></div></div>
+                <div class="cc-rival-bar-val">${it.frequency}/100</div>
+              </div>
+            </div>
+
+            <div class="cc-rival-tone">🎙 Тон: <b>${esc(it.tone)}</b></div>
+
+            <div class="cc-rival-twocol">
+              <div class="cc-rival-col cc-rival-strong">
+                <div class="cc-col-title">Сильные стороны</div>
+                <div>${esc(it.strengths)}</div>
+              </div>
+              <div class="cc-rival-col cc-rival-weak">
+                <div class="cc-col-title">Слабые стороны</div>
+                <div>${esc(it.weaknesses)}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("")}
     `;
   }
 
@@ -362,6 +451,126 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Demo paywall: 10 минут бесплатно в день, потом подписка 2990₽/мес.
+  // Счётчик в localStorage, обнуляется по локальной полуночи.
+  // ---------------------------------------------------------------------------
+
+  const DEMO_LIMIT_SECONDS = 600;             // 10 минут
+  const SUBSCRIPTION_PRICE = "2 990 ₽/мес";
+
+  function _today() { return new Date().toISOString().slice(0, 10); }
+  function loadDemoUsage() {
+    try {
+      const raw = localStorage.getItem("cm.candidate.demo");
+      if (!raw) return { date: _today(), seconds: 0 };
+      const parsed = JSON.parse(raw);
+      if (parsed.date !== _today()) return { date: _today(), seconds: 0 };
+      return { date: parsed.date, seconds: Number(parsed.seconds) || 0 };
+    } catch (_) { return { date: _today(), seconds: 0 }; }
+  }
+  function saveDemoUsage(usage) {
+    try { localStorage.setItem("cm.candidate.demo", JSON.stringify(usage)); } catch (_) {}
+  }
+
+  let demoTimerHandle = null;
+
+  function startDemoTimer() {
+    stopDemoTimer();
+    demoTimerHandle = setInterval(() => {
+      // Если роль больше не «кандидат» — выключаемся
+      if (window.cmRole?.get?.() !== "candidate") {
+        stopDemoTimer();
+        return;
+      }
+      const u = loadDemoUsage();
+      // Дата уже сменилась — обнуляем
+      if (u.date !== _today()) {
+        u.date = _today(); u.seconds = 0;
+      }
+      u.seconds += 1;
+      saveDemoUsage(u);
+
+      const left = DEMO_LIMIT_SECONDS - u.seconds;
+      updateDemoIndicator(u.seconds);
+
+      if (left <= 0) {
+        stopDemoTimer();
+        showPaywall();
+      }
+    }, 1000);
+  }
+  function stopDemoTimer() {
+    if (demoTimerHandle) {
+      clearInterval(demoTimerHandle);
+      demoTimerHandle = null;
+    }
+  }
+
+  function updateDemoIndicator(seconds) {
+    const el = document.getElementById("cc-demo-indicator");
+    if (!el) return;
+    const left = Math.max(0, DEMO_LIMIT_SECONDS - seconds);
+    const m = Math.floor(left / 60);
+    const s = left % 60;
+    el.textContent = `⏱ ${m}:${s.toString().padStart(2, "0")} бесплатно`;
+    el.classList.toggle("cc-demo-warn", left < 120);
+  }
+
+  function renderDemoIndicator() {
+    const usage = loadDemoUsage();
+    const left = Math.max(0, DEMO_LIMIT_SECONDS - usage.seconds);
+    const m = Math.floor(left / 60);
+    const s = left % 60;
+    const cls = left < 120 ? "cc-demo-warn" : "";
+    return `<div class="cc-demo-indicator ${cls}" id="cc-demo-indicator">⏱ ${m}:${s.toString().padStart(2, "0")} бесплатно</div>`;
+  }
+
+  function showPaywall() {
+    if (document.getElementById("cc-paywall")) return;
+    // Считаем сколько часов до полуночи
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const diffMs = tomorrow - now;
+    const hh = Math.floor(diffMs / 3_600_000);
+    const mm = Math.floor((diffMs % 3_600_000) / 60_000);
+    const wrap = document.createElement("div");
+    wrap.id = "cc-paywall";
+    wrap.className = "cc-paywall";
+    wrap.innerHTML = `
+      <div class="cc-paywall-card">
+        <div class="cc-paywall-eyebrow">⏱ 10 минут демо закончились</div>
+        <h2 class="cc-paywall-title">Подключите подписку — продолжайте без ограничений</h2>
+        <p class="cc-paywall-sub">
+          Полный доступ к кабинету кандидата: контент-визард в архетипе партии,
+          сценарии медиаповодов, чек-листы 67-ФЗ, штаб, конкуренты, праймериз
+          и весь функционал без ограничений.
+        </p>
+        <div class="cc-paywall-price">${esc(SUBSCRIPTION_PRICE)}</div>
+        <div class="cc-paywall-actions">
+          <a class="cc-paywall-btn primary" href="mailto:smart-mind@yandex.ru?subject=Подписка кабинета кандидата">
+            🚀 Купить подписку
+          </a>
+          <button type="button" class="cc-paywall-btn ghost" id="cc-paywall-close-btn">Завтра вернусь</button>
+        </div>
+        <div class="cc-paywall-hint">
+          Счётчик 10 мин обнулится через <b>${hh}ч ${mm}м</b> — в полночь по местному времени.
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+    wrap.querySelector("#cc-paywall-close-btn")?.addEventListener("click", () => wrap.remove());
+  }
+
+  function checkDemoLimitOnLoad() {
+    const u = loadDemoUsage();
+    if (u.seconds >= DEMO_LIMIT_SECONDS) {
+      showPaywall();
+      return false;  // сигнал что лимит закончился
+    }
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
   // Main
   // ---------------------------------------------------------------------------
 
@@ -412,6 +621,9 @@
       </div>
     `;
     hero.addEventListener("click", onTabClick);
+    // Запускаем демо-таймер. Если уже исчерпан — показываем paywall сразу.
+    if (!checkDemoLimitOnLoad()) return;
+    startDemoTimer();
   }
 
   function onTabClick(ev) {
@@ -437,6 +649,7 @@
       if (!hero) return;
       if (window.cmRole?.get?.() !== "candidate") {
         hero.innerHTML = "";
+        stopDemoTimer();
         return;
       }
       renderCabinet();
