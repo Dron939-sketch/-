@@ -277,6 +277,87 @@
 .cc-tone-do  .cc-col-title { color: #B0F0C0; }
 .cc-tone-dont .cc-col-title { color: #FF9F4A; }
 
+/* --- Selection (праймериз / кадровый отбор / подписи) --- */
+.cc-selection { border-left: 3px solid var(--cc-color, #5EA8FF); }
+.cc-fallback-tag {
+  margin-left: auto;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  padding: 2px 8px;
+  background: rgba(184, 212, 255, 0.1);
+  border-radius: 999px;
+  color: rgba(184, 212, 255, 0.6);
+}
+.cc-sel-progress {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.6);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.cc-sel-bar {
+  position: relative;
+  height: 8px;
+  background: rgba(94, 168, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cc-sel-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cc-color, #5EA8FF), rgba(176, 240, 192, 0.8));
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.cc-sel-meta {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1rem;
+  font-size: 0.84rem;
+  color: rgba(184, 212, 255, 0.85);
+}
+.cc-sel-num {
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--cc-color, #5EA8FF);
+}
+.cc-sel-pos {
+  padding: 2px 8px;
+  background: rgba(255, 217, 155, 0.15);
+  border: 1px solid rgba(255, 217, 155, 0.4);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  color: #FFD89B;
+  font-weight: 700;
+}
+.cc-sel-deadline {
+  color: #FF9F4A;
+  font-weight: 600;
+}
+.cc-sel-actions { margin-top: 6px; }
+.cc-sel-links {
+  margin-top: 8px;
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.cc-sel-link {
+  font-size: 0.78rem;
+  color: var(--cc-color, #5EA8FF);
+  text-decoration: none;
+  padding: 4px 10px;
+  background: rgba(94, 168, 255, 0.08);
+  border: 1px solid rgba(94, 168, 255, 0.25);
+  border-radius: 999px;
+  font-weight: 600;
+}
+.cc-sel-link:hover { background: rgba(94, 168, 255, 0.18); }
+.cc-sel-platform {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.6);
+}
+
 /* --- Mobile --- */
 @media (max-width: 700px) {
   .cc-hero { grid-template-columns: 1fr; }
