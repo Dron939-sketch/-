@@ -1187,6 +1187,7 @@ async def copilot_candidate_cabinet(
         default_election_date, party_meta,
     )
     from analytics.candidate_primaries import selection_for
+    from analytics.candidate_rivals import build_rivals_block
     p = party_meta(party)
     election_date = default_election_date()
     d_until = days_until(election_date)
@@ -1237,6 +1238,7 @@ async def copilot_candidate_cabinet(
         "missions":  missions,
         "selection": selection_for(p["code"]),
         "legal":     build_legal_block("city_dep"),
+        "rivals":    build_rivals_block(p["code"]),
         "city":      city,
     }
 
