@@ -1185,6 +1185,7 @@ async def copilot_candidate_cabinet(
         checklist_for_stage, current_stage, days_until,
         default_election_date, party_meta,
     )
+    from analytics.candidate_primaries import selection_for
     p = party_meta(party)
     election_date = default_election_date()
     d_until = days_until(election_date)
@@ -1233,6 +1234,7 @@ async def copilot_candidate_cabinet(
         "stage":     stage,
         "checklist": checklist,
         "missions":  missions,
+        "selection": selection_for(p["code"]),
         "city":      city,
     }
 

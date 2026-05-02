@@ -191,18 +191,7 @@
         <div class="cc-block-title">🤝 Союзники</div>
         <ul class="cc-list">${(data.party.allies || []).map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
       </div>
-      ${data.party.primaries ? `
-        <div class="cc-block">
-          <div class="cc-block-title">🗳 Праймериз — ${esc(data.party.primaries_kind || "")}</div>
-          <p class="cc-empty">Подключение к платформе праймериз появится в Этапе 3.
-          Здесь будет: текущий рейтинг внутри партии, число привлечённых голосов,
-          расписание дебатов.</p>
-        </div>` : `
-        <div class="cc-block">
-          <div class="cc-block-title">📋 Кадровый отбор</div>
-          <p class="cc-empty">У ${esc(data.party.name)} формальных праймериз нет — отбор через партийный
-          аппарат. В Этапе 3 добавим: контакты регионального руководства, расписание собраний актива.</p>
-        </div>`}
+      ${renderSelectionBlock(data.selection || {})}
     `;
   }
 
@@ -218,6 +207,50 @@
         <div class="cc-block-title">💰 Избирательный фонд</div>
         <p class="cc-empty">Калькулятор бюджета и контроль за расходованием —
         Этап 4. Лимиты и нарушения по 67-ФЗ.</p>
+      </div>
+    `;
+  }
+
+  function renderSelectionBlock(s) {
+    if (!s || !s.kind) return "";
+    const isDemo = s.data_kind === "demo";
+    const pct = s.progress_pct || 0;
+    return `
+      <div class="cc-block cc-selection cc-sel-${esc(s.kind)}">
+        <div class="cc-block-title">
+          ${esc(s.icon || "🗳")} ${esc(s.title || "Отбор")}
+          ${isDemo ? `<span class="cc-fallback-tag">демо</span>` : ""}
+        </div>
+        <p class="cc-empty" style="margin: 0 0 10px;">${esc(s.subtitle || "")}</p>
+
+        <div class="cc-sel-progress">
+          <div class="cc-sel-bar">
+            <div class="cc-sel-bar-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="cc-sel-meta">
+            <span class="cc-sel-num">${s.current}/${s.target}</span>
+            <span class="cc-sel-unit">${esc(s.unit || "")}</span>
+            ${s.position ? `<span class="cc-sel-pos">${esc(s.position)}</span>` : ""}
+            ${s.deadline_days != null ? `<span class="cc-sel-deadline">⏱ ${s.deadline_days} дн до конца</span>` : ""}
+          </div>
+        </div>
+
+        ${(s.boost_actions || []).length ? `
+          <div class="cc-sel-actions">
+            <div class="cc-col-title">Что поднимет показатель</div>
+            <ol class="cc-list">
+              ${(s.boost_actions || []).map((a) => `<li>${esc(a)}</li>`).join("")}
+            </ol>
+          </div>` : ""}
+
+        ${(s.links || []).length ? `
+          <div class="cc-sel-links">
+            ${(s.links || []).map(([label, url]) => `
+              <a class="cc-sel-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>
+            `).join("")}
+          </div>` : ""}
+
+        ${(s.platform) ? `<div class="cc-sel-platform">Платформа: <b>${esc(s.platform)}</b></div>` : ""}
       </div>
     `;
   }
