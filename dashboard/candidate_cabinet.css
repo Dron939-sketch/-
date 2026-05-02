@@ -358,6 +358,26 @@
   color: rgba(184, 212, 255, 0.6);
 }
 
+/* --- Юридика и штаб --- */
+.cc-team-cost {
+  margin-left: auto;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #B0F0C0;
+  padding: 3px 10px;
+  background: rgba(79, 204, 117, 0.15);
+  border: 1px solid rgba(79, 204, 117, 0.4);
+  border-radius: 999px;
+}
+.cc-team-rate {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--cc-color, #5EA8FF);
+}
+.cc-team-essential { border-left: 3px solid #FF9F4A; }
+
 /* --- Mobile --- */
 @media (max-width: 700px) {
   .cc-hero { grid-template-columns: 1fr; }

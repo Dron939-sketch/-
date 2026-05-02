@@ -18,6 +18,7 @@
     { id: "voters",     icon: "🗳", label: "Электорат",   sub: "сегменты, обещания" },
     { id: "party",      icon: "🏛", label: "Партия",      sub: "тон, актив, программа" },
     { id: "media",      icon: "📢", label: "СМИ",         sub: "контент-план, бюджет" },
+    { id: "legal",      icon: "⚖", label: "Юридика и штаб", sub: "67-ФЗ, документы, фонд, команда" },
   ];
 
   function loadActiveTab(party) {
@@ -211,6 +212,111 @@
     `;
   }
 
+  function renderLegalTab(data) {
+    const legal = data.legal || {};
+    const docs = legal.documents || [];
+    const prohibitions = legal.prohibitions || [];
+    const fund = legal.fund || {};
+    const team = legal.team || {};
+    const fmt = (n) => n.toLocaleString("ru-RU") + " ₽";
+    return `
+      <div class="cc-block">
+        <div class="cc-block-title">📋 Документы для регистрации</div>
+        <p class="cc-empty" style="margin: 0 0 8px;">67-ФЗ «Об основных гарантиях избирательных прав». Полный пакет — за 35-45 дней до подачи.</p>
+        <ul class="cc-checklist">
+          ${docs.map((d) => `
+            <li class="cc-check ${d.required ? 'cc-check-high' : ''}">
+              <span class="cc-check-icon">${d.required ? "★" : "○"}</span>
+              <div>
+                <div style="font-weight: 700">${esc(d.name)}</div>
+                <div style="font-size: 0.78rem; color: rgba(184, 212, 255, 0.65)">${esc(d.where || "")}</div>
+              </div>
+            </li>
+          `).join("")}
+        </ul>
+      </div>
+
+      <div class="cc-block">
+        <div class="cc-block-title">🚫 Запреты по 67-ФЗ</div>
+        <div class="cc-info-grid">
+          ${prohibitions.map((p) => `
+            <div class="cc-info-card">
+              <div class="cc-info-head">
+                <span class="cc-info-emoji">${esc(p.icon)}</span>
+                <span class="cc-info-title" style="font-size: 0.92rem">${esc(p.title)}</span>
+              </div>
+              <div class="cc-info-body">${esc(p.what)}</div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="cc-block">
+        <div class="cc-block-title">
+          💰 Избирательный фонд — ${esc(fund.label || "")}
+          <span class="cc-fallback-tag">справочно</span>
+        </div>
+        <div class="cc-info-grid">
+          <div class="cc-info-card">
+            <div class="cc-info-emoji">📊</div>
+            <div class="cc-info-title">Лимит фонда</div>
+            <div class="cc-info-body" style="font-size: 1.1rem; font-weight: 700; color: var(--cc-color, #5EA8FF)">
+              ${fund.max_fund ? fmt(fund.max_fund) : "—"}
+            </div>
+          </div>
+          <div class="cc-info-card">
+            <div class="cc-info-emoji">💼</div>
+            <div class="cc-info-title">Из собственных средств</div>
+            <div class="cc-info-body" style="font-size: 1.1rem; font-weight: 700">
+              ${fund.max_self ? fmt(fund.max_self) : "—"}
+            </div>
+          </div>
+        </div>
+        ${fund.note ? `<div class="cc-empty" style="margin-top: 8px">${esc(fund.note)}</div>` : ""}
+      </div>
+
+      <div class="cc-block">
+        <div class="cc-block-title">
+          👥 Штаб — минимум для регистрации
+          <span class="cc-team-cost">от ${fmt(team.min_payroll || 0)}/мес</span>
+        </div>
+        <div class="cc-info-grid">
+          ${(team.essentials || []).map((r) => `
+            <div class="cc-info-card cc-team-essential">
+              <div class="cc-info-head">
+                <span class="cc-info-emoji">${esc(r.icon)}</span>
+                <span class="cc-info-tag">обязательно</span>
+              </div>
+              <div class="cc-info-title">${esc(r.title)}</div>
+              <div class="cc-info-body">${esc(r.what)}</div>
+              ${r.rate_per_month_rub > 0 ? `<div class="cc-team-rate">${fmt(r.rate_per_month_rub)}/мес</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="cc-block">
+        <div class="cc-block-title">
+          ✨ Расширенный штаб — для активной кампании
+          <span class="cc-team-cost">+${fmt((team.full_payroll || 0) - (team.min_payroll || 0))}/мес</span>
+        </div>
+        <div class="cc-info-grid">
+          ${(team.optionals || []).map((r) => `
+            <div class="cc-info-card">
+              <div class="cc-info-head">
+                <span class="cc-info-emoji">${esc(r.icon)}</span>
+                <span class="cc-info-tag">опционально</span>
+              </div>
+              <div class="cc-info-title">${esc(r.title)}</div>
+              <div class="cc-info-body">${esc(r.what)}</div>
+              ${r.rate_per_month_rub > 0 ? `<div class="cc-team-rate">${fmt(r.rate_per_month_rub)}/мес</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
   function renderSelectionBlock(s) {
     if (!s || !s.kind) return "";
     const isDemo = s.data_kind === "demo";
@@ -300,6 +406,9 @@
       </div>
       <div class="cc-tab-pane" data-tab="media" ${activeTab === "media" ? "" : "hidden"}>
         ${renderMediaTab(data)}
+      </div>
+      <div class="cc-tab-pane" data-tab="legal" ${activeTab === "legal" ? "" : "hidden"}>
+        ${renderLegalTab(data)}
       </div>
     `;
     hero.addEventListener("click", onTabClick);

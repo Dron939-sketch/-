@@ -1181,6 +1181,7 @@ async def copilot_candidate_cabinet(
     """Кабинет кандидата в депутаты. Без VK-токена работает (нет посторонней
     зависимости от данных). Партийная логика берётся из analytics.candidate_party.
     """
+    from analytics.candidate_legal import build_legal_block
     from analytics.candidate_party import (
         checklist_for_stage, current_stage, days_until,
         default_election_date, party_meta,
@@ -1235,6 +1236,7 @@ async def copilot_candidate_cabinet(
         "checklist": checklist,
         "missions":  missions,
         "selection": selection_for(p["code"]),
+        "legal":     build_legal_block("city_dep"),
         "city":      city,
     }
 
