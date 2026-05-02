@@ -578,12 +578,28 @@
           и весь функционал без ограничений.
         </p>
         <div class="cc-paywall-price">${esc(SUBSCRIPTION_PRICE)}</div>
-        <div class="cc-paywall-actions">
-          <a class="cc-paywall-btn primary" href="mailto:smart-mind@yandex.ru?subject=Подписка кабинета кандидата">
-            🚀 Купить подписку
-          </a>
-          <button type="button" class="cc-paywall-btn ghost" id="cc-paywall-close-btn">Завтра вернусь</button>
+
+        <div class="cc-paywall-form" id="cc-paywall-form">
+          <input type="text" class="cc-audit-input" id="cc-paywall-contact"
+                 placeholder="Телефон, email или Telegram — куда позвонить" autocomplete="off">
+          <div class="cc-paywall-actions">
+            <button type="button" class="cc-paywall-btn primary" id="cc-paywall-buy">
+              🚀 Купить подписку
+            </button>
+            <button type="button" class="cc-paywall-btn ghost" id="cc-paywall-close-btn">
+              Завтра вернусь
+            </button>
+          </div>
         </div>
+
+        <div class="cc-paywall-success" id="cc-paywall-success" hidden>
+          <div class="cc-paywall-ok-icon">✓</div>
+          <div class="cc-paywall-ok-text">
+            <b>Заявка отправлена.</b>
+            <div>Я свяжусь с вами в ближайшее время.</div>
+          </div>
+        </div>
+
         <div class="cc-paywall-hint">
           Счётчик 10 мин обнулится через <b>${hh}ч ${mm}м</b> — в полночь по местному времени.
         </div>
@@ -591,6 +607,32 @@
     `;
     document.body.appendChild(wrap);
     wrap.querySelector("#cc-paywall-close-btn")?.addEventListener("click", () => wrap.remove());
+    wrap.querySelector("#cc-paywall-buy")?.addEventListener("click", submitPaymentIntent);
+  }
+
+  async function submitPaymentIntent() {
+    const wrap = document.getElementById("cc-paywall");
+    if (!wrap) return;
+    const btn = document.getElementById("cc-paywall-buy");
+    const contact = (document.getElementById("cc-paywall-contact")?.value || "").trim();
+    const role = window.cmRole?.get?.() || null;
+    const party = window.cmRole?.party?.() || null;
+    if (btn) { btn.disabled = true; btn.textContent = "Отправляю…"; }
+    try {
+      const r = await fetch("/api/copilot/payment/intent", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, party, contact }),
+      });
+      if (r.ok) {
+        document.getElementById("cc-paywall-form")?.setAttribute("hidden", "");
+        const ok = document.getElementById("cc-paywall-success");
+        if (ok) ok.hidden = false;
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = "Попробовать ещё раз"; }
+      }
+    } catch (_) {
+      if (btn) { btn.disabled = false; btn.textContent = "Сеть недоступна — попробовать ещё"; }
+    }
   }
 
   function checkDemoLimitOnLoad() {
