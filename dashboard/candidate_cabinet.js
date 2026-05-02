@@ -753,9 +753,35 @@
     `;
     hero.addEventListener("click", onTabClick);
     document.getElementById("cc-run-audit")?.addEventListener("click", openAuditModal);
+    document.getElementById("cc-create-content")?.addEventListener("click", () => showSoonModal("🎬 Создать контент",
+      "Wizard контент-плана появится в следующей итерации. Пока используй блок «🎯 Кампания» — там чек-лист и миссии."));
+    document.getElementById("cc-create-event")?.addEventListener("click", () => showSoonModal("📣 Создать медиаповод",
+      "Wizard сценария PR-события появится в следующей итерации. Пока используй блок «🥊 Конкуренты» — там можно посмотреть тон коллег."));
     // Запускаем демо-таймер. Если уже исчерпан — показываем paywall сразу.
     if (!checkDemoLimitOnLoad()) return;
     startDemoTimer();
+  }
+
+  function showSoonModal(title, message) {
+    const old = document.getElementById("cc-soon-modal");
+    if (old) old.remove();
+    const wrap = document.createElement("div");
+    wrap.id = "cc-soon-modal";
+    wrap.className = "cc-audit-modal";
+    wrap.innerHTML = `
+      <div class="cc-audit-bg" data-close></div>
+      <div class="cc-audit-card" style="max-width: 480px">
+        <button type="button" class="cc-audit-close" data-close>✕</button>
+        <div class="cc-audit-eyebrow">Скоро в подписке</div>
+        <h3 class="cc-audit-title">${esc(title)}</h3>
+        <p class="cc-audit-sub">${esc(message)}</p>
+        <button type="button" class="cc-paywall-btn primary" data-close style="margin-top: 12px">Понятно</button>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+    wrap.querySelectorAll("[data-close]").forEach((el) =>
+      el.addEventListener("click", () => wrap.remove()),
+    );
   }
 
   // ---------------------------------------------------------------------------
