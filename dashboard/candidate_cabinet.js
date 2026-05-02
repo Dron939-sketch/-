@@ -35,32 +35,64 @@
   // Render
   // ---------------------------------------------------------------------------
 
-  function renderHeader(p, election, stage) {
+  function renderHeader(p, election, stage, cityBrief) {
     const days = election.days_until;
     const daysLabel = days === 1 ? "1 день" : (days % 10 === 1 && days !== 11 ? `${days} день` : `${days} дней`);
     const dateStr = election.date
       ? new Date(election.date).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })
       : "";
+    const kpi = (cityBrief && cityBrief.kpi) || [];
     return `
       <div class="cc-hero" style="--cc-color: ${esc(p.color || '#5EA8FF')}">
-        <div class="cc-hero-badge">
-          <span class="cc-hero-emoji">${esc(p.emoji || "🇷🇺")}</span>
-        </div>
-        <div class="cc-hero-text">
-          <div class="cc-hero-eyebrow">
-            Кабинет кандидата · ${esc(p.short || "—")}
-            ${renderDemoIndicator()}
+        <div class="cc-hero-row">
+          <div class="cc-hero-badge">
+            <span class="cc-hero-emoji">${esc(p.emoji || "🇷🇺")}</span>
           </div>
-          <h1 class="cc-hero-greet">${esc(p.name || "Кандидат")}</h1>
-          <div class="cc-hero-meta">
-            ${esc(stage.icon || "▶")} Этап «${esc(stage.name)}» · ${esc(stage.what || "")}
+          <div class="cc-hero-text">
+            <div class="cc-hero-eyebrow">
+              Кабинет кандидата · ${esc(p.short || "—")}
+              ${renderDemoIndicator()}
+            </div>
+            <h1 class="cc-hero-greet">${esc(p.name || "Кандидат")}</h1>
+            <div class="cc-hero-meta">
+              ${esc(stage.icon || "▶")} Этап «${esc(stage.name)}» · ${esc(stage.what || "")}
+            </div>
+          </div>
+          <div class="cc-countdown">
+            <div class="cc-countdown-num">${days}</div>
+            <div class="cc-countdown-label">${days < 0 ? "выборы прошли" : `${daysLabel} до выборов`}</div>
+            <div class="cc-countdown-date">${esc(dateStr)}</div>
           </div>
         </div>
-        <div class="cc-countdown">
-          <div class="cc-countdown-num">${days}</div>
-          <div class="cc-countdown-label">${days < 0 ? "выборы прошли" : `${daysLabel} до выборов`}</div>
-          <div class="cc-countdown-date">${esc(dateStr)}</div>
+
+        <div class="cc-hero-actions">
+          <button type="button" class="cc-action-btn cc-action-primary" id="cc-create-content">
+            <span class="cc-action-emoji">🎬</span>
+            <span class="cc-action-title">Контент</span>
+          </button>
+          <button type="button" class="cc-action-btn cc-action-secondary" id="cc-create-event">
+            <span class="cc-action-emoji">📣</span>
+            <span class="cc-action-title">Медиаповод</span>
+          </button>
+          <button type="button" class="cc-action-btn cc-action-audit" id="cc-run-audit">
+            <span class="cc-action-emoji">🎭</span>
+            <span class="cc-action-title">Аудит VK + стратегия</span>
+          </button>
         </div>
+
+        ${kpi.length ? `
+          <div class="cc-city-kpi-strip">
+            <div class="cc-kpi-eyebrow">🏙 Город сейчас (Мейстер 0-6)</div>
+            <div class="cc-kpi-row">
+              ${kpi.map((v) => `
+                <div class="cc-kpi-tile" title="${esc(v.name)}">
+                  <div class="cc-kpi-code">${esc(v.code)}</div>
+                  <div class="cc-kpi-val">${v.value}<span class="cc-kpi-max">/${v.max}</span></div>
+                  <div class="cc-kpi-name">${esc(v.name)}</div>
+                </div>
+              `).join("")}
+            </div>
+          </div>` : ""}
       </div>
     `;
   }
@@ -599,7 +631,7 @@
     }
     const activeTab = loadActiveTab(party);
     hero.innerHTML = `
-      ${renderHeader(data.party || {}, data.election || {}, data.stage || {})}
+      ${renderHeader(data.party || {}, data.election || {}, data.stage || {}, data.city_brief || {})}
       ${renderTabs(activeTab)}
       <div class="cc-tab-pane" data-tab="campaign" ${activeTab === "campaign" ? "" : "hidden"}>
         ${renderCampaignTab(data)}
@@ -621,9 +653,141 @@
       </div>
     `;
     hero.addEventListener("click", onTabClick);
+    document.getElementById("cc-run-audit")?.addEventListener("click", openAuditModal);
     // Запускаем демо-таймер. Если уже исчерпан — показываем paywall сразу.
     if (!checkDemoLimitOnLoad()) return;
     startDemoTimer();
+  }
+
+  // ---------------------------------------------------------------------------
+  // VK Audit модалка — вход handle, результат с рекомендациями
+  // ---------------------------------------------------------------------------
+
+  function openAuditModal() {
+    const old = document.getElementById("cc-audit-modal");
+    if (old) old.remove();
+    const wrap = document.createElement("div");
+    wrap.id = "cc-audit-modal";
+    wrap.className = "cc-audit-modal";
+    wrap.innerHTML = `
+      <div class="cc-audit-bg" data-close></div>
+      <div class="cc-audit-card">
+        <button type="button" class="cc-audit-close" data-close>✕</button>
+        <div class="cc-audit-eyebrow">🎭 Аудит VK-страницы кандидата</div>
+        <h3 class="cc-audit-title">Введите ссылку на свой VK</h3>
+        <p class="cc-audit-sub">
+          Я проанализирую посты, тон, частоту и архетип. Дам рекомендации
+          по образу, бренду, целевому архетипу и победной стратегии.
+        </p>
+        <input type="text" class="cc-audit-input" id="cc-audit-input"
+               placeholder="vk.com/ivanov или ivanov" autocomplete="off">
+        <button type="button" class="cc-paywall-btn primary" id="cc-audit-go" style="margin-top: 12px">
+          🚀 Запустить аудит
+        </button>
+        <div class="cc-audit-result" id="cc-audit-result"></div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+    wrap.querySelectorAll("[data-close]").forEach((el) =>
+      el.addEventListener("click", () => wrap.remove()),
+    );
+    wrap.querySelector("#cc-audit-go")?.addEventListener("click", runAudit);
+  }
+
+  async function runAudit() {
+    const input = document.getElementById("cc-audit-input");
+    const result = document.getElementById("cc-audit-result");
+    const handle = (input?.value || "").trim();
+    if (!handle) {
+      if (result) result.innerHTML = `<div class="cc-empty">Введите VK handle или ссылку.</div>`;
+      return;
+    }
+    const party = window.cmRole?.party?.() || "independent";
+    if (result) result.innerHTML = `<div class="cc-empty">⏳ Анализирую страницу… это занимает 5-10 секунд.</div>`;
+    try {
+      const r = await fetch("/api/copilot/candidate/audit", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handle, party }),
+      });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({}));
+        if (result) result.innerHTML = `<div class="cc-empty">Не получилось: ${esc(detail.detail || r.status)}</div>`;
+        return;
+      }
+      const data = await r.json();
+      if (result) result.innerHTML = renderAuditResult(data);
+    } catch (e) {
+      if (result) result.innerHTML = `<div class="cc-empty">Сеть недоступна.</div>`;
+    }
+  }
+
+  function renderAuditResult(d) {
+    const recs = d.recommendations || {};
+    const a = d.audit || {};
+    const m = a.metrics || {};
+    const align = a.alignment_score;
+    const profile = d.profile || {};
+    const aff = d.affinity || [];
+    const voice = d.voice_portrait || {};
+    return `
+      <div class="cc-audit-output">
+        ${profile.photo ? `<img class="cc-audit-photo" src="${esc(profile.photo)}" alt="" />` : ""}
+        <div class="cc-audit-stats">
+          <div><b>${align != null ? Math.round(align) : "—"}%</b> соответствие архетипу</div>
+          <div><b>${m.posts_per_week ?? 0}</b> постов в неделю</div>
+          <div><b>${Math.round(m.avg_likes ?? 0)}</b> лайков в среднем</div>
+          ${profile.followers ? `<div><b>${profile.followers}</b> подписчиков</div>` : ""}
+        </div>
+
+        ${aff.length ? `
+          <div class="cc-audit-section">
+            <div class="cc-block-title">🎭 Top архетипы (близость постов)</div>
+            <div class="cc-audit-aff">
+              ${aff.slice(0, 3).map((x, i) => `
+                <div class="cc-audit-aff-row">
+                  <span class="cc-audit-aff-rank">${i + 1}</span>
+                  <span class="cc-audit-aff-name">${esc(x.name)}</span>
+                  <span class="cc-audit-aff-pct">${x.affinity}%</span>
+                </div>
+              `).join("")}
+            </div>
+          </div>` : ""}
+
+        ${voice.state === "ok" ? `
+          <div class="cc-audit-section">
+            <div class="cc-block-title">🎙 Голос-портрет</div>
+            <div class="cc-empty">${esc(voice.headline || "")}</div>
+          </div>` : ""}
+
+        <div class="cc-audit-section">
+          <div class="cc-block-title">👁 Образ глазами избирателя</div>
+          <ul class="cc-list">${(recs.image || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+        </div>
+
+        <div class="cc-audit-section">
+          <div class="cc-block-title">🏷 Бренд — что укрепить</div>
+          <ul class="cc-list">${(recs.brand || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+        </div>
+
+        <div class="cc-audit-section">
+          <div class="cc-block-title">🎭 Целевой архетип под партию</div>
+          <ul class="cc-list">${(recs.archetype || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+        </div>
+
+        <div class="cc-audit-section cc-audit-strategy">
+          <div class="cc-block-title">🏆 Победная стратегия — 30 дней</div>
+          <div class="cc-info-grid">
+            ${(recs.strategy || []).map((s) => `
+              <div class="cc-info-card">
+                <div class="cc-info-emoji">${esc(s.icon)}</div>
+                <div class="cc-info-title">${esc(s.what)}</div>
+                <div class="cc-info-body">${esc(s.why)}</div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   function onTabClick(ev) {

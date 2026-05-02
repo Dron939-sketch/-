@@ -1174,6 +1174,28 @@ def _build_district_today(deputy: dict) -> dict:
     }
 
 
+class CandidateAuditIn(BaseModel):
+    handle: str = Field(..., min_length=2, max_length=120)
+    party:  str = Field("independent", min_length=2, max_length=40)
+
+
+@router.post("/candidate/audit")
+async def copilot_candidate_audit(payload: CandidateAuditIn) -> dict:
+    """Аудит VK-страницы кандидата + рекомендации по образу/бренду/
+    архетипу/победной стратегии. Использует существующие audit_vk_page +
+    archetype_affinity + voice_portrait, поверх — partyaware рекомендации.
+    """
+    from analytics.candidate_audit import build_candidate_audit
+    from db.jarvis_user_vk_queries import normalize_handle
+    h = normalize_handle(payload.handle)
+    if not h:
+        raise HTTPException(
+            status_code=422,
+            detail="Неверный VK handle (укажите screen_name или ссылку https://vk.com/...).",
+        )
+    return await build_candidate_audit(h, payload.party)
+
+
 @router.get("/candidate/cabinet")
 async def copilot_candidate_cabinet(
     party: str = "independent", city: str = "Коломна",
@@ -1188,6 +1210,7 @@ async def copilot_candidate_cabinet(
     )
     from analytics.candidate_primaries import selection_for
     from analytics.candidate_rivals import build_rivals_block
+    from analytics.deputy_city_brief import build_city_brief
     p = party_meta(party)
     election_date = default_election_date()
     d_until = days_until(election_date)
@@ -1214,6 +1237,11 @@ async def copilot_candidate_cabinet(
                 "effort": "S" if it["priority"] == "medium" else "M",
             })
 
+    # Город — KPI Мейстера + новости. Используем тот же модуль что у
+    # депутата с pseudo-секторами (общая повестка кандидата).
+    pseudo_deputy_for_city = {"sectors": ["общая_повестка", "ЖКХ", "благоустройство"]}
+    city_brief = await build_city_brief(pseudo_deputy_for_city, city=city)
+
     return {
         "party": {
             "code":            p["code"],
@@ -1239,6 +1267,7 @@ async def copilot_candidate_cabinet(
         "selection": selection_for(p["code"]),
         "legal":     build_legal_block("city_dep"),
         "rivals":    build_rivals_block(p["code"]),
+        "city_brief": city_brief,
         "city":      city,
     }
 
