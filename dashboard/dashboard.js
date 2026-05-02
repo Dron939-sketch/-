@@ -2641,7 +2641,7 @@ async function refresh() {
   // 4-8x ускорение vs sequential await.
   const tasks = [];
 
-  if (_roleAllows("mayor", "vice", "guest")) {
+  if (_roleAllows("mayor", "vice", "candidate")) {
     tasks.push(_fetchAndRender("pulse",
       `/api/city/${slug}/pulse`, renderCityPulse));
   }
@@ -2679,7 +2679,7 @@ async function refresh() {
     tasks.push(_fetchAndRender("benchmark",
       `/api/benchmark`, renderBenchmark));
   }
-  if (_roleAllows("mayor", "vice", "guest")) {
+  if (_roleAllows("mayor", "vice", "candidate")) {
     tasks.push(_fetchAndRender("crisis",
       `/api/city/${slug}/crisis`, renderCrisis));
   }
@@ -2714,7 +2714,7 @@ async function refresh() {
     tasks.push(_fetchAndRender("deputy-coverage",
       `/api/city/${slug}/deputy-coverage?hours=24`, renderCoverage));
   }
-  if (_roleAllows("mayor", "vice", "guest")) {
+  if (_roleAllows("mayor", "vice", "candidate")) {
     tasks.push(_fetchAndRender("happiness_events",
       `/api/city/${slug}/happiness_events`, renderHappinessEvents));
   }

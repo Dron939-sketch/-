@@ -1,6 +1,6 @@
 // =============================================================================
 // Role picker — demo-режим без логинов. При первом заходе пользователь
-// выбирает роль (мэр / зам мэра / депутат / гость), выбор пишется в
+// выбирает роль (мэр / зам мэра / депутат / кандидат), выбор пишется в
 // localStorage. Каждая <section> с data-roles="..." скрывается, если
 // текущая роль не в списке. Чип в topbar показывает текущую роль и
 // открывает picker по клику.
@@ -11,14 +11,25 @@
 
   const STORAGE_KEY = "cm.role";
   const STORAGE_DEPUTY = "cm.deputyId";
-  const VALID_ROLES = ["mayor", "vice", "deputy", "guest"];
+  const STORAGE_PARTY  = "cm.candidate.party";
+  const VALID_ROLES = ["mayor", "vice", "deputy", "candidate"];
 
   const ROLES = {
-    mayor:  { emoji: "🏛", label: "Мэр",       desc: "Полный обзор города, все инструменты управления." },
-    vice:   { emoji: "⚙️", label: "Зам мэра",   desc: "Свой сектор: метрики, темы, депутаты." },
-    deputy: { emoji: "📋", label: "Депутат",    desc: "Округ, личный SMM-аудит, контент-план." },
-    guest:  { emoji: "👤", label: "Гость",     desc: "Город как житель: погода, пульс, Джарвис." },
+    mayor:     { emoji: "🏛", label: "Мэр",                 desc: "Полный обзор города, все инструменты управления." },
+    vice:      { emoji: "⚙️", label: "Зам мэра",             desc: "Свой сектор: метрики, темы, депутаты." },
+    deputy:    { emoji: "📋", label: "Депутат",             desc: "Округ, личный SMM-аудит, контент-план." },
+    candidate: { emoji: "🇷🇺", label: "Кандидат в депутаты", desc: "Кампания, праймериз, конкуренты, штаб." },
   };
+
+  // Партии для второго шага «кандидат». 5 партий + самовыдвиженец.
+  const PARTIES = [
+    { code: "er",          emoji: "🐻", short: "ЕР",      label: "Единая Россия",       desc: "Праймериз через er.ru, партийная вертикаль, акцент на стабильности." },
+    { code: "new_people",  emoji: "✨", short: "НЛ",      label: "Новые люди",           desc: "Открытые онлайн-праймериз, ставка на новые лица и предпринимателей." },
+    { code: "ldpr",        emoji: "🦅", short: "ЛДПР",    label: "ЛДПР",                 desc: "Кадровый отбор через партаппарат, эмоциональная риторика." },
+    { code: "sr",          emoji: "⚖", short: "СР",      label: "Справедливая Россия",  desc: "Социальная справедливость, объединение со «За Правду»." },
+    { code: "kprf",        emoji: "☭", short: "КПРФ",    label: "Коммунисты",           desc: "Региональная сеть, идеологическая преемственность." },
+    { code: "independent", emoji: "🗽", short: "Самовыдв.", label: "Самовыдвиженец",     desc: "Без партии — нужно собрать подписи избирателей округа." },
+  ];
 
   // ---------------------------------------------------------------------------
   // State
@@ -40,6 +51,18 @@
     try {
       if (id) localStorage.setItem(STORAGE_DEPUTY, id);
       else    localStorage.removeItem(STORAGE_DEPUTY);
+    } catch (_) {}
+  }
+  function getParty() {
+    try {
+      const v = localStorage.getItem(STORAGE_PARTY);
+      return PARTIES.some((p) => p.code === v) ? v : null;
+    } catch (_) { return null; }
+  }
+  function setParty(code) {
+    try {
+      if (code) localStorage.setItem(STORAGE_PARTY, code);
+      else      localStorage.removeItem(STORAGE_PARTY);
     } catch (_) {}
   }
 
@@ -79,8 +102,9 @@
   async function renderChip(role) {
     const chip = document.getElementById("role-chip");
     if (!chip) return;
-    const meta = ROLES[role] || ROLES.guest;
+    const meta = ROLES[role] || ROLES.candidate;
     let label = meta.label;
+    let emoji = meta.emoji;
     if (role === "deputy") {
       const eid = getDeputyId();
       if (eid) {
@@ -92,8 +116,16 @@
         }
       }
     }
+    if (role === "candidate") {
+      const code = getParty();
+      const p = PARTIES.find((pp) => pp.code === code);
+      if (p) {
+        emoji = p.emoji;
+        label = "Кандидат · " + p.short;
+      }
+    }
     chip.innerHTML = `
-      <span class="rc-chip-emoji">${meta.emoji}</span>
+      <span class="rc-chip-emoji">${emoji}</span>
       <span class="rc-chip-label">${label}</span>
       <span class="rc-chip-arrow">▾</span>
     `;
@@ -135,8 +167,13 @@
           await renderDeputyStep(wrap);
           return;
         }
+        if (role === "candidate") {
+          renderCandidateStep(wrap);
+          return;
+        }
         // Для не-депутата сбрасываем привязку к конкретному депутату
         setDeputyId(null);
+        setParty(null);
         setRole(role);
         applyRoleVisibility(role);
         renderChip(role);
@@ -220,6 +257,51 @@
     });
   }
 
+  function renderCandidateStep(wrap) {
+    const card = wrap.querySelector(".rc-card");
+    if (!card) return;
+    card.innerHTML = `
+      <div class="rc-eyebrow">Демо-режим · Шаг 2 из 2</div>
+      <h2 class="rc-title">От какой партии?</h2>
+      <p class="rc-sub">
+        Выбор партии настраивает кабинет: тон коммуникации, праймериз,
+        партийную вертикаль, конкурентный анализ соратников и оппонентов.
+      </p>
+      <div class="rc-parties">
+        ${PARTIES.map((p) => `
+          <button type="button" class="rc-party rc-party-${p.code}" data-code="${p.code}">
+            <span class="rc-party-emoji">${p.emoji}</span>
+            <span class="rc-party-text">
+              <span class="rc-party-label">${p.label}</span>
+              <span class="rc-party-desc">${p.desc}</span>
+            </span>
+          </button>
+        `).join("")}
+      </div>
+      <button type="button" class="rc-back" id="rc-back">← Назад к выбору роли</button>
+    `;
+
+    card.querySelectorAll(".rc-party").forEach((b) => {
+      b.addEventListener("click", () => {
+        const code = b.getAttribute("data-code");
+        if (!code) return;
+        setRole("candidate");
+        setParty(code);
+        setDeputyId(null);
+        applyRoleVisibility("candidate");
+        renderChip("candidate");
+        closePicker();
+        document.dispatchEvent(new CustomEvent("role:change", {
+          detail: { role: "candidate", party: code },
+        }));
+      });
+    });
+    card.querySelector("#rc-back")?.addEventListener("click", () => {
+      closePicker();
+      openPicker();
+    });
+  }
+
   function closePicker() {
     const m = document.getElementById("rc-modal");
     if (m) m.remove();
@@ -237,9 +319,10 @@
   window.cmRole = {
     get:        getRole,
     deputyId:   getDeputyId,
+    party:      getParty,
     set:        (r) => { if (VALID_ROLES.includes(r)) setRole(r); applyRoleVisibility(r); renderChip(r); },
     open:       openPicker,
-    apply:      (r) => applyRoleVisibility(r || getRole() || "guest"),
+    apply:      (r) => applyRoleVisibility(r || getRole() || "candidate"),
   };
 
   function init() {
@@ -248,9 +331,10 @@
       applyRoleVisibility(role);
       renderChip(role);
     } else {
-      // По умолчанию — гость, чтобы layout не дёргался; модалка закрепит выбор
-      applyRoleVisibility("guest");
-      renderChip("guest");
+      // По умолчанию — кандидат (наш main demo target), чтобы layout не дёргался;
+      // модалка закрепит реальный выбор
+      applyRoleVisibility("candidate");
+      renderChip("candidate");
       openPicker();
     }
     const chip = document.getElementById("role-chip");

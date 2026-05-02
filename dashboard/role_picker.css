@@ -199,6 +199,57 @@
 }
 .rc-back:hover { border-color: #5EA8FF; background: rgba(94, 168, 255, 0.1); }
 
+/* --- Шаг 2: выбор партии для кандидата --- */
+.rc-parties {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.rc-party {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  background: rgba(7, 20, 42, 0.6);
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 12px;
+  text-align: left;
+  color: #DBE9FF;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+}
+.rc-party:hover {
+  transform: translateY(-1px);
+  background: rgba(94, 168, 255, 0.12);
+  border-color: #5EA8FF;
+}
+.rc-party-emoji {
+  font-size: 1.6rem; line-height: 1;
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(94, 168, 255, 0.08);
+  border-radius: 50%;
+}
+.rc-party-text { display: flex; flex-direction: column; gap: 2px; }
+.rc-party-label {
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #B8D4FF;
+}
+.rc-party-desc {
+  font-size: 0.78rem;
+  color: rgba(184, 212, 255, 0.65);
+  line-height: 1.4;
+}
+/* Партийные акценты — левая полоса в фирменных цветах */
+.rc-party-er          { border-left: 3px solid #2C70D9; }  /* синий ЕР */
+.rc-party-new_people  { border-left: 3px solid #00B4FF; }  /* голубой НЛ */
+.rc-party-ldpr        { border-left: 3px solid #FFD700; }  /* жёлтый ЛДПР */
+.rc-party-sr          { border-left: 3px solid #FF6B6B; }  /* красно-розовый СР */
+.rc-party-kprf        { border-left: 3px solid #C70000; }  /* красный КПРФ */
+.rc-party-independent { border-left: 3px solid #B0B0B0; }  /* серый — без партии */
+
 @media (max-width: 540px) {
   .rc-grid { grid-template-columns: 1fr; }
   .rc-card { padding: 22px 20px 24px; }
