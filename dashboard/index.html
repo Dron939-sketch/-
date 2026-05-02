@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/copilot.css?v=5" />
   <link rel="stylesheet" href="/role_picker.css?v=3" />
   <link rel="stylesheet" href="/deputy_cabinet.css?v=22" />
+  <link rel="stylesheet" href="/candidate_cabinet.css?v=1" />
 </head>
 <body>
   <header class="topbar">
@@ -75,6 +76,11 @@
     <!-- Личный кабинет депутата — wow-первый экран при role=deputy -->
     <section class="card wide deputy-cabinet" id="deputy-cabinet-hero" data-roles="deputy" hidden>
       <div class="dc-loading">Готовлю ваш личный кабинет…</div>
+    </section>
+
+    <!-- Кабинет кандидата в депутаты — при role=candidate -->
+    <section class="card wide candidate-cabinet" id="candidate-cabinet-hero" data-roles="candidate" hidden>
+      <div class="cc-loading">Готовлю кабинет кандидата…</div>
     </section>
 
     <!-- row 0: crisis early-warning strip (status + alert list) -->
@@ -769,6 +775,7 @@
     defer></script>
   <script src="/role_picker.js?v=3" defer></script>
   <script src="/deputy_cabinet.js?v=22" defer></script>
+  <script src="/candidate_cabinet.js?v=1" defer></script>
   <script src="/dashboard.js?v=12" defer></script>
   <!-- Голосовой Ко-пилот — universal widget на всех страницах -->
   <script src="/copilot.js?v=7" defer></script>

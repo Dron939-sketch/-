@@ -1,0 +1,290 @@
+/* =============================================================================
+   Кабинет кандидата — hero с countdown + 5 табов.
+   Префикс .cc-* (Candidate Cabinet). --cc-color приходит inline из header
+   (фирменный цвет партии).
+   ============================================================================= */
+
+.candidate-cabinet {
+  --cc-color: #5EA8FF;
+  background: linear-gradient(135deg, #0E1F3D 0%, #122A55 60%, #0E1F3D 100%);
+  border: 1px solid rgba(94, 168, 255, 0.45);
+  box-shadow: 0 30px 80px -20px rgba(34, 100, 200, 0.45);
+  padding: 24px 28px 28px;
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: visible;
+  border-radius: 16px;
+}
+
+.cc-loading, .cc-empty {
+  padding: 18px;
+  color: rgba(184, 212, 255, 0.7);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* --- Hero --- */
+.cc-hero {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+.cc-hero-badge {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cc-color, #5EA8FF), rgba(94, 168, 255, 0.4));
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--cc-color, #5EA8FF);
+  box-shadow: 0 8px 22px -8px var(--cc-color, #5EA8FF);
+}
+.cc-hero-emoji { font-size: 1.8rem; line-height: 1; }
+.cc-hero-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.7rem;
+  color: var(--cc-color, #5EA8FF);
+  font-weight: 800;
+}
+.cc-hero-greet {
+  margin: 4px 0 4px;
+  font-family: "Playfair Display", serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #DBE9FF;
+  line-height: 1.15;
+}
+.cc-hero-meta {
+  font-size: 0.84rem;
+  color: rgba(184, 212, 255, 0.78);
+  line-height: 1.4;
+}
+
+/* Countdown */
+.cc-countdown {
+  text-align: center;
+  padding: 10px 14px;
+  background: rgba(7, 20, 42, 0.6);
+  border: 1px solid var(--cc-color, #5EA8FF);
+  border-radius: 12px;
+  min-width: 120px;
+}
+.cc-countdown-num {
+  font-family: "Playfair Display", serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--cc-color, #5EA8FF);
+  line-height: 1;
+}
+.cc-countdown-label {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  color: rgba(184, 212, 255, 0.7);
+}
+.cc-countdown-date {
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: rgba(184, 212, 255, 0.5);
+}
+
+/* --- Tabs --- */
+.cc-tabs {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 100;
+  margin: 16px -28px 0;
+  padding: 10px 28px;
+  background: rgba(10, 22, 40, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(94, 168, 255, 0.15);
+  border-bottom: 1px solid rgba(94, 168, 255, 0.15);
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  box-shadow: 0 4px 14px -8px rgba(0, 0, 0, 0.5);
+}
+.cc-tabs::-webkit-scrollbar { display: none; }
+.cc-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: rgba(184, 212, 255, 0.65);
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.cc-tab:hover { background: rgba(94, 168, 255, 0.06); color: #B8D4FF; }
+.cc-tab.is-active {
+  background: rgba(94, 168, 255, 0.12);
+  border-color: var(--cc-color, #5EA8FF);
+  color: #DBE9FF;
+}
+.cc-tab-icon { font-size: 1rem; line-height: 1; }
+.cc-tab-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
+.cc-tab-label { font-weight: 700; font-size: 0.86rem; }
+.cc-tab-sub {
+  font-size: 0.66rem;
+  color: rgba(184, 212, 255, 0.45);
+  font-weight: 400;
+}
+
+/* --- Tab pane --- */
+.cc-tab-pane {
+  margin-top: 14px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+/* --- Block --- */
+.cc-block {
+  padding: 14px 16px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 12px;
+}
+.cc-block-title {
+  font-family: "Playfair Display", serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #B8D4FF;
+  margin-bottom: 8px;
+}
+.cc-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: #DBE9FF;
+}
+
+/* Чек-лист этапа */
+.cc-checklist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.cc-check {
+  display: flex; gap: 10px; align-items: center;
+  padding: 8px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border-left: 3px solid rgba(94, 168, 255, 0.3);
+  border-radius: 8px;
+  font-size: 0.86rem;
+  color: #DBE9FF;
+}
+.cc-check-high { border-left-color: #FF9F4A; }
+.cc-check-icon {
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  color: var(--cc-color, #5EA8FF);
+}
+.cc-check-high .cc-check-icon { color: #FFD89B; }
+
+/* Миссии */
+.cc-missions { display: flex; flex-direction: column; gap: 8px; }
+.cc-mission {
+  display: grid; grid-template-columns: 30px 1fr; gap: 10px;
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+}
+.cc-mission-num {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--cc-color, #5EA8FF), rgba(94, 168, 255, 0.5));
+  color: #07142A;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  font-family: "Playfair Display", serif;
+}
+.cc-mission-title { font-weight: 700; color: #DBE9FF; }
+.cc-mission-why { font-size: 0.78rem; color: rgba(184, 212, 255, 0.7); }
+.cc-mission-hint { font-size: 0.78rem; color: rgba(184, 212, 255, 0.55); margin-top: 2px; }
+
+/* Info grid (rivals / voters) */
+.cc-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.cc-info-card {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(94, 168, 255, 0.06), rgba(7, 20, 42, 0.55));
+  border: 1px solid rgba(94, 168, 255, 0.2);
+  border-radius: 10px;
+}
+.cc-info-head { display: flex; align-items: center; gap: 8px; }
+.cc-info-emoji { font-size: 1.4rem; line-height: 1; }
+.cc-info-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--cc-color, #5EA8FF);
+  font-weight: 800;
+  padding: 2px 8px;
+  background: rgba(94, 168, 255, 0.12);
+  border-radius: 999px;
+}
+.cc-info-title {
+  font-family: "Playfair Display", serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #DBE9FF;
+}
+.cc-info-body {
+  font-size: 0.82rem;
+  color: rgba(184, 212, 255, 0.78);
+  line-height: 1.45;
+}
+
+/* Tone (party tab) */
+.cc-tone-headline {
+  font-family: "Playfair Display", serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #DBE9FF;
+  margin-bottom: 4px;
+}
+.cc-tone-voice {
+  font-size: 0.84rem;
+  color: rgba(184, 212, 255, 0.78);
+  margin-bottom: 10px;
+}
+.cc-tone-twocol {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.cc-tone-col {
+  padding: 10px 12px;
+  background: rgba(7, 20, 42, 0.55);
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  border-radius: 10px;
+}
+.cc-tone-do  { border-left: 3px solid #4FCC75; }
+.cc-tone-dont { border-left: 3px solid #FF9F4A; }
+.cc-col-title {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.cc-tone-do  .cc-col-title { color: #B0F0C0; }
+.cc-tone-dont .cc-col-title { color: #FF9F4A; }
+
+/* --- Mobile --- */
+@media (max-width: 700px) {
+  .cc-hero { grid-template-columns: 1fr; }
+  .cc-countdown { justify-self: start; min-width: auto; }
+  .cc-tone-twocol { grid-template-columns: 1fr; }
+}
+@media (max-width: 540px) {
+  .candidate-cabinet { padding: 18px 14px 20px; }
+  .cc-hero-greet { font-size: 1.2rem; }
+  .cc-info-grid { grid-template-columns: 1fr; }
+}
