@@ -25,10 +25,9 @@
 
 /* --- Hero --- */
 .cc-hero {
-  display: grid;
-  grid-template-columns: 64px 1fr auto;
-  gap: 16px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .cc-hero-badge {
   width: 64px; height: 64px;
