@@ -1174,6 +1174,73 @@ def _build_district_today(deputy: dict) -> dict:
     }
 
 
+class PaymentIntentIn(BaseModel):
+    role:    Optional[str] = Field(None, max_length=40)
+    party:   Optional[str] = Field(None, max_length=40)
+    contact: Optional[str] = Field(None, max_length=200)
+    note:    Optional[str] = Field(None, max_length=400)
+
+
+@router.post("/payment/intent")
+async def copilot_payment_intent(payload: PaymentIntentIn, request: Any = None) -> dict:
+    """Заявка на оплату подписки. Реальной оплаты пока нет —
+    собираем намерения, шлём админу через Max bot (если настроен) +
+    пишем в БД payment_intents.
+    """
+    import os
+    from db.payment_intents import insert_intent
+
+    # Достаём минимум контекста
+    user_agent = None
+    ip = None
+    try:
+        from fastapi import Request as _Req  # noqa: F401
+        if hasattr(payload, "_request"):
+            r = payload._request
+            user_agent = r.headers.get("User-Agent", "")[:300]
+            ip = r.client.host if r.client else None
+    except Exception:  # noqa: BLE001
+        pass
+
+    intent_id = await insert_intent(
+        role=payload.role,
+        party=payload.party,
+        contact=(payload.contact or "")[:200] or None,
+        note=(payload.note or "")[:400] or None,
+        user_agent=user_agent,
+        ip=ip,
+    )
+
+    # Уведомление админу через Max bot — если есть env ADMIN_MAX_CHAT_ID
+    admin_chat = (os.getenv("ADMIN_MAX_CHAT_ID") or "").strip()
+    notified = False
+    if admin_chat:
+        try:
+            from notify import max_client
+            if max_client.is_configured():
+                lines = ["💰 Новая заявка на подписку"]
+                lines.append(f"Роль: {payload.role or '—'}")
+                if payload.party:
+                    lines.append(f"Партия: {payload.party}")
+                if payload.contact:
+                    lines.append(f"Контакт: {payload.contact}")
+                if payload.note:
+                    lines.append(f"Комментарий: {payload.note}")
+                if intent_id:
+                    lines.append(f"#intent-{intent_id}")
+                await max_client.send_message(admin_chat, "\n".join(lines))
+                notified = True
+        except Exception:  # noqa: BLE001
+            logger.exception("admin notify failed")
+
+    return {
+        "ok":         True,
+        "intent_id":  intent_id,
+        "notified":   notified,
+        "message":    "Спасибо! Я получил заявку, свяжусь с вами в ближайшее время.",
+    }
+
+
 class CandidateAuditIn(BaseModel):
     handle: str = Field(..., min_length=2, max_length=120)
     party:  str = Field("independent", min_length=2, max_length=40)

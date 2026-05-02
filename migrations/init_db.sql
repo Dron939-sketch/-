@@ -471,3 +471,20 @@ CREATE TABLE IF NOT EXISTS deputy_rating_history (
 );
 CREATE INDEX IF NOT EXISTS deputy_rating_history_taken_idx
     ON deputy_rating_history (external_id, taken_at DESC);
+
+-- @SEGMENT payment_intents_table
+-- Заявки на оплату подписки кабинета кандидата. Реальной оплаты пока
+-- нет — собираем намерения пользователей, чтобы админ связался руками.
+CREATE TABLE IF NOT EXISTS payment_intents (
+    id          SERIAL PRIMARY KEY,
+    role        TEXT,           -- "candidate" | "deputy" | …
+    party       TEXT,           -- "er" | "new_people" | …
+    contact     TEXT,           -- телефон/email/telegram, что введёт юзер
+    note        TEXT,           -- свободный комментарий
+    user_agent  TEXT,
+    ip          TEXT,
+    status      TEXT NOT NULL DEFAULT 'new',  -- new | contacted | paid | rejected
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS payment_intents_created_idx
+    ON payment_intents (created_at DESC);
