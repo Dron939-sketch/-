@@ -1174,6 +1174,69 @@ def _build_district_today(deputy: dict) -> dict:
     }
 
 
+@router.get("/candidate/cabinet")
+async def copilot_candidate_cabinet(
+    party: str = "independent", city: str = "Коломна",
+) -> dict:
+    """Кабинет кандидата в депутаты. Без VK-токена работает (нет посторонней
+    зависимости от данных). Партийная логика берётся из analytics.candidate_party.
+    """
+    from analytics.candidate_party import (
+        checklist_for_stage, current_stage, days_until,
+        default_election_date, party_meta,
+    )
+    p = party_meta(party)
+    election_date = default_election_date()
+    d_until = days_until(election_date)
+    stage = current_stage(d_until)
+    checklist = checklist_for_stage(stage["code"])
+
+    # Базовые миссии — производные от этапа + tone-guide
+    missions = [
+        {
+            "code":  "stage_top",
+            "title": (checklist[0]["text"] if checklist else "Сформировать команду штаба"),
+            "why":   f"Этап «{stage['name']}» — это даёт тебе старт",
+            "hint":  stage["what"],
+            "effort": "M",
+        },
+    ]
+    if checklist:
+        for it in checklist[1:3]:
+            missions.append({
+                "code":  "stage",
+                "title": it["text"],
+                "why":   f"Приоритет {'★ высокий' if it['priority'] == 'high' else '○ средний'}",
+                "hint":  "",
+                "effort": "S" if it["priority"] == "medium" else "M",
+            })
+
+    return {
+        "party": {
+            "code":            p["code"],
+            "emoji":           p["emoji"],
+            "short":           p["short"],
+            "name":            p["name"],
+            "color":           p["color"],
+            "primaries":       p.get("primaries", False),
+            "primaries_kind":  p.get("primaries_kind"),
+            "tone":            p.get("tone", {}),
+            "key_metrics":     p.get("key_metrics", []),
+            "voter_promises":  p.get("voter_promises", []),
+            "allies":          p.get("allies", []),
+            "rivals":          p.get("rivals", []),
+        },
+        "election": {
+            "date":          election_date.isoformat(),
+            "days_until":    d_until,
+        },
+        "stage":     stage,
+        "checklist": checklist,
+        "missions":  missions,
+        "city":      city,
+    }
+
+
 @router.get("/greeting")
 async def copilot_greeting(
     role: Optional[str] = None,
