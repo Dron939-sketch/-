@@ -381,14 +381,13 @@ def start() -> None:
     if not settings.openweather_api_key:
         logger.info("scheduler: weather loop disabled (no OPENWEATHER_API_KEY)")
 
-    # Экономный режим — реже дёргаем платные API (DeepSeek, OpenWeather,
-    # Fish Audio) и VK rate-limit. Пользователь форсирует свежесть через
-    # «Аудит VK» в кабинете. На проде можно ускорить через env-переменные.
+    # Экономный режим (×4 от прошлой версии) — реже дёргаем платные
+    # API. Пользователь форсирует свежесть через «Аудит VK» в кабинете.
     collection_s = max(900, settings.collection_interval_minutes * 60)   # ≥15 мин
-    weather_s = max(900, _env_int("WEATHER_INTERVAL_S", 6 * 3600))       # default 6ч
-    snapshot_s = max(900, _env_int("SNAPSHOT_INTERVAL_S", 24 * 3600))    # default 24ч
-    deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 7 * 24 * 3600))  # default 1 нед
-    jarvis_alerts_s = max(900, _env_int("JARVIS_ALERTS_INTERVAL_S", 60 * 60))  # default 1ч
+    weather_s = max(900, _env_int("WEATHER_INTERVAL_S", 24 * 3600))      # default 24ч (было 6ч)
+    snapshot_s = max(900, _env_int("SNAPSHOT_INTERVAL_S", 96 * 3600))    # default 4 дня
+    deputy_topics_s = max(3600, _env_int("DEPUTY_TOPICS_INTERVAL_S", 30 * 24 * 3600))  # default 30 дней
+    jarvis_alerts_s = max(900, _env_int("JARVIS_ALERTS_INTERVAL_S", 4 * 60 * 60))  # default 4ч
 
     _tasks.append(asyncio.create_task(_collection_loop(collection_s), name="collection_loop"))
     if settings.openweather_api_key:

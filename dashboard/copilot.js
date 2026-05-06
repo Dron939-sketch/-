@@ -13,7 +13,7 @@
   const STORAGE_LAST_ALERT_ID = "jarvis.lastAlertId";
   const SESSION_GREETED = "jarvis.greeted";
   const GREETING_DELAY_MS = 10_000;
-  const ALERTS_POLL_MS = 90_000;
+  const ALERTS_POLL_MS = 360_000;            // 6 мин (было 90 сек) — экономим API
   const MAX_HISTORY = 16;
 
   // Anonymous identity — persistent UUID, генерится один раз. Никаких PII.
