@@ -87,10 +87,10 @@ function renderSummary(s) {
   el.innerHTML = "";
   const chips = [
     `Всего событий: <strong>${(s.total_events || 0).toLocaleString("ru-RU")}</strong>`,
-    `Авторизованных: <strong>${s.authenticated_events || 0}</strong>`,
-    `Анонимных: <strong>${s.anonymous_events || 0}</strong>`,
-    `Уникальных пользователей: <strong>${s.distinct_users || 0}</strong>`,
-    `Сессий: <strong>${s.distinct_sessions || 0}</strong>`,
+    `Уникальных посетителей: <strong>${s.unique_visitors || s.distinct_sessions || 0}</strong>`,
+    `Авторизованных: <strong>${s.distinct_users || 0}</strong>`,
+    `Анонимных сессий: <strong>${s.distinct_sessions || 0}</strong>`,
+    `Событий: ${s.authenticated_events || 0} auth · ${s.anonymous_events || 0} anon`,
   ];
   if (s.avg_response_ms != null) chips.push(`Сред. отклик: <strong>${s.avg_response_ms} мс</strong>`);
   if (s.errors_5xx) chips.push(`<span style="color: var(--danger);">5xx: ${s.errors_5xx}</span>`);
