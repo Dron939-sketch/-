@@ -21,7 +21,7 @@ from .pool import get_pool
 logger = logging.getLogger(__name__)
 
 
-_TTL_HOURS = 48
+_TTL_HOURS = 168   # 1 неделя (было 48ч) — экономим DeepSeek в 4x
 
 # Версия структуры payload. При каждом добавлении нового топ-уровневого
 # поля в _build_deputy_cabinet (briefing / meister / trends_now / …)

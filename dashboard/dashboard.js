@@ -4,8 +4,8 @@
 // slug (`/kolomna`) and finally to the backend-provided default.
 // ============================================================
 
-const REFRESH_MS = 10 * 60 * 1000;
-const HEALTH_REFRESH_MS = 60 * 1000;       // ping health every minute
+const REFRESH_MS = 40 * 60 * 1000;          // 40 мин (было 10) — экономим API
+const HEALTH_REFRESH_MS = 4 * 60 * 1000;    // 4 мин (было 1 мин)
 const STORAGE_KEY = "cityMind.selectedCitySlug";
 
 const VECTOR_META = [

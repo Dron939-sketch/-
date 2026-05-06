@@ -103,7 +103,7 @@ class Settings:
     # выставляется COLLECTION_INTERVAL_MIN=30, NEWS_LOOKBACK_HOURS=24,
     # WEATHER_INTERVAL_S=3600, SNAPSHOT_INTERVAL_S=3600,
     # DEPUTY_TOPICS_INTERVAL_S=86400, ENRICHMENT_BATCH_SIZE=20.
-    collection_interval_minutes: int = _env_int("COLLECTION_INTERVAL_MIN", 240)
+    collection_interval_minutes: int = _env_int("COLLECTION_INTERVAL_MIN", 960)  # 16ч (×4 от 240)
     news_lookback_hours: int = _env_int("NEWS_LOOKBACK_HOURS", 12)
 
     # --- ML ---
