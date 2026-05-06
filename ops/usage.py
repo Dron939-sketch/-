@@ -434,6 +434,7 @@ async def summary(days: int = 7) -> Dict[str, Any]:
     empty = {
         "window_days": days, "total_events": 0, "authenticated_events": 0,
         "anonymous_events": 0, "distinct_users": 0, "distinct_sessions": 0,
+        "unique_visitors": 0,
         "errors_5xx": 0, "errors_4xx": 0, "avg_response_ms": None,
     }
     if pool is None:
@@ -450,6 +451,7 @@ async def summary(days: int = 7) -> Dict[str, Any]:
                     SUM(CASE WHEN user_id IS NULL THEN 1 ELSE 0 END)          AS anon,
                     COUNT(DISTINCT user_id)                                   AS users,
                     COUNT(DISTINCT session_token_hash)                        AS sessions,
+                    COUNT(DISTINCT COALESCE(user_id::text, session_token_hash)) AS visitors,
                     SUM(CASE WHEN status >= 500 THEN 1 ELSE 0 END)            AS e5,
                     SUM(CASE WHEN status BETWEEN 400 AND 499 THEN 1 ELSE 0 END) AS e4,
                     ROUND(AVG(response_time_ms))::INT                         AS avg_ms
@@ -465,8 +467,9 @@ async def summary(days: int = 7) -> Dict[str, Any]:
             "total_events": int(row["total"] or 0),
             "authenticated_events": int(row["auth"] or 0),
             "anonymous_events": int(row["anon"] or 0),
-            "distinct_users": int(row["users"] or 0),
-            "distinct_sessions": int(row["sessions"] or 0),
+            "distinct_users":     int(row["users"] or 0),     # авторизованные
+            "distinct_sessions":  int(row["sessions"] or 0),
+            "unique_visitors":    int(row["visitors"] or 0),  # auth + anon objединено
             "errors_5xx": int(row["e5"] or 0),
             "errors_4xx": int(row["e4"] or 0),
             "avg_response_ms": int(row["avg_ms"]) if row["avg_ms"] is not None else None,
