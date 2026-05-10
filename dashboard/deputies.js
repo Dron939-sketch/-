@@ -807,7 +807,25 @@
     await loadAll();
   }
 
+  async function refreshDemoBanner() {
+    const banner = document.getElementById("demo-banner");
+    if (!banner) return;
+    try {
+      const r = await fetch("/api/copilot/mode", { credentials: "include" });
+      if (!r.ok) { banner.hidden = true; return; }
+      const data = await r.json();
+      if (data && data.demo) {
+        banner.hidden = false;
+        const c = document.getElementById("demo-banner-contact");
+        if (c) c.textContent = data.contact ? "Активация: " + data.contact : "";
+      } else {
+        banner.hidden = true;
+      }
+    } catch (_) { banner.hidden = true; }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
+    refreshDemoBanner();
     $("dep-refresh").addEventListener("click", loadAll);
     $("topic-form").addEventListener("submit", createTopic);
     $("dep-form").addEventListener("submit", createDeputy);

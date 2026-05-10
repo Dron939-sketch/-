@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/style.css?v=10" />
   <link rel="stylesheet" href="/admin.css" />
   <link rel="stylesheet" href="/copilot.css?v=5" />
 </head>
@@ -40,6 +40,12 @@
       </button>
     </div>
   </header>
+
+  <div class="demo-banner" id="demo-banner" hidden role="status">
+    <span class="demo-banner-dot" aria-hidden="true">●</span>
+    <span class="demo-banner-text">Программа в демо-режиме — внешние API не запрашиваются.</span>
+    <span class="demo-banner-contact" id="demo-banner-contact"></span>
+  </div>
 
   <main class="admin-page">
 

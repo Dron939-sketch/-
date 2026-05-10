@@ -51,6 +51,10 @@ class DeepSeekClient:
 
     @property
     def enabled(self) -> bool:
+        # В демо-режиме клиент маскируется под «не сконфигурирован»: все
+        # callers уже проверяют .enabled и берут fallback из кеша/БД.
+        if getattr(settings, "demo_mode", False):
+            return False
         return bool(self.api_key)
 
     async def chat_json(

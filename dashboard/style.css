@@ -104,6 +104,34 @@ body {
 }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 0.85rem; }
 
+/* ------------------ DEMO BANNER ------------------ */
+.demo-banner {
+  position: sticky;
+  top: 64px;
+  z-index: 49;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: linear-gradient(90deg, rgba(255, 200, 60, 0.18), rgba(197, 160, 89, 0.12));
+  border-bottom: 1px solid rgba(197, 160, 89, 0.35);
+  color: #f5e7c2;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+.demo-banner[hidden] { display: none !important; }
+.demo-banner-dot {
+  color: #ffc83c;
+  text-shadow: 0 0 6px rgba(255, 200, 60, 0.7);
+  font-size: 0.65rem;
+}
+.demo-banner-text { font-weight: 600; }
+.demo-banner-contact { color: rgba(245, 231, 194, 0.75); }
+@media (max-width: 720px) {
+  .demo-banner { padding: 8px 14px; font-size: 0.78rem; }
+  .demo-banner-contact { display: none; }
+}
+
 /* ------------------ ADMIN LINK (topbar) ------------------ */
 .admin-link {
   display: inline-flex;

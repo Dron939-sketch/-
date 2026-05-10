@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
 
+@router.get("/mode")
+async def copilot_mode() -> dict:
+    """Текущий режим работы программы. Фронт показывает баннер, если demo."""
+    from config.settings import settings as _settings
+    return {
+        "demo":    bool(getattr(_settings, "demo_mode", False)),
+        "contact": _settings.demo_contact if getattr(_settings, "demo_mode", False) else "",
+    }
+
+
 class HistoryTurn(BaseModel):
     role: str = Field(..., pattern=r"^(user|assistant)$")
     text: str = Field("", max_length=1500)
@@ -226,6 +236,15 @@ async def copilot_execute(payload: ExecuteIn) -> dict:
     Возвращает {text, action, sources, audio?} — фронт показывает
     как обычный ответ ассистента, обернёт в bubble и озвучит.
     """
+    from config.settings import settings as _settings
+    if getattr(_settings, "demo_mode", False):
+        return {
+            "city": payload.city, "text": _settings.demo_contact,
+            "action": payload.action, "sources": ["demo"],
+            "tts_engine": "browser", "audio": None, "audio_mime": None,
+            "mode": "demo",
+        }
+
     cfg = _resolve_city_safe(payload.city)
     cid: Optional[int] = None
     try:
@@ -790,6 +809,9 @@ async def copilot_vk_audit(payload: VKAuditIn) -> dict:
 
     Возвращает тот же формат что deputy audit (см. audit_vk_page).
     """
+    from config.settings import settings as _settings
+    if getattr(_settings, "demo_mode", False):
+        return {"state": "demo_mode", "message": _settings.demo_contact, "mode": "demo"}
     from analytics.vk_audit import audit_vk_page
     from db.jarvis_user_vk_queries import get_link, touch_audit
 
@@ -813,6 +835,12 @@ async def copilot_vk_audit(payload: VKAuditIn) -> dict:
 async def copilot_vk_plan(payload: VKAuditIn) -> dict:
     """Контент-план на неделю для привязанной VK-страницы.
     Возвращает {week_of, items[5], archetype, archetype_name}."""
+    from config.settings import settings as _settings
+    if getattr(_settings, "demo_mode", False):
+        return {
+            "items": [], "week_of": "—",
+            "state": "demo_mode", "message": _settings.demo_contact, "mode": "demo",
+        }
     from analytics.vk_audit import plan_vk_page
     from db.jarvis_user_vk_queries import get_link
 
@@ -1252,6 +1280,13 @@ async def copilot_candidate_audit(payload: CandidateAuditIn) -> dict:
     архетипу/победной стратегии. Использует существующие audit_vk_page +
     archetype_affinity + voice_portrait, поверх — partyaware рекомендации.
     """
+    from config.settings import settings as _settings
+    if getattr(_settings, "demo_mode", False):
+        return {
+            "state":   "demo_mode",
+            "message": _settings.demo_contact,
+            "mode":    "demo",
+        }
     from analytics.candidate_audit import build_candidate_audit
     from db.jarvis_user_vk_queries import normalize_handle
     h = normalize_handle(payload.handle)
@@ -1456,6 +1491,14 @@ async def copilot_content_generate(payload: ContentGenerateIn) -> dict:
     """Готовый пост в архетипе депутата. Использует recommend_post,
     подмешивая в request_text жанр/длину/тему пользователя.
     """
+    from config.settings import settings as _settings
+    if getattr(_settings, "demo_mode", False):
+        return {
+            "text":      _settings.demo_contact,
+            "hashtags":  [],
+            "structure": "demo",
+            "mode":      "demo",
+        }
     from analytics.deputy_content import recommend_post
     from config.archetypes import suggest_for_deputy
     from config.deputies import deputies_for_city
@@ -1766,6 +1809,15 @@ async def copilot_event_scenario(payload: EventScenarioIn) -> dict:
 @router.post("/chat")
 async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
     import asyncio as _asyncio
+
+    from config.settings import settings as _settings
+    if getattr(_settings, "demo_mode", False):
+        return {
+            "text":      _settings.demo_contact,
+            "sources":   ["demo"],
+            "audio_b64": None,
+            "mode":      "demo",
+        }
 
     cfg = _resolve_city_safe(payload.city)
 

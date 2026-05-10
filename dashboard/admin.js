@@ -7,6 +7,23 @@
 let currentUser = null;
 let currentRange = 7;
 
+async function refreshDemoBanner() {
+  const banner = document.getElementById("demo-banner");
+  if (!banner) return;
+  try {
+    const r = await fetch("/api/copilot/mode", { credentials: "include" });
+    if (!r.ok) { banner.hidden = true; return; }
+    const data = await r.json();
+    if (data && data.demo) {
+      banner.hidden = false;
+      const c = document.getElementById("demo-banner-contact");
+      if (c) c.textContent = data.contact ? "Активация: " + data.contact : "";
+    } else {
+      banner.hidden = true;
+    }
+  } catch (_) { banner.hidden = true; }
+}
+
 async function fetchJson(url) {
   const res = await fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -415,6 +432,8 @@ function showContent() {
 // -------------------------------------------------- Init
 
 async function init() {
+  refreshDemoBanner();
+
   currentUser = await fetchAuthState();
   renderAuthChip();
 

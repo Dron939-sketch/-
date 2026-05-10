@@ -26,6 +26,9 @@ async def fetch_profile(handle: str) -> Optional[Dict[str, Any]]:
     except Exception:  # noqa: BLE001
         return None
 
+    if getattr(settings, "demo_mode", False):
+        return None
+
     token = settings.vk_api_token
     if not token:
         return None

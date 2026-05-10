@@ -42,6 +42,8 @@ class VKCollector(BaseCollector):
         self.count = count
 
     async def collect(self, since: Optional[datetime] = None) -> List[CollectedItem]:
+        if getattr(settings, "demo_mode", False):
+            return []
         token = settings.vk_api_token
         if not token:
             logger.warning("VK_API_TOKEN not set — VKCollector running in stub mode")

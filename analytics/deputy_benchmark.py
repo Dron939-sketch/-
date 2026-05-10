@@ -155,6 +155,8 @@ async def _fetch_metrics(deputy: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         from config.settings import settings
     except Exception:  # noqa: BLE001
         return None
+    if getattr(settings, "demo_mode", False):
+        return None
     token = settings.vk_api_token
     if not token:
         return None

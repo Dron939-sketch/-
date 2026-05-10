@@ -58,6 +58,8 @@ def _comfort_index(temp: float, humidity: float, wind: float) -> float:
 
 async def fetch_current(lat: float, lon: float) -> Optional[Dict[str, Any]]:
     """Fetch current weather for coordinates. Returns a DB-ready dict."""
+    if getattr(settings, "demo_mode", False):
+        return None
     api_key = settings.openweather_api_key
     if not api_key:
         logger.info("OPENWEATHER_API_KEY not set — skipping weather fetch")

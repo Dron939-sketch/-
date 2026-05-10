@@ -1336,6 +1336,11 @@ async def cross_city_benchmark() -> dict:
 async def collect_news(name: str, limit: int = 100) -> schemas.NewsResponse:
     cfg = _resolve_city(name)
 
+    if getattr(settings, "demo_mode", False):
+        # В демо-режиме внешние RSS/VK не дёргаем — отдаём пустой список,
+        # дашборд работает на кешах predict/agenda и БД.
+        return schemas.NewsResponse(city=cfg["name"], collected=0, items=[])
+
     collectors = [
         # --- re-enable when valid TELEGRAM_API_ID/HASH arrive:
         # TelegramCollector(cfg["name"]),

@@ -840,6 +840,10 @@
         return;
       }
       const data = await r.json();
+      if (data && data.mode === "demo") {
+        if (result) result.innerHTML = `<div class="cc-empty">🛑 ${esc(data.message || "Программа в демо-режиме.")}</div>`;
+        return;
+      }
       if (result) result.innerHTML = renderAuditResult(data);
     } catch (e) {
       if (result) result.innerHTML = `<div class="cc-empty">Сеть недоступна.</div>`;
