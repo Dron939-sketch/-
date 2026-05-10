@@ -185,6 +185,8 @@ async def _fetch_recent_posts(
     except Exception:  # noqa: BLE001
         return []
 
+    if settings.demo_mode:
+        return []
     token = settings.vk_api_token
     if not token:
         return []

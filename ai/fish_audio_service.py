@@ -30,6 +30,12 @@ def _env(name: str, default: str = "") -> str:
 
 def is_configured() -> bool:
     """Доступен ли Fish Audio для этого инстанса (есть ли ключ)."""
+    try:
+        from config.settings import settings as _settings
+        if _settings.demo_mode:
+            return False
+    except Exception:  # noqa: BLE001
+        pass
     return bool(_env("FISH_AUDIO_API_KEY"))
 
 
@@ -39,6 +45,12 @@ async def synthesize(text: str) -> Optional[bytes]:
     Используется напрямую из api/copilot_routes.py — там же оборачивается
     в try, так что эта функция не должна бросать.
     """
+    try:
+        from config.settings import settings as _settings
+        if _settings.demo_mode:
+            return None
+    except Exception:  # noqa: BLE001
+        pass
     api_key = _env("FISH_AUDIO_API_KEY")
     voice_id = _env("FISH_AUDIO_VOICE_ID")
     if not api_key or not voice_id:

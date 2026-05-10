@@ -136,6 +136,8 @@ async def _vk_targets(
         from config.settings import settings
     except Exception:  # noqa: BLE001
         return []
+    if settings.demo_mode:
+        return []
     token = settings.vk_api_token
     if not token:
         return []

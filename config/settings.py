@@ -46,6 +46,14 @@ class Settings:
     env: str = _env("ENV", "development")
     debug: bool = _env_bool("DEBUG", True)
     default_city: str = _env("DEFAULT_CITY", "Коломна")
+    # Демо-режим: внешние API не дёргаются, фоновые джобы не запускаются.
+    # Все эндпоинты возвращают то, что уже лежит в кеше/БД. Снимается через
+    # env DEMO_MODE=false (на проде с активной подпиской/ключами).
+    demo_mode: bool = _env_bool("DEMO_MODE", True)
+    demo_contact: str = _env(
+        "DEMO_CONTACT",
+        "Программа в демо-режиме. Для активации свяжитесь с разработчиком: dron939@yandex.ru",
+    )
 
     # --- API ---
     api_host: str = _env("API_HOST", "0.0.0.0")

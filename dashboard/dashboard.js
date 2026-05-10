@@ -2877,7 +2877,24 @@ async function init() {
   refreshSystemHealth();
   setInterval(refreshSystemHealth, HEALTH_REFRESH_MS);
 
+  refreshDemoBanner();
+
   refreshTimer = setInterval(refresh, REFRESH_MS);
+}
+
+async function refreshDemoBanner() {
+  const banner = document.getElementById("demo-banner");
+  if (!banner) return;
+  try {
+    const data = await fetchJson("/api/copilot/mode", { timeoutMs: 5000 });
+    if (data && data.demo) {
+      banner.hidden = false;
+      const c = document.getElementById("demo-banner-contact");
+      if (c) c.textContent = data.contact ? "Активация: " + data.contact : "";
+    } else {
+      banner.hidden = true;
+    }
+  } catch (_) { banner.hidden = true; }
 }
 
 // -------------------------------------------------- Сценарии / Действия (модалки)

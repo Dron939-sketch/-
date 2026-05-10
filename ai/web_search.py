@@ -65,6 +65,12 @@ async def search(query: str, *, limit: int = 5) -> List[Dict[str, str]]:
     q = (query or "").strip()
     if not q:
         return []
+    try:
+        from config.settings import settings as _settings
+        if _settings.demo_mode:
+            return []
+    except Exception:  # noqa: BLE001
+        pass
     payload = {"q": q, "kl": "ru-ru"}
     try:
         timeout = aiohttp.ClientTimeout(total=12)

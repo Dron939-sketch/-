@@ -52,6 +52,9 @@ async def build_comments_queue(
     except Exception:  # noqa: BLE001
         return {"queue": [], "state": "no_settings", "summary": ""}
 
+    if settings.demo_mode:
+        return {"queue": [], "state": "demo_mode", "summary": ""}
+
     token = settings.vk_api_token
     if not token:
         return {"queue": [], "state": "no_token", "summary": ""}
