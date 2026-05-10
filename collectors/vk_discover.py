@@ -38,7 +38,7 @@ async def search_groups(query: str, *, limit: int = 50,
     Returns a list of dicts ready for human review, sorted as the API
     returned. Empty list when token missing or API error.
     """
-    if settings.demo_mode:
+    if getattr(settings, "demo_mode", False):
         return []
     token = settings.vk_api_token
     if not token:
@@ -127,7 +127,7 @@ async def search_users(
     Возвращает список dict'ов с id, name, photo, city, has_profile_url.
     На отсутствующий токен / ошибку API → [].
     """
-    if settings.demo_mode:
+    if getattr(settings, "demo_mode", False):
         return []
     token = settings.vk_api_token
     if not token or not query or len(query.strip()) < 3:
@@ -193,7 +193,7 @@ async def search_news(
     """Поиск свежих постов VK по запросу. Используется Джарвисом для
     «что в VK пишут про X». Возвращает топ-N постов с короткими
     выжимками + ссылкой."""
-    if settings.demo_mode:
+    if getattr(settings, "demo_mode", False):
         return []
     token = settings.vk_api_token
     if not token or not query or len(query.strip()) < 3:

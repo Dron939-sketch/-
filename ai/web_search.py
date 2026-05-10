@@ -67,7 +67,7 @@ async def search(query: str, *, limit: int = 5) -> List[Dict[str, str]]:
         return []
     try:
         from config.settings import settings as _settings
-        if _settings.demo_mode:
+        if getattr(_settings, "demo_mode", False):
             return []
     except Exception:  # noqa: BLE001
         pass

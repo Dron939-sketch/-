@@ -36,8 +36,8 @@ async def copilot_mode() -> dict:
     """Текущий режим работы программы. Фронт показывает баннер, если demo."""
     from config.settings import settings as _settings
     return {
-        "demo":    bool(_settings.demo_mode),
-        "contact": _settings.demo_contact if _settings.demo_mode else "",
+        "demo":    bool(getattr(_settings, "demo_mode", False)),
+        "contact": _settings.demo_contact if getattr(_settings, "demo_mode", False) else "",
     }
 
 
@@ -237,7 +237,7 @@ async def copilot_execute(payload: ExecuteIn) -> dict:
     как обычный ответ ассистента, обернёт в bubble и озвучит.
     """
     from config.settings import settings as _settings
-    if _settings.demo_mode:
+    if getattr(_settings, "demo_mode", False):
         return {
             "city": payload.city, "text": _settings.demo_contact,
             "action": payload.action, "sources": ["demo"],
@@ -810,7 +810,7 @@ async def copilot_vk_audit(payload: VKAuditIn) -> dict:
     Возвращает тот же формат что deputy audit (см. audit_vk_page).
     """
     from config.settings import settings as _settings
-    if _settings.demo_mode:
+    if getattr(_settings, "demo_mode", False):
         return {"state": "demo_mode", "message": _settings.demo_contact, "mode": "demo"}
     from analytics.vk_audit import audit_vk_page
     from db.jarvis_user_vk_queries import get_link, touch_audit
@@ -836,7 +836,7 @@ async def copilot_vk_plan(payload: VKAuditIn) -> dict:
     """Контент-план на неделю для привязанной VK-страницы.
     Возвращает {week_of, items[5], archetype, archetype_name}."""
     from config.settings import settings as _settings
-    if _settings.demo_mode:
+    if getattr(_settings, "demo_mode", False):
         return {
             "items": [], "week_of": "—",
             "state": "demo_mode", "message": _settings.demo_contact, "mode": "demo",
@@ -1281,7 +1281,7 @@ async def copilot_candidate_audit(payload: CandidateAuditIn) -> dict:
     archetype_affinity + voice_portrait, поверх — partyaware рекомендации.
     """
     from config.settings import settings as _settings
-    if _settings.demo_mode:
+    if getattr(_settings, "demo_mode", False):
         return {
             "state":   "demo_mode",
             "message": _settings.demo_contact,
@@ -1492,7 +1492,7 @@ async def copilot_content_generate(payload: ContentGenerateIn) -> dict:
     подмешивая в request_text жанр/длину/тему пользователя.
     """
     from config.settings import settings as _settings
-    if _settings.demo_mode:
+    if getattr(_settings, "demo_mode", False):
         return {
             "text":      _settings.demo_contact,
             "hashtags":  [],
@@ -1811,7 +1811,7 @@ async def copilot_chat_endpoint(payload: CopilotIn) -> dict:
     import asyncio as _asyncio
 
     from config.settings import settings as _settings
-    if _settings.demo_mode:
+    if getattr(_settings, "demo_mode", False):
         return {
             "text":      _settings.demo_contact,
             "sources":   ["demo"],

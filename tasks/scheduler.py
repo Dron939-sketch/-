@@ -80,7 +80,7 @@ _tasks: List[asyncio.Task] = []
 
 async def collect_city(city_name: str, enricher: Optional[NewsEnricher] = None) -> int:
     """Collect + enrich + persist news for a single city. Returns rows written."""
-    if settings.demo_mode:
+    if getattr(settings, "demo_mode", False):
         return 0
     pool = get_pool()
     if pool is None:
@@ -150,7 +150,7 @@ async def collect_city(city_name: str, enricher: Optional[NewsEnricher] = None) 
 
 async def refresh_weather(city_name: str) -> bool:
     """Fetch current weather and persist it. Returns True on success."""
-    if settings.demo_mode:
+    if getattr(settings, "demo_mode", False):
         return False
     cfg = CITIES.get(city_name)
     if cfg is None:
@@ -379,7 +379,7 @@ async def _deputy_topics_loop(interval_s: int) -> None:
 def start() -> None:
     if _tasks:
         return
-    if settings.demo_mode:
+    if getattr(settings, "demo_mode", False):
         # Демо-режим: фоновые джобы не стартуют, всё работает на кеше/БД.
         logger.info("scheduler: DEMO_MODE=true — background loops disabled")
         return

@@ -32,7 +32,7 @@ def is_configured() -> bool:
     """Доступен ли Fish Audio для этого инстанса (есть ли ключ)."""
     try:
         from config.settings import settings as _settings
-        if _settings.demo_mode:
+        if getattr(_settings, "demo_mode", False):
             return False
     except Exception:  # noqa: BLE001
         pass
@@ -47,7 +47,7 @@ async def synthesize(text: str) -> Optional[bytes]:
     """
     try:
         from config.settings import settings as _settings
-        if _settings.demo_mode:
+        if getattr(_settings, "demo_mode", False):
             return None
     except Exception:  # noqa: BLE001
         pass

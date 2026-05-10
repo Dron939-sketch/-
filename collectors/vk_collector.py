@@ -42,7 +42,7 @@ class VKCollector(BaseCollector):
         self.count = count
 
     async def collect(self, since: Optional[datetime] = None) -> List[CollectedItem]:
-        if settings.demo_mode:
+        if getattr(settings, "demo_mode", False):
             return []
         token = settings.vk_api_token
         if not token:

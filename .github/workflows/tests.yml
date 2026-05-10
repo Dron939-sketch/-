@@ -40,4 +40,7 @@ jobs:
           TELEGRAM_API_HASH: ""
           DEEPSEEK_API_KEY: ""
           OPENWEATHER_API_KEY: ""
+          # DEMO_MODE по умолчанию true (продакшн без активации) — но
+          # юнит-тесты проверяют реальные ветки кода, а не early-return.
+          DEMO_MODE: "false"
         run: pytest tests/ -v --tb=short
